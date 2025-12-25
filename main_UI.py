@@ -487,15 +487,17 @@ class MainFrame(wx.Frame):
         self.text_ctrl.Hide()
 
         # 剪贴板模式
-        self.list_Box = wx.ListBox(self.main_panel, style=wx.LB_HSCROLL | wx.SUNKEN_BORDER)
+        self.list_Box = wx.CheckListBox(self.main_panel, style=wx.LB_HSCROLL | wx.SUNKEN_BORDER)
         self.main_sizer.Add(self.list_Box, 1, wx.EXPAND | wx.ALL, 10)
         
         self.main_panel.SetSizer(self.main_sizer)
         self.text_ctrl.Bind(wx.EVT_KEY_DOWN, self.on_key_to_translate)
         self.text_ctrl.Bind(wx.EVT_TEXT, self.on_text_changed)
         self.list_Box.Bind(wx.EVT_KEY_DOWN, self.on_list_key_down)
+        # 绑定复选框勾选事件（替代原EVT_LISTBOX）
+        self.list_Box.Bind(wx.EVT_CHECKLISTBOX, self.on_list_item_checked)
+        # 保留列表项选中事件（兼容热键/键盘操作）
         self.list_Box.Bind(wx.EVT_LISTBOX, self.on_list_item_selected)
-        self.list_Box.Bind(wx.EVT_LISTBOX_DCLICK, self.on_list_item_deselected)
 
 
     def load_clipboard_data(self):
@@ -593,7 +595,7 @@ class MainFrame(wx.Frame):
 
 
     def refresh_list_box(self):
-        """刷新列表数据"""
+        """刷新列表数据：仅加载原始文本，原生复选框自动显示勾选状态"""
         self.list_Box.Clear()
         for item in self.clipboard_list_data:
             if len(item) > 100:
@@ -604,51 +606,76 @@ class MainFrame(wx.Frame):
 
 
     def update_clipboard_buttons_state(self):
-        """更新剪贴板按钮状态"""
-        # ListBox使用GetSelection()判断是否有选中项（-1表示无选中）
-        has_select = self.list_Box.GetSelection() != -1
+        """更新剪贴板按钮状态：基于勾选项判断"""
+        # 获取所有勾选的项索引（原生API）
+        checked_indices = self.list_Box.GetCheckedItems()
+        has_select = len(checked_indices) > 0
         self.toolbar.EnableTool(self.copy_btn.GetId(), has_select)
         self.toolbar.EnableTool(self.delete_btn.GetId(), has_select)
         self.toolbar.EnableTool(self.edit_btn.GetId(), has_select)
 
 
     def on_copy_btn(self, event):
-        """拷贝选中项到剪贴板"""
-        idx = self.list_Box.GetSelection()
-        if idx == -1:
+        """拷贝勾选的项到剪贴板：多选拼接，单选复制单个"""
+        # 获取所有勾选的项索引
+        checked_indices = self.list_Box.GetCheckedItems()
+        if not checked_indices:
             return
-        content = self.clipboard_list_data[idx]
+        
+        # 拼接所有勾选的内容（多选用换行分隔）
+        content_list = [self.clipboard_list_data[idx] for idx in checked_indices]
+        content = "\n".join(content_list)
+        
         # 复制到系统剪贴板
         clipboard = wx.Clipboard()
         clipboard.Open()
         clipboard.SetData(wx.TextDataObject(content))
         clipboard.Close()
-        if idx > 0:
-            del self.clipboard_list_data[idx]
-            self.refresh_list_box()
+
+        # 仅单选时删除原项（保持原有逻辑）
+        if len(checked_indices) == 1:
+            idx = checked_indices[0]
+            if idx > 0:
+                del self.clipboard_list_data[idx]
+                self.refresh_list_box()
 
 
     def on_delete_btn(self, event):
-        """删除选中项"""
-        idx = self.list_Box.GetSelection()
-        if idx == -1:
+        """删除勾选的项：批量倒序删除，避免索引错乱"""
+        # 获取所有勾选的项索引
+        checked_indices = self.list_Box.GetCheckedItems()
+        if not checked_indices:
             return
 
         # 确认删除
         if wx.MessageBox(setting.lang_dict[setting.current_lang]['delete_btn_tips'], setting.lang_dict[setting.current_lang]['confirm_btn'], wx.YES_NO | wx.ICON_WARNING) != wx.YES:
             return
 
-        del self.clipboard_list_data[idx]
+        # 核心：倒序删除，防止索引偏移
+        sorted_indices = sorted(checked_indices, reverse=True)
+        for idx in sorted_indices:
+            if 0 <= idx < len(self.clipboard_list_data):
+                del self.clipboard_list_data[idx]
+
+        # 刷新列表+更新按钮状态
         self.refresh_list_box()
         self.update_clipboard_buttons_state()
         self.save_clipboard_data()
 
 
     def on_edit_btn(self, event):
-        """编辑选中项"""
-        idx = self.list_Box.GetSelection()
-        if idx == -1:
+        """编辑勾选的项：仅支持单个勾选项"""
+        # 获取所有勾选的项索引
+        checked_indices = self.list_Box.GetCheckedItems()
+        if not checked_indices:
             return
+        
+        # 多选时提示仅编辑第一个
+        if len(checked_indices) > 1:
+            wx.MessageBox("编辑功能仅支持单个项，请取消其他勾选后重试", "提示", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        idx = checked_indices[0]
         init_content = self.clipboard_list_data[idx]
         # 打开编辑窗口
         dialog = EditDialog(
@@ -661,7 +688,10 @@ class MainFrame(wx.Frame):
                 del self.clipboard_list_data[idx]
                 if list_len > 1:
                     new_idx = idx - 1 if idx == list_len - 1 else idx
-                    self.list_Box.SetSelection(new_idx)
+                    # 取消所有勾选，选中新项
+                    self.list_Box.UncheckAll()
+                    if new_idx >= 0:
+                        self.list_Box.SetSelection(new_idx)
                 else:
                     new_idx = -1
             else:
@@ -670,17 +700,18 @@ class MainFrame(wx.Frame):
             self.refresh_list_box()
             if self.clipboard_list_data and new_idx != -1:
                 self.list_Box.SetSelection(new_idx)  # 确保选中有效项
+                self.list_Box.Check(new_idx, True)  # 勾选新项
                 self.on_copy_btn(event)
 
         dialog.Destroy()
         self.save_clipboard_data()
 
-
     def on_list_key_down(self, event):
-        """列表键盘事件"""
+        """列表键盘事件：基于勾选项处理"""
         key = event.GetKeyCode()
-        idx = self.list_Box.GetSelection()  # ListBox使用GetSelection()获取选中项索引
-        if idx == -1:
+        # 获取所有勾选的项索引
+        checked_indices = self.list_Box.GetCheckedItems()
+        if not checked_indices:
             event.Skip()
             return
 
@@ -689,13 +720,22 @@ class MainFrame(wx.Frame):
         elif key == wx.WXK_RETURN:
             self.on_copy_btn(None)
         elif key == wx.WXK_F2:
-            self.on_edit_btn(None)
+            # F2编辑仅支持单个勾选项
+            if len(checked_indices) == 1:
+                self.on_edit_btn(None)
+            else:
+                wx.MessageBox("编辑功能仅支持单个项，请取消其他勾选后重试", "提示", wx.OK | wx.ICON_INFORMATION)
         else:
             event.Skip()
 
 
     def on_list_item_selected(self, event):
-        """列表项选中：启用按钮"""
+        """列表项选中：兼容热键/键盘操作，更新按钮状态"""
+        self.update_clipboard_buttons_state()
+
+
+    def on_list_item_checked(self, event):
+        """复选框勾选/取消勾选：仅更新按钮状态，无刷新卡顿"""
         self.update_clipboard_buttons_state()
 
 
@@ -1023,7 +1063,7 @@ class MainFrame(wx.Frame):
 
     def on_clean_list(self, event):
         self.clipboard_list_data = []
-        self.refresh_list_box()
+        self.list_Box.Clear()  # 清空列表同时清空勾选状态
         self.update_clipboard_buttons_state()
         self.save_clipboard_data()
 
