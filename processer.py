@@ -1,6 +1,7 @@
 ## https://hf-mirror.com/facebook/mbart-large-50-many-to-many-mmt/resolve/main/model.safetensors?download=trueimport re
 
 import appscript
+import gzip
 import logging
 import os
 import re 
@@ -193,11 +194,11 @@ class MBartTranslator(BaseThreadedWorker):
 
     def _load_dictionary(self):
         """
-        加载本地词典 ）
+        加载本地 gzip 格式词典
         """
         self._dictionary.clear()
         try:
-            with open(self._dict_path, 'r', encoding='utf-8') as file:
+            with gzip.open(self._dict_path, 'rt', encoding='utf-8') as file:
                 for line_num, line in enumerate(file, 1):
                     # 去除首尾空白字符，跳过空行
                     line = line.strip()
@@ -211,14 +212,18 @@ class MBartTranslator(BaseThreadedWorker):
                         # 统一转为小写，实现不区分大小写查询
                         self._dictionary[english.lower()] = chinese
                     else:
-                        # 格式错误（不足两个字段），仅警告不中断
+                        # 格式错误警告
                         self.logger.warning(f"词典第{line_num}行格式不正确（需至少两个字段），已跳过")
             
-            self.logger.info(f"本地词典加载完成，共加载 {len(self._dictionary)} 条有效记录（路径：{self._dict_path}）")
+            # 加载完成日志
+            self.logger.info(f"本地 gzip 词典加载完成，共加载 {len(self._dictionary)} 条有效记录（路径：{self._dict_path}）")
         except FileNotFoundError:
-            self.logger.error(f"词典加载失败：找不到文件 {self._dict_path}")
+            # 文件不存在异常
+            self.logger.error(f"词典加载失败：找不到 gzip 文件 {self._dict_path}")
+        except gzip.BadGzipFile:
+            self.logger.error(f"词典加载失败：{self._dict_path} 不是有效的 gzip 压缩文件")
         except Exception as e:
-            self.logger.error(f"加载词典时发生错误: {str(e)}")
+            self.logger.error(f"加载 gzip 词典时发生错误: {str(e)}")
 
 
     def _lookup_word(self, word: str) -> Optional[str]:
