@@ -100,9 +100,9 @@ class EditDialog(wx.Dialog):
         self.Bind(wx.EVT_MENU, self.on_punc_to_newline, self.punc_to_newline_menu)
 
 
-        # 初始化：将初始状态存入撤销栈（仅初始时执行一次）
+        # 将初始状态存入撤销栈（仅初始时执行一次）
         self.save_state_to_undo()
-        # 强制获取焦点（macOS专用）
+        # 强制获取焦点
         self.get_textCtrl_focus()
 
 
@@ -111,11 +111,11 @@ class EditDialog(wx.Dialog):
         current_text = self.text_ctrl.GetValue()
         current_cursor = self.text_ctrl.GetInsertionPoint()
 
-        # 去重：避免重复存储相同的状态（防止栈冗余）
+        # 去重
         if self.undo_stack and self.undo_stack[-1] == (current_text, current_cursor):
             return
 
-        # 限制栈大小：超过最大数量时删除最旧的记录
+        # 限制栈大小
         if len(self.undo_stack) >= self.max_stack_size:
             self.undo_stack.pop(0)
 
@@ -124,14 +124,14 @@ class EditDialog(wx.Dialog):
 
     def on_text_changed(self, event):
         """文本变化时触发：记录历史状态（修复首次编辑的初始状态记录）"""
-        # 跳过撤销/重做过程中的文本变化（避免栈混乱）
+        # 跳过撤销/重做过程中的文本变化
         if self.is_undoing or self.is_redoing:
             event.Skip()
             return
 
-        # 首次编辑时：确保撤销栈只保留初始状态，避免初始状态被覆盖
+        # 首次编辑时：撤销栈只保留初始状态
         if self.first_edit:
-            self.undo_stack = [self.undo_stack[0]]  # 重置为初始状态（清除可能的重复）
+            self.undo_stack = [self.undo_stack[0]]  # 重置为初始状态
             self.first_edit = False
 
         # 新操作触发后，清空重做栈（不能再重做之前的撤销操作）
@@ -143,7 +143,7 @@ class EditDialog(wx.Dialog):
 
 
     def on_app_key_down(self, event):
-        #应用级快捷键：不管焦点在文本框/按钮，只要对话框打开就生效"""
+        #应用级快捷键
         if not self.IsShown():
             event.Skip(True)
             return
@@ -152,7 +152,6 @@ class EditDialog(wx.Dialog):
         modifiers = event.GetModifiers()
         is_alt_pressed = (modifiers & wx.MOD_ALT) == wx.MOD_ALT
 
-        # 1. Alt+1~4 功能菜单
         if is_alt_pressed:
             if key_code == ord('1'):
                 self.on_remove_whitespace(None)
@@ -169,11 +168,10 @@ class EditDialog(wx.Dialog):
             elif key_code in (ord('X'), ord('x')):
                 self.on_ok(None)
                 event.Skip(False)
-        # 2. ESC 取消
         elif key_code == wx.WXK_ESCAPE:
             self.on_cancel(None)
             event.Skip(False)
-        # 其他按键正常传递（不影响Tab切焦点、文本输入）
+        # 其他按键
         else:
             event.Skip(True)
 
@@ -183,34 +181,33 @@ class EditDialog(wx.Dialog):
         key_code = event.GetKeyCode()
         modifiers = event.GetModifiers()
 
-        # 撤销：Cmd+Z
+        # 撤销
         if modifiers == wx.MOD_CMD and key_code == ord('Z'):
             self.undo()
-            event.Skip(False)  # 阻止系统默认撤销行为（避免冲突）
-        # 重做：Cmd+Shift+Z
+            event.Skip(False)  # 阻止系统默认撤销行为
+        # 重做
         elif modifiers == (wx.MOD_CMD | wx.MOD_SHIFT) and key_code == ord('Z'):
             self.redo()
             event.Skip(False)  # 阻止系统默认重做行为
-        # 其他按键：正常传递（确保输入、删除、方向键等正常工作）
+        # 其他按键正常传递
         else:
             event.Skip(True)
 
     def undo(self):
-        """执行撤销操作：恢复上一个文本状态和光标位置"""
-        # 至少保留初始状态（不能撤销到空栈）
+        """撤销：恢复上一个文本状态和光标位置"""
         if len(self.undo_stack) <= 1:
             logging.debug("EditDialog: 没有可撤销的操作")
             return
 
         self.is_undoing = True
 
-        # 1. 将当前状态存入重做栈（用于后续可能的重做）
+        # 将当前状态存入重做栈
         current_text = self.text_ctrl.GetValue()
         current_cursor = self.text_ctrl.GetInsertionPoint()
         self.redo_stack.append((current_text, current_cursor))
 
-        # 2. 从撤销栈取出上一个状态并恢复
-        self.undo_stack.pop()  # 移除当前状态（文本变化时已存入）
+        # 从撤销栈取出上一个状态并恢复
+        self.undo_stack.pop() 
         prev_text, prev_cursor = self.undo_stack[-1]
         self.text_ctrl.SetValue(prev_text)
         self.text_ctrl.SetInsertionPoint(prev_cursor)  # 恢复光标位置
@@ -225,12 +222,12 @@ class EditDialog(wx.Dialog):
 
         self.is_redoing = True
 
-        # 1. 将当前状态存入撤销栈（用于后续可能的再次撤销）
+        # 将当前状态存入撤销栈
         current_text = self.text_ctrl.GetValue()
         current_cursor = self.text_ctrl.GetInsertionPoint()
         self.undo_stack.append((current_text, current_cursor))
 
-        # 2. 从重做栈取出状态并恢复
+        #  重做栈取出状态并恢复
         next_text, next_cursor = self.redo_stack.pop()
         self.text_ctrl.SetValue(next_text)
         self.text_ctrl.SetInsertionPoint(next_cursor)  # 恢复光标位置
@@ -269,7 +266,7 @@ class EditDialog(wx.Dialog):
             ns_window = self.GetHandle()
             if ns_window:
                 ns_window.makeKeyAndOrderFront_(None)  # 置顶窗口
-            self.text_ctrl.SetFocus()  # 输入框获取焦点
+            self.text_ctrl.SetFocus()
             self.text_ctrl.SetInsertionPointEnd()  # 光标定位到末尾
         except Exception as e:
             logging.error(f"EditDialog: macOS 强制焦点失败: {str(e)}")
@@ -337,9 +334,9 @@ class MainFrame(wx.Frame):
 
         #启动处理器
         self.clipboard_monitor.start_worker(callback=self.on_new_clipboard_content)
-        #self.vo_handler.start_worker()  # 启动 VO 监听线程
 
         # 状态变量
+        self.version='V1.0.2\nBuild: 251230'""''
         self.current_mode = "clipboard"
         self.clipboard_list_data = []  # 剪贴板列表
         self.current_clipboard_idx = -1
@@ -391,24 +388,24 @@ class MainFrame(wx.Frame):
 
     def create_menu_bar(self):
         menubar = wx.MenuBar()
-        # 2. 应用专属菜单
+        # 2. 应用菜单
         app_menu = wx.Menu()
 
-        # 2.1 关于Magic Toolbox
+        # 关于
         about_item = app_menu.Append(
-            wx.ID_ABOUT,  # 使用系统默认ID，自动匹配macOS关于项风格
+            wx.ID_ABOUT,  # 使用系统默认ID
             setting.lang_dict[setting.current_lang]['menu_about']
         )
         self.Bind(wx.EVT_MENU, self.on_about, about_item)
 
-        # 2.2 分隔线（区分“关于”和“退出”）
+        # 分隔线
         app_menu.AppendSeparator()
 
-        # 2.3 退出Magic Toolbox（带系统默认退出图标和快捷键⌘Q）
+        # 退出
         exit_item = app_menu.Append(
-            wx.ID_EXIT,  # 使用系统默认ID，自动匹配macOS退出项风格和快捷键
+            wx.ID_EXIT, 
             "退出 Magic Toolbox",
-            "退出应用（快捷键：⌘Q）"  # 菜单提示
+            "退出应用（快捷键：⌘Q）"  
         )
         self.Bind(wx.EVT_MENU, self.on_exit, exit_item)
         rebootVO = app_menu.Append(wx.NewId(), setting.lang_dict[setting.current_lang]['menu_opt_rebootVO'])
@@ -419,7 +416,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_clean_list, cleanList)
 
 
-        # 将应用菜单添加到菜单栏
+        # 添加到菜单栏
         menubar.Append(app_menu, setting.lang_dict[setting.current_lang]['menubar_opt'])
 
        # 设置菜单栏到窗口
@@ -430,25 +427,23 @@ class MainFrame(wx.Frame):
         """处理退出事件：释放线程、热键，关闭窗口"""
         # 存储剪贴板数据
         self.save_clipboard_data()
-        # 1. 停止核心处理器线程
+        #  停止核心处理器线程
         if self.translator:
             self.translator.stop_worker()
-        #if self.vo_handler:
-            #self.vo_handler.stop_worker()
         if self.clipboard_monitor:
             self.clipboard_monitor.stop_worker()
 
-        # 2. 注销所有热键
+        #  注销热键
         for hid in self.hotkey_ids.values():
             self.UnregisterHotKey(hid)
         self.hotkey_ids.clear()
 
-        # 3. 关闭窗口（触发应用退出）
+        #  关闭窗口
         os._exit(0)
 
 
     def on_about(self, event):
-        about_content = f""" """
+        about_content = f"""{self.version} """
         dialog = wx.Dialog(self, title="关于 Magic Toolbox", size=(500, 400))
         panel = wx.Panel(dialog)
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -461,7 +456,7 @@ class MainFrame(wx.Frame):
         text_ctrl.SetValue(about_content)
         text_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
 
-        # 添加关闭按钮
+        # 关闭按钮
         btn = wx.Button(panel, label="Got it")
         btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
 
@@ -495,9 +490,9 @@ class MainFrame(wx.Frame):
         self.text_ctrl.Bind(wx.EVT_KEY_DOWN, self.on_key_to_translate)
         self.text_ctrl.Bind(wx.EVT_TEXT, self.on_text_changed)
         self.list_Box.Bind(wx.EVT_KEY_DOWN, self.on_list_key_down)
-        # 绑定复选框勾选事件（替代原EVT_LISTBOX）
+        # 绑定复选框勾选事件
         self.list_Box.Bind(wx.EVT_CHECKLISTBOX, self.on_list_item_checked)
-        # 保留列表项选中事件（兼容热键/键盘操作）
+        # 列表项选中事件
         self.list_Box.Bind(wx.EVT_LISTBOX, self.on_list_item_selected)
 
 
@@ -530,19 +525,19 @@ class MainFrame(wx.Frame):
 
     def register_hotkeys(self):
         """注册热键"""
-        # 1. 注销原有热键
+        #  注销热键
         for hid in self.hotkey_ids.values():
             self.UnregisterHotKey(hid)
         self.hotkey_ids.clear()
 
-        # 2. 修饰键映射表（将字符串转换为wx对应的常量）
+        #  修饰键映射表（将字符串转换为wx对应的常量）
         modifier_map = {
             "ALT": wx.MOD_ALT,
             "SHIFT": wx.MOD_SHIFT,
             "CTRL": wx.MOD_CONTROL
         }
 
-        # 3. 遍历keys列表批量注册热键
+        #  遍历keys列表批量注册热键
         for hotkey in setting.hotKeys:
             try:
                 # 解析修饰键
@@ -608,7 +603,7 @@ class MainFrame(wx.Frame):
 
     def update_clipboard_buttons_state(self):
         """更新剪贴板按钮状态：基于勾选项判断"""
-        # 获取所有勾选的项索引（原生API）
+        # 获取所有勾选的项索引
         checked_indices = self.list_Box.GetCheckedItems()
         has_select = len(checked_indices) > 0
         self.toolbar.EnableTool(self.copy_btn.GetId(), has_select)
@@ -624,21 +619,21 @@ class MainFrame(wx.Frame):
         if not content:  # 空内容不处理
             return
         
-        # 1. 查找并倒序删除所有相同的旧项（避免索引错乱）
+        #  倒序删除
         indices_to_remove = [i for i, item in enumerate(self.clipboard_list_data) if item == content]
         for i in reversed(indices_to_remove):
             del self.clipboard_list_data[i]
         
-        # 2. 插入新内容到列表开头
+        #  插入到开头
         self.clipboard_list_data.insert(0, content)
         
-        # 3. 剪贴板模式下刷新UI
+        #  刷新UI
         if self.current_mode == "clipboard":
             self.refresh_list_box()
             self.list_Box.SetSelection(0)  # 选中新添加的项
             self.update_clipboard_buttons_state()
         
-        # 4. 持久化保存数据
+        #  持久化数据
         self.save_clipboard_data()
 
 
@@ -678,13 +673,13 @@ class MainFrame(wx.Frame):
         if wx.MessageBox(setting.lang_dict[setting.current_lang]['delete_btn_tips'], setting.lang_dict[setting.current_lang]['confirm_btn'], wx.YES_NO | wx.ICON_WARNING) != wx.YES:
             return
 
-        # 核心：倒序删除，防止索引偏移
+        # 倒序删除
         sorted_indices = sorted(checked_indices, reverse=True)
         for idx in sorted_indices:
             if 0 <= idx < len(self.clipboard_list_data):
                 del self.clipboard_list_data[idx]
 
-        # 刷新列表+更新按钮状态
+        # 刷新
         self.refresh_list_box()
         self.update_clipboard_buttons_state()
         # 同步系统剪贴板
@@ -752,7 +747,6 @@ class MainFrame(wx.Frame):
         elif key == wx.WXK_RETURN:
             self.on_copy_btn(None)
         elif key == wx.WXK_F2:
-            # F2编辑仅支持单个勾选项
             if len(checked_indices) == 1:
                 self.on_edit_btn(None)
             else:
@@ -763,14 +757,14 @@ class MainFrame(wx.Frame):
 
     def on_list_item_selected(self, event):
         """列表项选中"""
-        # 1. 获取当前选中的索引（无需勾选，仅光标选中）
+        #  获取当前选中的索引
         selected_idx = event.GetSelection()
-        self.current_clipboard_idx = selected_idx  # 核心：同步索引
+        self.current_clipboard_idx = selected_idx  # 同步索引
         
-        # 2. 选中有效项时，加载文本到TextBrowser（方便后续快捷键操作）
+        #  加载文本到TextBrowser
         if selected_idx != -1 and 0 <= selected_idx < len(self.clipboard_list_data):
             selected_content = self.clipboard_list_data[selected_idx]
-            self.TB.set_text(selected_content)  # 同步到TB，快捷键操作更顺畅
+            self.TB.set_text(selected_content) 
 
         self.update_clipboard_buttons_state()
 
@@ -836,11 +830,11 @@ class MainFrame(wx.Frame):
             return
         try:
             app = NSApp()
-            # 强制激活当前应用，把焦点从其他 App 抢过来
+            # 强制激活当前应用
             app.activateIgnoringOtherApps_(True)
         except Exception as e:
             logging.error(f"激活应用失败: {str(e)}")
-        # 1. 读取系统剪贴板内容
+        #  读取系统剪贴板
         clipboard = wx.Clipboard()
         init_content = ""
         if clipboard.Open():
@@ -848,9 +842,8 @@ class MainFrame(wx.Frame):
             text_data = wx.TextDataObject()
             if clipboard.GetData(text_data):
                 init_content = text_data.GetText()
-            clipboard.Close()  # 关闭剪贴板
+            clipboard.Close()
 
-        # 2. 打开编辑对话框
         self.edit_dialog = EditDialog(self, setting.lang_dict[setting.current_lang]["editor_title"], 
             init_content)
         if self.edit_dialog.ShowModal() == wx.ID_OK:
@@ -888,7 +881,7 @@ class MainFrame(wx.Frame):
         if not last_phrase:
             return
         vo_text, _ = last_phrase
-        if not vo_text.strip():  # 空文本直接返回，避免无效操作
+        if not vo_text.strip():
             return
 
         if not self.clipboard_list_data:
@@ -900,17 +893,15 @@ class MainFrame(wx.Frame):
                     self.save_clipboard_data()
             return
 
-        # 列表非空 → 执行原追加逻辑 -
+        # 列表非空，追加
         first_item = self.clipboard_list_data[0]
         if first_item.endswith(f"\n{vo_text}") or first_item == vo_text:
             return
 
-        # 追加内容（原内容+\n+VO内容）
         self.clipboard_list_data[0] = f"{first_item}\n{vo_text}"
         if self.current_mode == "clipboard":
             self.refresh_list_box()
-            self.list_Box.SetSelection(0)  # 选中第一行
-        # 同步系统剪贴板
+            self.list_Box.SetSelection(0)
         clipboard = wx.Clipboard()
         clipboard.Open()
         clipboard.SetData(wx.TextDataObject(self.clipboard_list_data[0]))
@@ -920,18 +911,17 @@ class MainFrame(wx.Frame):
 
     def on_hotkey_altshift7(self, event):
         """alt+shift+7: 剪贴板列表上一条"""
-        # 边界条件1：数据列表为空，直接返回（同步UI和数据层状态）
+        # 数据列表为空直接返回
         if not self.clipboard_list_data:
             if hasattr(self, 'list_Box') and self.list_Box:
                 self.list_Box.SetSelection(-1)
             self.current_clipboard_idx = -1
             return
 
-        # 数据层核心计算：仅依赖独立索引和数据列表，无UI依赖
-        total_count = len(self.clipboard_list_data)  # 数据列表总长度
-        current_idx = self.current_clipboard_idx     # 独立维护的索引变量
+        total_count = len(self.clipboard_list_data)
+        current_idx = self.current_clipboard_idx
 
-        # 计算上一条索引（循环切换逻辑）
+        # 计算上一条索引
         if current_idx == -1 or current_idx == 0:
             # 无选中 或 已到第一项 → 切换到最后一项
             new_idx = total_count - 1
@@ -942,7 +932,7 @@ class MainFrame(wx.Frame):
         self.current_clipboard_idx = new_idx
 
         selected_content = self.clipboard_list_data[new_idx]
-        print(f"切换到索引 {new_idx}，内容：{selected_content[:20]}...")  # 调试用
+        print(f"切换到索引 {new_idx}，内容：{selected_content[:20]}...")
         self.list_Box.SetSelection(new_idx)  # UI选中对应行
         # 调用vo_handler朗读
         self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
@@ -961,14 +951,13 @@ class MainFrame(wx.Frame):
 
     def on_hotkey_altshift9(self, event):
         """alt+shift+9: 剪贴板列表下一条"""
-        # 边界条件1：数据列表为空，直接返回
         if not self.clipboard_list_data:
-            # 可选：清空UI选中状态（保持数据与UI一致）
+            
             self.list_Box.SetSelection(-1)
             self.current_clipboard_idx = -1
             return
 
-        total_count = len(self.clipboard_list_data)  # 数据列表总长度
+        total_count = len(self.clipboard_list_data)
         current_idx = self.current_clipboard_idx
 
         # 下一条索引
@@ -981,7 +970,7 @@ class MainFrame(wx.Frame):
         # 获取选中内容
         selected_content = self.clipboard_list_data[new_idx]
         
-        self.list_Box.SetSelection(new_idx)  # UI选中对应行
+        self.list_Box.SetSelection(new_idx)
         
         # 调用vo_handler朗读
         self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
@@ -1097,14 +1086,14 @@ class MainFrame(wx.Frame):
 
         try:
             
-            # 1. 停止当前线程
+            #  停止当前线程
             if self.clipboard_monitor:
                 self.clipboard_monitor.stop_worker()
                 self.clipboard_monitor = None
 
                 logging.info("已停止当前VO处理器线程")
 
-            # 2. 重新实例化并启动
+            #  重新实例化并启动
             self.clipboard_monitor = ClipboardMonitor(
                 log_level=logging.INFO, 
                 loop_interval=0.1
@@ -1140,14 +1129,14 @@ class MainFrame(wx.Frame):
         :param window: wx.Frame 实例（主窗口）
         """
         try:
-            # 获取 wx 窗口对应的 macOS 原生 NSWindow 实例
+            # 获取 wx 窗口对应的NSWindow 实例
             ns_window = window.GetHandle()
             if not ns_window:
                 return
 
             # 获取当前应用实例
             app = NSApp()
-            # 调用系统 API 执行“隐藏应用”（和 Cmd+H 触发的系统行为完全相同）
+            # 系统 API 隐藏应用
             app.hide_(None)
         except Exception as e:
             logging.error(f"系统级隐藏窗口失败: {str(e)}")
@@ -1161,7 +1150,7 @@ def main():
     )
 
     app = wx.App(False)
-    # macOS 适配：设置应用为「非后台应用」，确保退出时Dock图标消失
+    #设置非后台应用
     if sys.platform == 'darwin':
         app.SetExitOnFrameDelete(True)  # 主窗口关闭时自动退出应用
     frame = MainFrame(None, setting.lang_dict[setting.current_lang]['app_name'])
