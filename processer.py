@@ -248,18 +248,6 @@ class MBartTranslator(BaseThreadedWorker):
         self._langType = langType
 
 
-    def _is_chinese_char(self, c):
-        """判断单个字符是否为中文字符"""
-        return '\u4e00' <= c <= '\u9fff'
-
-
-    def _is_chinese(self,text):
-        """检测文本是否是中文"""
-        if not text.strip():
-            return False
-        return any(self._is_chinese_char(c) for c in text)
-
-
     def _detect_english(self, text):
         """只有当文本不包含任何中文字符，且包含英文字母时，才判定为英文"""
         text = text.strip()
@@ -276,8 +264,8 @@ class MBartTranslator(BaseThreadedWorker):
         if not original_text:
             raise ValueError("请输入要翻译的内容")
 
-        # 当输入是「单个中文字符」时查询词典
-        if self._is_chinese(original_text) and len(original_text) == 1:
+        # 查询词典
+        if len(original_text) == 1:
             dict_result = self._lookup_word(original_text)
             if dict_result:
                 return dict_result
