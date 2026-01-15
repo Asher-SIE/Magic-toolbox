@@ -336,7 +336,7 @@ class MainFrame(wx.Frame):
         self.clipboard_monitor.start_worker(callback=self.on_new_clipboard_content)
 
         # 状态变量
-        self.version='V1.0.2\nBuild: 251230'""''
+        self.version='V1.0.3\nBuild: 251230'""''
         self.current_mode = "clipboard"
         self.clipboard_list_data = []  # 剪贴板列表
         self.current_clipboard_idx = -1
@@ -998,12 +998,55 @@ class MainFrame(wx.Frame):
 
 
     def on_hotkey_altshiftj(self, event):
-        """alt+shift+j: 获取当前剪贴板到系统"""
+        """alt+shift+j: 剪贴板列表内容设置到系统"""
+        if not self.clipboard_list_data or self.current_clipboard_idx < 0 or self.current_clipboard_idx >= len(self.clipboard_list_data):
+            return
+        
+        # 目标文本
+        target_text = self.clipboard_list_data[self.current_clipboard_idx]
+        
+        #  对比
+        current_clipboard_text = ""
+        clipboard_check = wx.Clipboard()
+        try:
+            if clipboard_check.Open():
+                data = wx.TextDataObject()
+                if clipboard_check.GetData(data):
+                    current_clipboard_text = data.GetText()
+        except Exception as e:
+            print(f"读取系统剪贴板失败：{e}")
+        finally:
+            if clipboard_check.IsOpened():
+                clipboard_check.Close()
+        
+
+        if current_clipboard_text == target_text:
+            return
+        
+        # 置剪贴板
         clipboard = wx.Clipboard()
-        clipboard.Open()
-        clipboard.SetData(wx.TextDataObject(self.clipboard_list_data[self.current_clipboard_idx]))
-        clipboard.Close()
-        del self.clipboard_list_data[self.current_clipboard_idx ]
+        try:
+            if not clipboard.Open():
+                return
+            
+            clipboard.SetData(wx.TextDataObject(target_text))
+        except Exception as e:
+            wx.MessageBox(f"设置剪贴板失败：{str(e)}", "错误", wx.OK | wx.ICON_ERROR)
+        finally:
+            if clipboard.IsOpened():
+                clipboard.Close()
+        
+
+        del self.clipboard_list_data[self.current_clipboard_idx]
+        
+        # 校准current_clipboard_idx
+
+        if not self.clipboard_list_data:
+            self.current_clipboard_idx = -1
+        elif self.current_clipboard_idx >= len(self.clipboard_list_data):
+            self.current_clipboard_idx = len(self.clipboard_list_data) - 1
+
+        
         self.refresh_list_box()
 
 
