@@ -1,6 +1,7 @@
 ## https://hf-mirror.com/facebook/mbart-large-50-many-to-many-mmt/resolve/main/model.safetensors?download=trueimport re
 
 import appscript
+import gzip
 import logging
 import os
 import re 
@@ -15,7 +16,7 @@ from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 from typing import Optional, Tuple, Callable
 
 
-# 多线程管理基类：封装线程启停
+# 多线程管理基类
 class BaseThreadedWorker:
     """
     多线程工作基类，提供统一的线程管理功能
@@ -73,7 +74,7 @@ class BaseThreadedWorker:
             
             #  event.wait  支持被强制唤醒
             if self._stop_event.wait(self._loop_interval):
-                # 如果事件被触发（调用了 stop_worker），直接退出循环
+                # 退出循环
                 break
             
         self.logger.info("线程已停止")
@@ -90,7 +91,7 @@ class BaseThreadedWorker:
             return
             
         self._result_callback = callback
-        # 创建守护线程，主线程退出时自动结束
+        # 创建守护线程
         self._worker_thread = threading.Thread(
             target=self._thread_loop,
             daemon=False
@@ -150,21 +151,21 @@ class MBartTranslator(BaseThreadedWorker):
 
     def _find_model_path(self) -> str:
         """按顺序查找模型目录，返回第一个找到的路径，都找不到则返回默认路径"""
-        # 1. 优先查找程序当前目录下的 "model"
+        # 程序目录下的 "model"
         path_in_current = os.path.join(self._current_dir, "model")
         if os.path.isdir(path_in_current):
             self.logger.info(f"在当前目录找到模型: {path_in_current}")
             return path_in_current
 
-        # 2. 如果找不到，查找用户的 "下载" 目录下的 "model"
+        #  "下载" 目录下的 "model"
         path_in_external = os.path.join(self.external_dir, "model")
         if os.path.isdir(path_in_external):
             self.logger.info(f"在下载目录找到模型: {path_in_external}")
             return path_in_external
 
-        # 3. 都找不到，返回一个默认路径
+        # 默认路径
         self.logger.warning("在当前目录和下载目录均未找到 'model' 文件夹。")
-        return path_in_current # 返回一个默认路径，让后续加载尝试失败
+        return path_in_current 
 
 
     def _try_load_model_and_tokenizer(self):
@@ -173,7 +174,7 @@ class MBartTranslator(BaseThreadedWorker):
             # 加载模型（指定MPS设备，float16精度减少内存占用）
             self._model = MBartForConditionalGeneration.from_pretrained(
                 self.model_path,
-                torch_dtype=torch.bfloat16,# float16先加个B看看有什么区别
+                torch_dtype=torch.bfloat16,
                 trust_remote_code=True
             ).to("mps")
             
@@ -193,32 +194,36 @@ class MBartTranslator(BaseThreadedWorker):
 
     def _load_dictionary(self):
         """
-        加载本地词典 ）
+        加载本地 gzip 格式词典
         """
         self._dictionary.clear()
         try:
-            with open(self._dict_path, 'r', encoding='utf-8') as file:
+            with gzip.open(self._dict_path, 'rt', encoding='utf-8') as file:
                 for line_num, line in enumerate(file, 1):
-                    # 去除首尾空白字符，跳过空行
+                    # 去除首尾空白字符跳过空行
                     line = line.strip()
                     if not line:
                         continue
 
-                    # 分割字段：取前两个
-                    parts = line.split('\t', 2)  # 最多分割2次
+                    # 分割字段取前两个
+                    parts = line.split('\t', 2)
                     if len(parts) >= 2:
-                        english, chinese = parts[0], parts[1]  # 仅保留前两个字段
-                        # 统一转为小写，实现不区分大小写查询
+                        english, chinese = parts[0], parts[1]
+                        # 统一转为小写
                         self._dictionary[english.lower()] = chinese
                     else:
-                        # 格式错误（不足两个字段），仅警告不中断
+                        # 格式错误警告
                         self.logger.warning(f"词典第{line_num}行格式不正确（需至少两个字段），已跳过")
             
-            self.logger.info(f"本地词典加载完成，共加载 {len(self._dictionary)} 条有效记录（路径：{self._dict_path}）")
+            # 加载完成日志
+            self.logger.info(f"本地 gzip 词典加载完成，共加载 {len(self._dictionary)} 条有效记录（路径：{self._dict_path}）")
         except FileNotFoundError:
-            self.logger.error(f"词典加载失败：找不到文件 {self._dict_path}")
+            # 文件不存在异常
+            self.logger.error(f"词典加载失败：找不到 gzip 文件 {self._dict_path}")
+        except gzip.BadGzipFile:
+            self.logger.error(f"词典加载失败：{self._dict_path} 不是有效的 gzip 压缩文件")
         except Exception as e:
-            self.logger.error(f"加载词典时发生错误: {str(e)}")
+            self.logger.error(f"加载 gzip 词典时发生错误: {str(e)}")
 
 
     def _lookup_word(self, word: str) -> Optional[str]:
@@ -227,7 +232,7 @@ class MBartTranslator(BaseThreadedWorker):
             self.logger.debug("词典查询：输入非有效英文单词")
             return None
         
-        # 统一转为小写，匹配词典键
+        # 统一转为小写
         lower_word = word.strip().lower()
         if lower_word in self._dictionary:
             self.logger.debug(f"词典命中：{word} → {self._dictionary[lower_word]}")
@@ -280,14 +285,14 @@ class MBartTranslator(BaseThreadedWorker):
             ## 未命中则整体翻译为英文
 
         is_english = self._detect_english(original_text)
-        # 判断是否为「单个英文单词」（不含空格，仅字母/数字）
+        # 判断是否为单个英文单词
         is_single_word = bool(re.match(r'^[a-zA-Z0-9]+$', original_text.strip()))
         if is_english and is_single_word:
             dict_result = self._lookup_word(original_text)
             if dict_result:
-                return dict_result  # 词典命中，直接返回结果
+                return dict_result  # 词典命中
 
-        # 词典未命中/非单词翻译
+        # 翻译
         
         # 构建翻译提示词和语言参数
         prompt_prefix_English = "Translation English to Chinese:###T###"
@@ -304,7 +309,7 @@ class MBartTranslator(BaseThreadedWorker):
             src_lang = "zh_CN"
             tgt_lang = "en_XX"
 
-        # 分词器编码（将文本转为模型可识别的Tensor
+        # 分词器编码
         self._tokenizer.src_lang = src_lang  # 设置源语言
         self._tokenizer.tgt_lang = tgt_lang  # 设置目标语言
         inputs = self._tokenizer(
@@ -316,7 +321,7 @@ class MBartTranslator(BaseThreadedWorker):
             add_special_tokens=True
         ).to("mps")  # 移动到MPS设备
 
-        # 模型生成翻译结果（禁用梯度计算，减少内存占用
+        # 生成翻译结果
         with torch.no_grad():
             outputs = self._model.generate(
                 **inputs,
@@ -328,7 +333,7 @@ class MBartTranslator(BaseThreadedWorker):
                 repetition_penalty=1.3   # 惩罚重复token
             )
 
-        # 解码并清理结果（移除特殊符号和提示词格式
+        # 解码并清理结果
         translated_text = self._tokenizer.decode(
             outputs[0],
             skip_special_tokens=True,    # 跳过<pad>、</s>等特殊token
@@ -388,7 +393,7 @@ class VoiceOverHandler(BaseThreadedWorker):
         # 缓存上次的朗读信息（内容+时间戳）
         self._last_content: Optional[str] = None
         self._last_timestamp: float = 0.0  # 时间戳（秒）
-        self.repeat_threshold = repeat_threshold  # 阈值（默认0.05秒）
+        self.repeat_threshold = repeat_threshold  # 阈值
 
     def get_last_phrase(self) -> Optional[Tuple[str, float]]:
         """
@@ -397,7 +402,7 @@ class VoiceOverHandler(BaseThreadedWorker):
         """
         try:
             current_content = self.vo.last_phrase.content()
-            current_timestamp = time.time()  # 获取当前时间戳（秒，精确到小数）
+            current_timestamp = time.time()  # 获取当前时间戳
             
             # 内容为空返回None
             self._vo_err_count = 0
@@ -412,7 +417,7 @@ class VoiceOverHandler(BaseThreadedWorker):
                     self.logger.debug(f"重复内容（时间差{time_diff:.2f}s < 阈值）：{current_content}")
                     return None
             
-            # 视为新内容，更新缓存并返回
+            # 更新缓存并返回
             self._last_content = current_content
             self._last_timestamp = current_timestamp
             self.logger.info(f"新朗读内容（时间戳：{current_timestamp:.2f}）：{current_content}")
@@ -467,13 +472,13 @@ class ClipboardMonitor(BaseThreadedWorker):
         """
         super().__init__(log_level=log_level, loop_interval=loop_interval)
         self._last_content: Optional[str] = None
-        # 使用线程局部存储来保存wx.App实例，避免线程问题
+        # 使用线程局部存储来保存wx.App实例
         self._thread_local = threading.local()
 
     def _get_wx_app(self) -> wx.App:
         """确保每个线程都有一个wx.App实例"""
         if not hasattr(self._thread_local, 'app'):
-            # 对于非GUI线程，必须创建一个wx.App实例
+            # 非GUI线程，必须创建一个wx.App实例
             self._thread_local.app = wx.App(False)
         return self._thread_local.app
 
@@ -482,7 +487,6 @@ class ClipboardMonitor(BaseThreadedWorker):
         检查剪贴板内容是否变化。
         如果变化，则返回 (新内容, 时间戳) 元组，否则返回 None。
         """
-        # 确保线程有wx.App实例
         self._get_wx_app()
         
         clipboard = wx.Clipboard.Get()
@@ -491,7 +495,7 @@ class ClipboardMonitor(BaseThreadedWorker):
             return None
             
         try:
-            # 尝试获取文本数据
+            # 获取文本数据
             text_data = wx.TextDataObject()
             if clipboard.GetData(text_data):
                 current_content = text_data.GetText()
@@ -508,13 +512,12 @@ class ClipboardMonitor(BaseThreadedWorker):
         finally:
             clipboard.Close()
             
-        # 如果没有变化或获取失败，则返回None
         return None
 
 
 class TextBrowser:
     def __init__(self):
-        self.current_text = ""  # 存储传入的文本
+        self.current_text = ""
         self.focus_pos = 0  # 浏览焦点的虚拟坐标（字符索引）
         self._total_chars = 0  # 文本总字数
         self._row_column = (0, 0)  #行列坐标
@@ -681,14 +684,13 @@ class TextProcessor:
             result = ''
             zero_flag = False
             digit_units = ['千', '百', '十', '']  # 对应4位的位权（从左到右）
-            # 找到第一个非零数字的位置，跳过开头零
+            # 找到第一个非零数字的位置
             first_non_zero = 0
             while first_non_zero < len(num_str) and num_str[first_non_zero] == '0':
                 first_non_zero += 1
             if first_non_zero == len(num_str):
                 return ''  # 全零返回空
 
-            # 从第一个非零数字开始处理，按4位位权对应（不足4位时自动匹配）
             for i in range(len(num_str)):
                 digit = int(num_str[i])
                 unit = digit_units[4 - len(num_str) + i]  # 匹配正确位权
@@ -698,7 +700,7 @@ class TextProcessor:
                     if zero_flag:
                         result += chinese_nums[0]
                         zero_flag = False
-                    # 十位特殊处理：仅10-19（两位数）省略"一"
+                    # 十位
                     if unit == '十' and digit == 1 and first_non_zero == i:
                         result += unit
                     else:
@@ -709,20 +711,19 @@ class TextProcessor:
             if num == 0:
                 return chinese_nums[0]
             
-            # 处理负数
+            # 负数
             is_negative = False
             if num < 0:
                 is_negative = True
                 num = -num
 
             num_str = str(num)
-            # 去除整体前导零（开头的0全部忽略）
             num_str = num_str.lstrip('0')
-            # 全零特殊处理：还原为"0"
+            # 全零
             if not num_str:
                 num_str = "0"
 
-            # 从右往左4位分组，不补零
+            # 从右往左4位分组
             groups = []
             for i in range(len(num_str), 0, -4):
                 start = max(0, i - 4)
@@ -730,7 +731,7 @@ class TextProcessor:
 
             result = ''
             level_zero_flag = False
-            # 逆序遍历分组（从万/亿级到个级）
+            # 逆序遍历分组
             for i in reversed(range(len(groups))):
                 group = groups[i]
                 group_cn = four_digit_to_chinese(group)
@@ -763,23 +764,23 @@ class TextProcessor:
             denominator_cn = int_to_chinese(int(denominator))
             return f"{denominator_cn}分之{numerator_cn}" if denominator != '1' else numerator_cn
 
-        # 关键修改1：正则新增匹配四则运算符号（+、-、*、/），保持原顺序提取
+        # 正则匹配四则运算符号
         pattern = r"""
-            (-?\d+\/\d+) |                # 分数（优先匹配，避免被/符号单独匹配）
+            (-?\d+\/\d+) |                # 分数（优先匹配
             (-?\d+\.?\d*%) |              # 百分数
-            (-?\d+\.\d+) |                # 小数（正常格式如1.23）
-            (-?\.\d+) |                   # 小数（点开头如.123）
+            (-?\d+\.\d+) |                # 小数
+            (-?\.\d+) |                   # 小数点开头
             (-?\d+) |                     # 整数
-            ([aAsSmMdD])                  # 四则运算符号（单独分组）
+            ([aAsSmMdD])                  # 四则运算符号
         """
-        # 提取所有匹配项（包括数字类和符号类），保持原文本顺序
+        # 提取所有匹配项
         matches = re.findall(pattern, self.text, re.VERBOSE | re.MULTILINE)
 
         chinese_results = []
         for match in matches:
             (fraction, percent, decimal_normal, decimal_dot_start, integer, op) = match
             if fraction:
-                # 分数处理（注意：分数的/已包含在分组内，不会被符号匹配）
+                # 分数处理
                 numerator, denominator = fraction.split('/', 1)
                 chinese_results.append(fraction_to_chinese(numerator, denominator))
             elif percent:
@@ -798,11 +799,11 @@ class TextProcessor:
             elif integer:
                 chinese_results.append(int_to_chinese(int(integer)))
             elif op:
-                # 关键修改2：符号映射，按规则添加前后空格
+                #  符号映射
                 chinese_results.append(op_map[op.lower()])
 
-        # 关键修改3：拼接所有结果，最后清理首尾多余空格（避免符号在开头/结尾导致的空格）
+        #  拼接结果
         final_result = ''.join(chinese_results).strip()
-        # 清理可能的连续空格（如符号前后与数字拼接时的冗余空格）
+        # 清理空格
         final_result = re.sub(r'\s+', ' ', final_result)
         return final_result
