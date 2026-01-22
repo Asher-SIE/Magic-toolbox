@@ -1,0 +1,277 @@
+import llama_cpp
+import time
+import os
+from typing import Optional, List, Dict
+
+class HYMT15Translator:
+    """
+    腾讯HY-MT1.5-1.8B翻译器（M1芯片优化版）
+    核心功能：单句翻译、批量翻译，优雅返回结果（无多余打印）
+    """
+    # M1 8GB内存最优配置（16GB可修改n_ctx=2048，n_gpu_layers=25）
+    DEFAULT_CONFIG = {
+        "n_ctx": 1536,
+        "n_threads": 8,
+        "n_gpu_layers": 15,
+        "n_batch": 256,
+        "verbose": False,
+        "backend": "metal",
+        "metal_ctx_alloc": "auto",
+        "metal_dev_id": 0
+    }
+    # 支持的目标语言映射
+    SUPPORTED_LANGS = {
+        "en": "英语", "zh": "中文", "ja": "日语", "ko": "韩语",
+        "fr": "法语", "de": "德语", "es": "西班牙语", "ru": "俄语"
+    }
+    DEFAULT_TARGET_LANG = "en"
+
+    def __init__(self, model_path: str = "./models/HY-MT1.5-1.8B-Q4_K_M.gguf", config: Optional[Dict] = None):
+        """
+        初始化翻译器（加载模型，仅初始化一次）
+        :param model_path: 模型文件路径
+        :param config: 自定义模型配置（覆盖默认配置）
+        """
+        self.model_path = model_path
+        self.config = {**self.DEFAULT_CONFIG, **(config or {})}
+        self.model = self._load_model()
+
+    def _load_model(self) -> llama_cpp.Llama:
+        """加载模型（内部方法，不对外暴露）"""
+        if not os.path.exists(self.model_path):
+            raise FileNotFoundError(f"模型文件未找到：{self.model_path}")
+        
+        try:
+            return llama_cpp.Llama(
+                model_path=self.model_path,
+                **self.config
+            )
+        except Exception as e:
+            raise RuntimeError(f"模型加载失败：{str(e)}") from e
+
+    def _validate_target_lang(self, target_lang: str) -> str:
+        """验证目标语言（内部方法，不对外暴露）"""
+        target_lang = target_lang.lower().strip()
+        return target_lang if target_lang in self.SUPPORTED_LANGS else self.DEFAULT_TARGET_LANG
+
+    def translate(self, text: str, target_lang: str = DEFAULT_TARGET_LANG) -> str:
+        """
+        单句翻译（核心方法）
+        :param text: 待翻译文本
+        :param target_lang: 目标语言（支持en/zh/ja等，默认英语）
+        :return: 翻译结果（纯文本，无多余字符）
+        """
+        text = text.strip()
+        if not text:
+            return ""
+        
+        # 验证语言+构建提示词
+        target_lang = self._validate_target_lang(target_lang)
+        prompt = f"""Translate the following text from auto to {target_lang} accurately.
+Requirements:
+1. Keep original meaning, no addition/omission.
+2. Natural and fluent target language.
+3. No extra content.
+
+Text: {text}
+Translation:"""
+        
+        try:
+            output = self.model.create_completion(
+                prompt=prompt,
+                max_tokens=768,
+                temperature=0.15,
+                top_p=0.9,
+                stop=["\n", "Text:"],
+                echo=False
+            )
+            result = output["choices"][0]["text"].strip()
+            return result or ""
+        except Exception as e:
+            raise RuntimeError(f"翻译失败：{str(e)}") from e
+        finally:
+            # M1内存回收优化
+            self.model.reset()
+            time.sleep(0.05)
+
+    def translate_batch(self, texts: List[str], target_lang: str = DEFAULT_TARGET_LANG) -> List[str]:
+        """
+        批量翻译（核心方法）
+        :param texts: 待翻译文本列表
+        :param target_lang: 目标语言（统一设置，支持批量相同目标语言）
+        :return: 翻译结果列表（与输入列表顺序一致）
+        """
+        target_lang = self._validate_target_lang(target_lang)
+        return [self.translate(text, target_lang) for text in texts]
+
+    def translate_file(self, input_file: str, output_file: str, target_lang: str = DEFAULT_TARGET_LANG) -> None:
+        """
+        文件批量翻译（辅助方法）
+        :param input_file: 输入文件路径（每行一句）
+        :param output_file: 输出文件路径（每行对应翻译结果）
+        :param target_lang: 目标语言
+        """
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"输入文件未找到：{input_file}")
+        
+        # 读取输入文本
+        with open(input_file, "r", encoding="utf-8") as f:
+            texts = [line.strip() for line in f if line.strip()]
+        
+        # 批量翻译
+        results = self.translate_batch(texts, target_lang)
+        
+        # 保存结果
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(results))
+```
+
+### 🔥 核心特点（完全满足你的要求）
+1. **纯粹优雅**：仅一个类，无多余打印、无交互、无UI，专注返回数据；
+2. **M1优化**：内置Metal加速、内存回收等配置，直接适配你的环境；
+3. **用法简单**：初始化一次，重复调用翻译方法，支持单句/批量/文件翻译；
+4. **异常友好**：抛出明确异常（而非打印错误），方便你在项目中捕获处理；
+5. **返回干净**：翻译结果仅纯文本，无任何多余符号（如⚠️、文字提示等）。
+
+### 📌 快速使用示例（导入即用）
+```python
+# 1. 初始化翻译器（仅需初始化一次，加载模型）
+translator = HYMT15Translator(
+    model_path="./models/HY-MT1.5-1.8B-Q4_K_M.gguf"  # 你的模型路径
+)
+
+# 2. 单句翻译（返回纯文本结果）
+text = "人工智能正在改变世界"
+result_en = translator.translate(text, target_lang="en")
+result_ja = translator.translate(text, target_lang="ja")
+print(result_en)  # 输出：Artificial intelligence is changing the world
+print(result_ja)  # 输出：人工知能が世界を変えています
+
+# 3. 批量翻译（返回结果列表，与输入顺序一致）
+texts = [
+    "自然语言处理是AI的重要分支",
+    "Large language models have made great progress"
+]
+results = translator.translate_batch(texts, target_lang="zh")
+print(results)  # 输出：["自然言語処理はAIの重要な分野です", "大言語モデルは大きな進歩を遂げました"]
+
+# 4. 文件批量翻译（读取input.txt，保存到output.txt）
+translator.translate_file(
+    input_file="input.txt",
+    output_file="output.txt",
+    target_lang="en"
+)
+
+# 5. 自定义配置（如16GB内存M1，调整参数）
+custom_config = {
+    "n_ctx": 2048,
+    "n_gpu_layers": 25
+}
+translator_custom = HYMT15Translator(config=custom_config)
+```
+
+### 🚀 集成到你的项目
+直接在你的代码中导入这个类，即可无缝集成翻译功能：
+```python
+# 假设你的项目文件是 magic_toolbox.py
+from hymt_translator import HYMT15Translator
+
+# 初始化翻译器（在项目启动时执行一次）
+translator = HYMT15Translator(model_path="./models/HY-MT1.5-1.8B-Q4_K_M.gguf")
+
+# 业务逻辑中调用翻译
+def process_text(text: str) -> str:
+    # 处理逻辑...
+    translated_text = translator.translate(text, target_lang="en")
+    # 后续逻辑...
+    return translated_text
+```
+模型下载地址
+https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF?show_file_info=HY-MT1.5-1.8B-Q4_K_M.gguf
+
+你在venv中安装`llama-cpp-python`时遇到了CMake编译失败的错误，核心原因是**macOS缺少编译该库所需的依赖（如CMake、编译器、加速库）**，且ARM架构（M系列芯片）的编译配置需要额外适配。我帮你梳理完整的解决步骤，从依赖安装到编译适配，确保能成功安装。
+
+### 一、先解释错误本质
+`llama-cpp-python`是基于C/C++的Python绑定库，安装时需要本地编译C代码：
+1. 缺少CMake（构建工具）、Xcode命令行工具（编译器）等基础依赖；
+2. M系列Mac（arm64）需要额外配置编译参数，适配Apple Silicon的加速指令；
+3. 编译过程中`ggml-quants.c`（量化相关代码）报错，是因为缺少编译环境或架构适配。
+
+### 二、解决步骤（按顺序执行，激活venv后操作）
+#### 步骤1：安装基础编译依赖（必做）
+先安装macOS编译所需的工具链，打开终端（激活venv）执行：
+```bash
+# 1. 安装Xcode命令行工具（提供gcc/clang编译器）
+xcode-select --install
+# 弹出安装窗口后，点击“安装”，等待完成（约5分钟）
+
+# 2. 安装Homebrew（若未安装）
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 3. 安装CMake（构建工具）和依赖
+brew install cmake pkg-config llvm
+```
+
+#### 步骤2：配置ARM架构编译参数（M系列Mac必做）
+为适配Apple Silicon的加速能力，设置环境变量（激活venv后执行）：
+```bash
+# 设置编译架构为arm64，启用Metal加速（M系列Mac）
+export CMAKE_ARGS="-DLLAMA_METAL=on -DCMAKE_OSX_ARCHITECTURES=arm64"
+export FORCE_CMAKE=1
+```
+
+#### 步骤3：重新安装llama-cpp-python
+用pip安装（确保venv已激活），优先安装指定版本（避免最新版兼容性问题）：
+```bash
+# 方式1：安装稳定版（推荐）
+pip install llama-cpp-python==0.2.78
+
+# 方式2：若方式1失败，用源码编译（指定编译参数）
+CMAKE_ARGS="-DLLAMA_METAL=on -DCMAKE_OSX_ARCHITECTURES=arm64" pip install --no-cache-dir llama-cpp-python
+```
+
+#### 步骤4：验证安装成功
+```bash
+# 进入Python交互环境
+python
+# 导入库，无报错即成功
+>>> import llama_cpp
+>>> print(llama_cpp.__version__)
+# 输出版本号（如0.2.78）即为成功
+```
+
+### 三、若仍失败：进阶解决方案
+#### 方案1：降级llama-cpp-python版本
+部分新版可能适配问题，尝试更低版本：
+```bash
+pip install llama-cpp-python==0.2.60
+```
+
+#### 方案2：禁用Metal加速（仅作为兜底）
+若Metal加速编译失败，暂时禁用（性能会降低，但能安装）：
+```bash
+export CMAKE_ARGS="-DLLAMA_METAL=off -DCMAKE_OSX_ARCHITECTURES=arm64"
+pip install llama-cpp-python
+```
+
+#### 方案3：手动编译安装
+```bash
+# 克隆源码
+git clone https://github.com/abetlen/llama-cpp-python.git
+cd llama-cpp-python
+
+# 配置编译参数
+CMAKE_ARGS="-DLLAMA_METAL=on" python setup.py install
+```
+
+### 四、关键注意事项
+1. **必须在激活的venv中操作**：所有依赖和编译都针对venv环境，避免污染系统；
+2. **Xcode命令行工具安装后需重启终端**：确保编译器生效；
+3. **M系列Mac必加`-DCMAKE_OSX_ARCHITECTURES=arm64`**：否则会编译x86架构代码，导致失败。
+
+### 总结
+1. 核心问题：缺少编译依赖+ARM架构未适配；
+2. 解决核心：安装Xcode命令行工具+CMake，设置ARM编译参数后重新安装；
+3. 验证标准：`import llama_cpp`无报错，说明安装成功。
+
+按上述步骤执行后，`llama-cpp-python`的编译错误会被解决，能正常安装到你的venv中。

@@ -1,18 +1,15 @@
-## https://hf-mirror.com/facebook/mbart-large-50-many-to-many-mmt/resolve/main/model.safetensors?download=trueimport re
-
 import appscript
 import gzip
 import logging
+import llama_cpp
 import os
 import re 
 import setting
 import sys
 import threading
 import time
-import torch
 import wx
 
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 from typing import Optional, Tuple, Callable
 
 
