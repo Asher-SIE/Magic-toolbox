@@ -9,7 +9,7 @@ import wx
 import wx.adv
 
 from AppKit import NSApplication, NSApp, NSWindow
-from processer import MBartTranslator, VoiceOverHandler, ClipboardMonitor, TextBrowser, reboot_VoiceOver, TextProcessor
+from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler
 from typing import Optional, Tuple
 
 
@@ -511,11 +511,10 @@ class MainFrame(wx.Frame):
     def init_translator(self):
         """初始化翻译器"""
         try:
-            self.translator = MBartTranslator(
+            self.translator = Translator(
                 log_level=logging.INFO,
                 loop_interval=0.1
             )
-            self.translator.start_worker(callback=self.on_translation_complete)
         except Exception as e:
             wx.MessageBox(str(e), "初始化错误", wx.OK | wx.ICON_ERROR)
             self.translator = None
@@ -784,8 +783,14 @@ class MainFrame(wx.Frame):
         last_phrase = self.vo_handler.get_last_phrase()
         if last_phrase:
             vo_text, _ = last_phrase
-            self.translator.set_input_text(vo_text[0], "EN")
-            
+            explained_text = self.TB.get_char_explanation(vo_text)
+            # 若解释存在（与原文本不同），则使用解释结果；否则用原文本
+            if explained_text != vo_text:
+                self.vo_handler.speak_text(explained_text)
+                return
+
+            result_text = self.translator.lookup_dictionary(vo_text[0])
+            self.vo_handler.speak_text(result_text)
 
 
     def on_hotkey_altd(self, event):
@@ -804,7 +809,12 @@ class MainFrame(wx.Frame):
                 return
 
             if self.translator:
-                self.translator.set_input_text(vo_text, "EN")
+                result_text = self.translator.lookup_dictionary(vo_text)
+                if result_text:
+                    self.vo_handler.speak_text(result_text)
+                    return
+                result_text = self.translator.translate(vo_text, "English", "Chinese")
+                self.vo_handler.speak_text(result_text)
         else:
             self.text_ctrl.SetValue(setting.lang_dict[setting.current_lang]['vo_warning'])
 
@@ -818,8 +828,20 @@ class MainFrame(wx.Frame):
         last_phrase = self.vo_handler.get_last_phrase()
         if last_phrase:
             vo_text, _ = last_phrase
+            explained_text = self.TB.get_char_explanation(vo_text)
+            # 若解释存在（与原文本不同），则使用解释结果；否则用原文本
+            
+            if explained_text != vo_text:
+                self.vo_handler.speak_text(explained_text)
+                return
+
             if self.translator:
-                self.translator.set_input_text(vo_text, "ZH")
+                result_text = self.translator.lookup_dictionary(vo_text)
+                if result_text:
+                    self.vo_handler.speak_text(result_text)
+                    return
+                result_text = self.translator.translate(vo_text, "Chinese", "English")
+                self.vo_handler.speak_text(result_text)
         else:
             self.text_ctrl.SetValue(setting.lang_dict[setting.current_lang]['vo_warning'])
 
@@ -987,8 +1009,17 @@ class MainFrame(wx.Frame):
     def on_hotkey_altshifti(self, event):
         """alt+shift+i: 当前字符解释"""
         result_text = self.TB.browse("explain_char")
+
         if result_text:
-            self.translator.set_input_text(result_text[0], "EN")
+            explained_text = self.TB.get_char_explanation(result_text)
+            # 若解释存在（与原文本不同），则使用解释结果；否则用原文本
+            if explained_text != result_text:
+                self.vo_handler.speak_text(explained_text)
+                return
+
+        if self.translator:
+            result_text = self.translator.lookup_dictionary(result_text[0])
+            self.vo_handler.speak_text(result_text)
 
 
     def on_hotkey_altshifto(self, event):
