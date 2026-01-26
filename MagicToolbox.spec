@@ -4,8 +4,8 @@
 a = Analysis(
     ['main_UI.py'],
     pathex=[],
-    binaries=[],
-    datas=[('resource/', 'resource/')],
+    binaries=[('venv/lib/python3.13/site-packages/llama_cpp/lib', '.')],
+    datas=[('resources', 'resources')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -19,16 +19,13 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='MagicToolbox',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -36,8 +33,17 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
-app = BUNDLE(
+coll = COLLECT(
     exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='MagicToolbox',
+)
+app = BUNDLE(
+    coll,
     name='MagicToolbox.app',
     icon=None,
     bundle_identifier=None,
