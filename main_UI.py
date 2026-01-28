@@ -312,6 +312,18 @@ class MainFrame(wx.Frame):
     def __init__(self, parent, title):
         super(MainFrame, self).__init__(parent, title=title, size=(1024, 768))
         
+        # 状态变量
+        self.version='V1.0.3\nBuild: 251230'""''
+        self.current_mode = "clipboard"
+        self.clipboard_list_data = []  # 剪贴板列表
+        self.current_clipboard_idx = -1
+        self.current_module = "clipboard"
+        # 外部剪贴板数据
+        app_support_dir = os.path.expanduser("~/Library/Application Support/")
+        self.app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
+        os.makedirs(self.app_data_dir, exist_ok=True)
+        self._clipboard_data_path = os.path.join(self.app_data_dir, ".clipboard_data")
+
         # 创建UI组件
         self.init_toolbar()
         self.init_ui()
@@ -335,17 +347,6 @@ class MainFrame(wx.Frame):
         #启动处理器
         self.clipboard_monitor.start_worker(callback=self.on_new_clipboard_content)
 
-        # 状态变量
-        self.version='V1.0.3\nBuild: 251230'""''
-        self.current_mode = "clipboard"
-        self.clipboard_list_data = []  # 剪贴板列表
-        self.current_clipboard_idx = -1
-        # 外部剪贴板数据
-        app_support_dir = os.path.expanduser("~/Library/Application Support/")
-        self.app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
-        os.makedirs(self.app_data_dir, exist_ok=True)
-        self._clipboard_data_path = os.path.join(self.app_data_dir, ".clipboard_data")
-
         self.load_clipboard_data()
         self.edit_dialog = None
 
@@ -362,28 +363,26 @@ class MainFrame(wx.Frame):
 
     def init_toolbar(self):
         """工具栏"""
-        self.toolbar = self.CreateToolBar(wx.TB_HORIZONTAL | wx.NO_BORDER)
-        # 模式单选框
-        self.mode_group = wx.RadioBox(
-            self.toolbar, label=setting.lang_dict[setting.current_lang]['tbr_mode'], choices=[setting.lang_dict[setting.current_lang]['trans_radio'], setting.lang_dict[setting.current_lang]['clipboard_radio']], style=wx.RA_SPECIFY_ROWS
-        )
-        self.mode_group.SetSelection(1)
-        self.toolbar.AddControl(self.mode_group)
-        self.toolbar.AddSeparator()
-        # 剪贴板功能按钮
-        self.copy_btn = self.toolbar.AddTool(wx.NewIdRef(), setting.lang_dict[setting.current_lang]['copy_btn'], wx.Bitmap(), setting.lang_dict[setting.current_lang]['copy_btn_tips'])
-        self.delete_btn = self.toolbar.AddTool(wx.NewIdRef(), setting.lang_dict[setting.current_lang]['delete_btn'], wx.Bitmap(), setting.lang_dict[setting.current_lang]['delete_btn_tips'])
-        self.edit_btn = self.toolbar.AddTool(wx.NewIdRef(), setting.lang_dict[setting.current_lang]['edit_btn'], wx.Bitmap(), setting.lang_dict[setting.current_lang]['edit_btn_tips'])
-        self.toolbar.EnableTool(self.copy_btn.GetId(), False)
-        self.toolbar.EnableTool(self.delete_btn.GetId(), False)
-        self.toolbar.EnableTool(self.edit_btn.GetId(), False)
+        self.toolbar = self.CreateToolBar(wx.TB_HORIZONTAL | wx.NO_BORDER | wx.TB_TEXT)
+        # Initially empty, will be populated by update_toolbar_for_module
         self.toolbar.Realize()
 
-        # 事件绑定
-        self.Bind(wx.EVT_RADIOBOX, self.on_mode_switch, self.mode_group)
-        self.Bind(wx.EVT_TOOL, self.on_copy_btn, self.copy_btn)
-        self.Bind(wx.EVT_TOOL, self.on_delete_btn, self.delete_btn)
-        self.Bind(wx.EVT_TOOL, self.on_edit_btn, self.edit_btn)
+        # Store button IDs for dynamic enabling/disabling later
+        self.copy_btn_id = wx.NewIdRef()
+        self.delete_btn_id = wx.NewIdRef()
+        self.edit_btn_id = wx.NewIdRef()
+
+        # Store button labels/tips from settings for reuse
+        self.copy_btn_label = setting.lang_dict[setting.current_lang]['copy_btn']
+        self.delete_btn_label = setting.lang_dict[setting.current_lang]['delete_btn']
+        self.edit_btn_label = setting.lang_dict[setting.current_lang]['edit_btn']
+        self.copy_btn_tip = setting.lang_dict[setting.current_lang]['copy_btn_tips']
+        self.delete_btn_tip = setting.lang_dict[setting.current_lang]['delete_btn_tips']
+        self.edit_btn_tip = setting.lang_dict[setting.current_lang]['edit_btn_tips']
+
+        # Initially disable them, they will be enabled based on selection in clipboard mode
+        # These will be handled by update_toolbar_for_module
+        # Event bindings for tools will also be done there
 
 
     def create_menu_bar(self):
@@ -469,31 +468,97 @@ class MainFrame(wx.Frame):
 
 
     def init_ui(self):
-        """初始化主界面：编辑框+列表"""
-        self.main_panel = wx.Panel(self)
-        self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+        """
+        重构UI：左侧导航列表 + 动态工具栏 + 内容区
+        核心原则：
+        - 工具栏由 Frame 直接创建管理（不放入任何 sizer）
+        - Frame 设置 sizer 仅包含 main_panel（工具栏自动位于 sizer 上方）
+        - main_panel 的 sizer 仅管理内容区域（分割窗口）
+        """
+        # ========== 1. Frame 工具栏已经由 init_toolbar 创建 ==========
+        # self.toolbar = self.CreateToolBar(...) #  0
         
-        # 翻译模式
-        self.text_ctrl = wx.TextCtrl(
-            self.main_panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER
-        )
-        self.text_ctrl.SetFont(wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-        self.text_ctrl.SetHint("输入文本进行翻译...")
-        self.main_sizer.Add(self.text_ctrl, 1, wx.EXPAND | wx.ALL, 10)
-        self.text_ctrl.Hide()
+        # Enable/disable tools based on whether anything is selected
+        # Check if current module is clipboard first, as buttons might not exist otherwise
+        if self.current_module == "clipboard":
+            self.toolbar.EnableTool(self.copy_btn_id, has_select)
+            self.toolbar.EnableTool(self.delete_btn_id, has_select)
+            self.toolbar.EnableTool(self.edit_btn_id, has_select and len(checked_indices) == 1) # Edit requires single selection
+        else:
+            # If not in clipboard mode, ensure buttons are disabled even if accidentally enabled
+            # Note: This might cause an error if tool doesn't exist, so only call when appropriate
+            # It's safer to rely on the fact that update_toolbar_for_module handles this.
+            pass # State management is now handled by update_toolbar_for_module
 
-        # 剪贴板模式
-        self.list_Box = wx.CheckListBox(self.main_panel, style=wx.LB_HSCROLL | wx.SUNKEN_BORDER)
-        self.main_sizer.Add(self.list_Box, 1, wx.EXPAND | wx.ALL, 10)
+
+
+    def update_toolbar_for_module(self, module_name: str):
+        """安全更新工具栏内容（不重建）"""
+        self.toolbar.ClearTools()  # 清除旧工具
         
-        self.main_panel.SetSizer(self.main_sizer)
-        self.text_ctrl.Bind(wx.EVT_KEY_DOWN, self.on_key_to_translate)
-        self.text_ctrl.Bind(wx.EVT_TEXT, self.on_text_changed)
-        self.list_Box.Bind(wx.EVT_KEY_DOWN, self.on_list_key_down)
-        # 绑定复选框勾选事件
-        self.list_Box.Bind(wx.EVT_CHECKLISTBOX, self.on_list_item_checked)
-        # 列表项选中事件
-        self.list_Box.Bind(wx.EVT_LISTBOX, self.on_list_item_selected)
+        if module_name == "clipboard":
+            # 添加剪贴板工具（示例）
+            copy_id = wx.NewIdRef()
+            self.toolbar.AddTool(copy_id, "复制", wx.ArtProvider.GetBitmap(wx.ART_COPY), "复制选中项")
+            self.Bind(wx.EVT_TOOL, self.on_copy_btn, id=copy_id)
+            # ... 其他按钮
+        elif module_name == "translation":
+            # 添加翻译工具（示例）
+            translate_id = wx.NewIdRef()
+            self.toolbar.AddTool(translate_id, "翻译", wx.ArtProvider.GetBitmap(wx.ART_FIND), "翻译为英文")
+            self.Bind(wx.EVT_TOOL, lambda e: self.on_to_translate(e, "EN"), id=translate_id)
+        
+        self.toolbar.Realize()  # 刷新显示
+
+
+
+
+    def on_nav_selection_changed(self, event):
+        """导航选择事件：切换内容面板 + 更新工具栏"""
+        selection = event.GetString()
+        if "翻译" in selection or "Translation" in selection:
+            self.switch_to_module("translation")
+        elif "剪贴板" in selection or "Clipboard" in selection:
+            self.switch_to_module("clipboard")
+        elif "设置" in selection or "Settings" in selection:
+            self.switch_to_module("settings")
+
+    def switch_to_module(self, module_name: str):
+        """统一切换逻辑：更新面板显隐 + 工具栏 + 状态"""
+        # 隐藏所有面板
+        self.translation_panel.Hide()
+        self.clipboard_panel.Hide()
+        self.settings_panel.Hide()
+        
+        # 显示目标面板
+        if module_name == "translation":
+            self.translation_panel.Show()
+            self.text_ctrl.SetFocus()
+        elif module_name == "clipboard":
+            self.clipboard_panel.Show()
+            self.refresh_list_box()  # 刷新剪贴板列表
+            self.list_Box.SetFocus()
+        elif module_name == "settings":
+            self.settings_panel.Show()
+        
+        # 更新状态与工具栏
+        self.current_module = module_name
+        self.update_toolbar_for_module(module_name)
+        self.main_panel.Layout()
+
+
+
+
+    def on_switch_to_translation(self):
+        pass
+
+    def on_switch_to_clipboard(self):
+        pass
+
+    def on_switch_to_settings():
+        pass
+
+
 
 
     def load_clipboard_data(self):
