@@ -314,19 +314,20 @@ class MainFrame(wx.Frame):
         
         # 状态变量
         self.version='V1.0.3\nBuild: 251230'""''
-        self.current_mode = "clipboard"
         self.clipboard_list_data = []  # 剪贴板列表
         self.current_clipboard_idx = -1
-        self.current_module = "clipboard"
+        self.current_module = "translation"
         # 外部剪贴板数据
         app_support_dir = os.path.expanduser("~/Library/Application Support/")
         self.app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
         os.makedirs(self.app_data_dir, exist_ok=True)
-        self._clipboard_data_path = os.path.join(self.app_data_dir, ".clipboard_data")
+        self._clipboard_data_path = os.path.join(self.app_data_dir, ".clipboard_data")  # 剪贴板数据文件
+        self.edit_dialog = None
 
         # 创建UI组件
         self.init_toolbar()
         self.init_ui()
+        self.create_menu_bar()
 
         # 实例化核心处理器
         self.translator = None
@@ -348,13 +349,11 @@ class MainFrame(wx.Frame):
         self.clipboard_monitor.start_worker(callback=self.on_new_clipboard_content)
 
         self.load_clipboard_data()
-        self.edit_dialog = None
 
         # 注册热键
         self.hotkey_ids = {}
         self.register_hotkeys()
 
-        self.create_menu_bar()
         self.Bind(wx.EVT_CLOSE, self.on_exit)
         # 显示窗口
         self.Centre()
@@ -364,25 +363,12 @@ class MainFrame(wx.Frame):
     def init_toolbar(self):
         """工具栏"""
         self.toolbar = self.CreateToolBar(wx.TB_HORIZONTAL | wx.NO_BORDER | wx.TB_TEXT)
-        # Initially empty, will be populated by update_toolbar_for_module
-        self.toolbar.Realize()
-
-        # Store button IDs for dynamic enabling/disabling later
+        # toolbar_for_module 函数来填充内容。
         self.copy_btn_id = wx.NewIdRef()
-        self.delete_btn_id = wx.NewIdRef()
         self.edit_btn_id = wx.NewIdRef()
+        self.delete_btn_id = wx.NewIdRef()
 
-        # Store button labels/tips from settings for reuse
-        self.copy_btn_label = setting.lang_dict[setting.current_lang]['copy_btn']
-        self.delete_btn_label = setting.lang_dict[setting.current_lang]['delete_btn']
-        self.edit_btn_label = setting.lang_dict[setting.current_lang]['edit_btn']
-        self.copy_btn_tip = setting.lang_dict[setting.current_lang]['copy_btn_tips']
-        self.delete_btn_tip = setting.lang_dict[setting.current_lang]['delete_btn_tips']
-        self.edit_btn_tip = setting.lang_dict[setting.current_lang]['edit_btn_tips']
-
-        # Initially disable them, they will be enabled based on selection in clipboard mode
-        # These will be handled by update_toolbar_for_module
-        # Event bindings for tools will also be done there
+        self.toolbar.Realize()
 
 
     def create_menu_bar(self):
@@ -420,6 +406,105 @@ class MainFrame(wx.Frame):
 
        # 设置菜单栏到窗口
         self.SetMenuBar(menubar)
+
+
+    def init_ui(self):
+        """初始化用户界面"""
+        self.splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE | wx.SP_3DSASH)
+        
+        # 创建左侧导航列表
+        self.nav_list = wx.ListBox(self.splitter, choices=[
+            setting.lang_dict[setting.current_lang]['trans_radio'],  # "翻译 / Translation"
+            setting.lang_dict[setting.current_lang]['clipboard_radio'],   # "剪贴板 / Clipboard"
+            setting.lang_dict[setting.current_lang]['menubar_opt']     # "设置 / Settings"
+        ])
+        self.nav_list.SetMinSize((150, -1)) # 设置最小宽度
+        self.nav_list.SetSelection(0)
+        self.nav_list.Bind(wx.EVT_LISTBOX, self.on_nav_selection_changed)
+
+        # 创建右侧内容面板容器
+        self.main_panel = wx.Panel(self.splitter)
+
+        # 创建一个 Sizer 来管理 main_panel 内部的内容
+        self.main_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.main_panel.SetSizer(self.main_panel_sizer)
+
+        # --- 初始化各功能模块的面板 ---
+        # 翻译面板
+        self.translation_panel = wx.Panel(self.main_panel)
+        self.setup_translation_panel()
+        self.translation_panel.Hide() # 默认隐藏
+
+        # 剪贴板面板
+        self.clipboard_panel = wx.Panel(self.main_panel)
+        self.setup_clipboard_panel()
+        self.clipboard_panel.Hide() # 默认隐藏
+
+        # 设置面板
+        self.settings_panel = wx.Panel(self.main_panel)
+        self.setup_settings_panel()
+        self.settings_panel.Hide() # 默认隐藏
+
+        # 将各功能面板添加到 main_panel 的 Sizer 中
+        self.main_panel_sizer.Add(self.translation_panel, 1, wx.EXPAND)
+        self.main_panel_sizer.Add(self.clipboard_panel, 1, wx.EXPAND)
+        self.main_panel_sizer.Add(self.settings_panel, 1, wx.EXPAND)
+
+        # 将左右两部分加入分割窗口
+        self.splitter.SplitVertically(self.nav_list, self.main_panel)
+        self.splitter.SetSashGravity(0.2) # 设置分割线位置，左边占20%
+        self.splitter.SetMinimumPaneSize(100) # 设置最小窗格大小
+
+        # 创建一个顶级 Sizer 并将其设置给主框架
+        # 这样主框架就能管理分割窗口
+        main_frame_sizer = wx.BoxSizer(wx.VERTICAL)
+        main_frame_sizer.Add(self.splitter, 1, wx.EXPAND)
+        self.SetSizer(main_frame_sizer)
+
+        # 初始显示翻译面板
+        self.switch_to_module("translation")
+
+    def setup_translation_panel(self):
+        """设置翻译功能面板的UI元素"""
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # 添加翻译相关的控件，例如文本输入框、翻译按钮等
+        self.text_ctrl = wx.TextCtrl(self.translation_panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
+        self.text_ctrl.Bind(wx.EVT_TEXT, self.on_text_changed)
+        self.text_ctrl.Bind(wx.EVT_CHAR_HOOK, self.on_key_to_translate) # 绑定按键钩子以捕获 Option+Enter
+
+        sizer.Add(self.text_ctrl, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.translation_panel.SetSizer(sizer)
+
+
+    def setup_clipboard_panel(self):
+        """设置剪贴板功能面板的UI元素"""
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # 添加剪贴板列表
+        self.list_Box = wx.CheckListBox(self.clipboard_panel) # 使用 CheckListBox 实现复选功能
+        self.list_Box.Bind(wx.EVT_LISTBOX, self.on_list_item_selected)
+        self.list_Box.Bind(wx.EVT_CHECKLISTBOX, self.on_list_item_checked) # 绑定复选事件
+        # 绑定键盘事件
+        self.list_Box.Bind(wx.EVT_KEY_DOWN, self.on_list_key_down)
+
+        sizer.Add(self.list_Box, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.clipboard_panel.SetSizer(sizer)
+
+
+    def setup_settings_panel(self):
+        """设置功能面板的UI元素 (Placeholder)"""
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # TODO: 在此处添加设置相关的控件，例如语言选择、快捷键配置等
+        
+        # 一个示例静态文本
+        label = wx.StaticText(self.settings_panel, label=setting.lang_dict[setting.current_lang]['app_name'])
+        sizer.Add(label, 0, wx.ALIGN_CENTER | wx.ALL, 10)
+
+        self.settings_panel.SetSizer(sizer)
 
 
     def on_exit(self, event):
@@ -467,43 +552,47 @@ class MainFrame(wx.Frame):
         dialog.Destroy()
 
 
-    def init_ui(self):
-        """
-        重构UI：左侧导航列表 + 动态工具栏 + 内容区
-        核心原则：
-        - 工具栏由 Frame 直接创建管理（不放入任何 sizer）
-        - Frame 设置 sizer 仅包含 main_panel（工具栏自动位于 sizer 上方）
-        - main_panel 的 sizer 仅管理内容区域（分割窗口）
-        """
-        # ========== 1. Frame 工具栏已经由 init_toolbar 创建 ==========
-        # self.toolbar = self.CreateToolBar(...) #  0
-        
-        # Enable/disable tools based on whether anything is selected
-        # Check if current module is clipboard first, as buttons might not exist otherwise
-        if self.current_module == "clipboard":
-            self.toolbar.EnableTool(self.copy_btn_id, has_select)
-            self.toolbar.EnableTool(self.delete_btn_id, has_select)
-            self.toolbar.EnableTool(self.edit_btn_id, has_select and len(checked_indices) == 1) # Edit requires single selection
-        else:
-            # If not in clipboard mode, ensure buttons are disabled even if accidentally enabled
-            # Note: This might cause an error if tool doesn't exist, so only call when appropriate
-            # It's safer to rely on the fact that update_toolbar_for_module handles this.
-            pass # State management is now handled by update_toolbar_for_module
-
 
 
     def update_toolbar_for_module(self, module_name: str):
-        """安全更新工具栏内容（不重建）"""
+        """更新工具栏"""
         self.toolbar.ClearTools()  # 清除旧工具
         
         if module_name == "clipboard":
-            # 添加剪贴板工具（示例）
-            copy_id = wx.NewIdRef()
-            self.toolbar.AddTool(copy_id, "复制", wx.ArtProvider.GetBitmap(wx.ART_COPY), "复制选中项")
-            self.Bind(wx.EVT_TOOL, self.on_copy_btn, id=copy_id)
-            # ... 其他按钮
+            # 添加剪贴板工具
+            self.toolbar.AddTool(
+                self.copy_btn_id,
+                setting.lang_dict[setting.current_lang]['copy_btn'],
+                wx.NullBitmap,
+                setting.lang_dict[setting.current_lang]['copy_btn_tips']
+            )
+
+            self.toolbar.AddTool(
+                self.edit_btn_id,
+                setting.lang_dict[setting.current_lang]['edit_btn'],
+                wx.NullBitmap,
+                setting.lang_dict[setting.current_lang]['edit_btn_tips']
+            )
+
+            self.toolbar.AddTool(
+                self.delete_btn_id,
+                setting.lang_dict[setting.current_lang]['delete_btn'],
+                wx.NullBitmap,
+                setting.lang_dict[setting.current_lang]['delete_btn_tips']
+            )
+
+            # 绑定事件
+            self.Bind(wx.EVT_TOOL, self.on_copy_btn, id=self.copy_btn_id)
+            self.Bind(wx.EVT_TOOL, self.on_edit_btn, id=self.edit_btn_id)
+            self.Bind(wx.EVT_TOOL, self.on_delete_btn, id=self.delete_btn_id)
+
+            # 初始禁用状态
+            self.toolbar.EnableTool(self.copy_btn_id, False)
+            self.toolbar.EnableTool(self.edit_btn_id, False)
+            self.toolbar.EnableTool(self.delete_btn_id, False)
+
         elif module_name == "translation":
-            # 添加翻译工具（示例）
+            # 添加翻译工具栏
             translate_id = wx.NewIdRef()
             self.toolbar.AddTool(translate_id, "翻译", wx.ArtProvider.GetBitmap(wx.ART_FIND), "翻译为英文")
             self.Bind(wx.EVT_TOOL, lambda e: self.on_to_translate(e, "EN"), id=translate_id)
@@ -522,6 +611,7 @@ class MainFrame(wx.Frame):
             self.switch_to_module("clipboard")
         elif "设置" in selection or "Settings" in selection:
             self.switch_to_module("settings")
+
 
     def switch_to_module(self, module_name: str):
         """统一切换逻辑：更新面板显隐 + 工具栏 + 状态"""
@@ -545,20 +635,6 @@ class MainFrame(wx.Frame):
         self.current_module = module_name
         self.update_toolbar_for_module(module_name)
         self.main_panel.Layout()
-
-
-
-
-    def on_switch_to_translation(self):
-        pass
-
-    def on_switch_to_clipboard(self):
-        pass
-
-    def on_switch_to_settings():
-        pass
-
-
 
 
     def load_clipboard_data(self):
@@ -628,32 +704,6 @@ class MainFrame(wx.Frame):
                 logging.error(f"注册热键'{hotkey['name']}'失败: {str(e)}")
 
 
-    def on_mode_switch(self, event):
-        """翻译/剪贴板模式切换"""
-        new_mode = "clipboard" if self.mode_group.GetSelection() == 1 else "translation"
-        if new_mode == self.current_mode:
-            return
-
-        self.current_mode = new_mode
-        if new_mode == "translation":
-            # 显示编辑框，隐藏列表
-            self.text_ctrl.Show()
-            self.list_Box.Hide()
-            self.toolbar.EnableTool(self.copy_btn.GetId(), False)
-            self.toolbar.EnableTool(self.delete_btn.GetId(), False)
-            self.toolbar.EnableTool(self.edit_btn.GetId(), False)
-        else:
-            # 显示列表，隐藏编辑框
-            self.text_ctrl.Hide()
-            self.list_Box.Show()
-            self.refresh_list_box()
-            self.update_clipboard_buttons_state()
-        
-        self.main_sizer.Layout()
-        self.main_panel.Layout()
-        self.Layout()
-
-
     def refresh_list_box(self):
         """刷新列表数据：仅加载原始文本，原生复选框自动显示勾选状态"""
         self.list_Box.Clear()
@@ -670,9 +720,9 @@ class MainFrame(wx.Frame):
         # 获取所有勾选的项索引
         checked_indices = self.list_Box.GetCheckedItems()
         has_select = len(checked_indices) > 0
-        self.toolbar.EnableTool(self.copy_btn.GetId(), has_select)
-        self.toolbar.EnableTool(self.delete_btn.GetId(), has_select)
-        self.toolbar.EnableTool(self.edit_btn.GetId(), has_select)
+        self.toolbar.EnableTool(self.copy_btn_id, has_select)
+        self.toolbar.EnableTool(self.edit_btn_id, has_select)
+        self.toolbar.EnableTool(self.delete_btn_id, has_select)
 
 
     def add_clipboard_content(self, content: str):
@@ -692,7 +742,7 @@ class MainFrame(wx.Frame):
         self.clipboard_list_data.insert(0, content)
         
         #  刷新UI
-        if self.current_mode == "clipboard":
+        if self.current_module == "clipboard":
             self.refresh_list_box()
             self.list_Box.SetSelection(0)  # 选中新添加的项
             self.update_clipboard_buttons_state()
@@ -727,7 +777,7 @@ class MainFrame(wx.Frame):
 
 
     def on_delete_btn(self, event):
-        """删除勾选的项：批量倒序删除，避免索引错乱"""
+        """删除勾选的项"""
         # 获取所有勾选的项索引
         checked_indices = self.list_Box.GetCheckedItems()
         if not checked_indices:
@@ -777,6 +827,8 @@ class MainFrame(wx.Frame):
             list_len = len(self.clipboard_list_data)  # 记录当前列表长度
             if not new_content:
                 del self.clipboard_list_data[idx]
+                # 刷新
+                self.refresh_list_box()
                 if list_len > 1:
                     new_idx = idx - 1 if idx == list_len - 1 else idx
                     # 取消所有勾选，选中新项
@@ -796,6 +848,7 @@ class MainFrame(wx.Frame):
 
         dialog.Destroy()
         self.save_clipboard_data()
+
 
     def on_list_key_down(self, event):
         """列表键盘事件：基于勾选项处理"""
@@ -834,7 +887,7 @@ class MainFrame(wx.Frame):
 
 
     def on_list_item_checked(self, event):
-        """复选框勾选/取消勾选：仅更新按钮状态，无刷新卡顿"""
+        """复选框勾选/取消勾选"""
         self.update_clipboard_buttons_state()
 
 
@@ -974,7 +1027,7 @@ class MainFrame(wx.Frame):
         if not self.clipboard_list_data:
             if not (self.clipboard_list_data and self.clipboard_list_data[0] == vo_text):
                 self.clipboard_list_data.insert(0, vo_text)
-                if self.current_mode == "clipboard":
+                if self.current_module == "clipboard":
                     self.refresh_list_box()
                     self.update_clipboard_buttons_state()
                     self.save_clipboard_data()
@@ -986,7 +1039,7 @@ class MainFrame(wx.Frame):
             return
 
         self.clipboard_list_data[0] = f"{first_item}\n{vo_text}"
-        if self.current_mode == "clipboard":
+        if self.current_module == "clipboard":
             self.refresh_list_box()
             self.list_Box.SetSelection(0)
         clipboard = wx.Clipboard()
@@ -1000,7 +1053,7 @@ class MainFrame(wx.Frame):
         """alt+shift+7: 剪贴板列表上一条"""
         # 数据列表为空直接返回
         if not self.clipboard_list_data:
-            if hasattr(self, 'list_Box') and self.list_Box:
+            if hasattr(self, 'list_Box') and self.list_Box and self.current_module == 'clipboard':
                 self.list_Box.SetSelection(-1)
             self.current_clipboard_idx = -1
             return
@@ -1020,7 +1073,8 @@ class MainFrame(wx.Frame):
 
         selected_content = self.clipboard_list_data[new_idx]
         print(f"切换到索引 {new_idx}，内容：{selected_content[:20]}...")
-        self.list_Box.SetSelection(new_idx)  # UI选中对应行
+        if self.current_module == 'clipboard':
+            self.list_Box.SetSelection(new_idx)  # UI选中对应行
         # 调用vo_handler朗读
         self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
         # 更新按钮状态
@@ -1039,8 +1093,8 @@ class MainFrame(wx.Frame):
     def on_hotkey_altshift9(self, event):
         """alt+shift+9: 剪贴板列表下一条"""
         if not self.clipboard_list_data:
-            
-            self.list_Box.SetSelection(-1)
+            if hasattr(self, 'list_Box') and self.list_Box and self.current_module == 'clipboard':
+                self.list_Box.SetSelection(-1)
             self.current_clipboard_idx = -1
             return
 
@@ -1056,8 +1110,8 @@ class MainFrame(wx.Frame):
         self.current_clipboard_idx = new_idx
         # 获取选中内容
         selected_content = self.clipboard_list_data[new_idx]
-        
-        self.list_Box.SetSelection(new_idx)
+        if self.current_module == 'clipboard':
+            self.list_Box.SetSelection(new_idx)
         
         # 调用vo_handler朗读
         self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
@@ -1185,10 +1239,29 @@ class MainFrame(wx.Frame):
                 "Error", 
                 wx.OK | wx.ICON_ERROR
             )
+        if langType == 'EN':
+            text = self.text_ctrl.GetValue().strip()
+            if text:
+                result_text = self.translator.lookup_dictionary(text)
+                if result_text:
+                    self.text_ctrl.SetValue(result_text)
+                    return
+                result_text = self.translator.translate(text, "English", "Chinese")
+                if result_text:
+                    self.text_ctrl.SetValue(result_text)
 
-        text = self.text_ctrl.GetValue().strip()
-        if text:
-            self.translator.set_input_text(text, langType)
+        if langType == 'ZH':
+            text = self.text_ctrl.GetValue().strip()
+            if text:
+                result_text = self.translator.lookup_dictionary(text)
+                if result_text:
+                    self.text_ctrl.SetValue(result_text)
+                    return
+                result_text = self.translator.translate(text, "Chinese", "English")
+                if result_text:
+                    self.text_ctrl.SetValue(result_text)
+
+        self.vo_handler.speak_text(result_text)
 
 
     def on_key_to_translate(self, event):
