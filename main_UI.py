@@ -412,8 +412,13 @@ class MainFrame(wx.Frame):
         """初始化用户界面"""
         self.splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE | wx.SP_3DSASH)
         
-        # 创建左侧导航列表
-        self.nav_list = wx.ListBox(self.splitter, choices=[
+        # 创建左侧导航容器
+        self.nav_container_panel = wx.Panel(self.splitter)
+
+        static_box = wx.StaticBox(self.nav_container_panel, label="选择功能：") 
+        static_box_sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
+
+        self.nav_list = wx.ListBox(self.nav_container_panel, choices=[
             setting.lang_dict[setting.current_lang]['trans_radio'],  # "翻译 / Translation"
             setting.lang_dict[setting.current_lang]['clipboard_radio'],   # "剪贴板 / Clipboard"
             setting.lang_dict[setting.current_lang]['menubar_opt']     # "设置 / Settings"
@@ -421,6 +426,10 @@ class MainFrame(wx.Frame):
         self.nav_list.SetMinSize((150, -1)) # 设置最小宽度
         self.nav_list.SetSelection(0)
         self.nav_list.Bind(wx.EVT_LISTBOX, self.on_nav_selection_changed)
+
+        static_box_sizer.Add(self.nav_list, 1, wx.EXPAND | wx.ALL, 5) # 拉伸填充并添加边    距
+        self.nav_container_panel.SetSizer(static_box_sizer)
+
 
         # 创建右侧内容面板容器
         self.main_panel = wx.Panel(self.splitter)
@@ -451,7 +460,7 @@ class MainFrame(wx.Frame):
         self.main_panel_sizer.Add(self.settings_panel, 1, wx.EXPAND)
 
         # 将左右两部分加入分割窗口
-        self.splitter.SplitVertically(self.nav_list, self.main_panel)
+        self.splitter.SplitVertically(self.nav_container_panel, self.main_panel)
         self.splitter.SetSashGravity(0.2) # 设置分割线位置，左边占20%
         self.splitter.SetMinimumPaneSize(100) # 设置最小窗格大小
 
@@ -464,47 +473,85 @@ class MainFrame(wx.Frame):
         # 初始显示翻译面板
         self.switch_to_module("translation")
 
+
     def setup_translation_panel(self):
         """设置翻译功能面板的UI元素"""
-        sizer = wx.BoxSizer(wx.VERTICAL)
+        # 创建 StaticBox，其 label 说明文字
+        static_box = wx.StaticBox(self.translation_panel, label="请输入待翻译文本：") 
+        
+        #  创建 StaticBoxSizer，将 StaticBox 与 Panel 关联
+        sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
 
-        # 添加翻译相关的控件，例如文本输入框、翻译按钮等
         self.text_ctrl = wx.TextCtrl(self.translation_panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
-        self.text_ctrl.Bind(wx.EVT_TEXT, self.on_text_changed)
         self.text_ctrl.Bind(wx.EVT_CHAR_HOOK, self.on_key_to_translate) # 绑定按键钩子以捕获 Option+Enter
 
-        sizer.Add(self.text_ctrl, 1, wx.EXPAND | wx.ALL, 5)
+        sizer.Add(self.text_ctrl, 1, wx.EXPAND | wx.ALL, 5) # 拉伸填充并添加边距
 
         self.translation_panel.SetSizer(sizer)
 
 
     def setup_clipboard_panel(self):
         """设置剪贴板功能面板的UI元素"""
-        sizer = wx.BoxSizer(wx.VERTICAL)
+        static_box = wx.StaticBox(self.clipboard_panel, label="剪贴板历史记录：")
+        
+        sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
 
-        # 添加剪贴板列表
         self.list_Box = wx.CheckListBox(self.clipboard_panel) # 使用 CheckListBox 实现复选功能
         self.list_Box.Bind(wx.EVT_LISTBOX, self.on_list_item_selected)
         self.list_Box.Bind(wx.EVT_CHECKLISTBOX, self.on_list_item_checked) # 绑定复选事件
         # 绑定键盘事件
         self.list_Box.Bind(wx.EVT_KEY_DOWN, self.on_list_key_down)
 
-        sizer.Add(self.list_Box, 1, wx.EXPAND | wx.ALL, 5)
+        sizer.Add(self.list_Box, 1, wx.EXPAND | wx.ALL, 5) # 拉伸填充并添加边距
 
         self.clipboard_panel.SetSizer(sizer)
 
 
     def setup_settings_panel(self):
-        """设置功能面板的UI元素 (Placeholder)"""
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        
-        # TODO: 在此处添加设置相关的控件，例如语言选择、快捷键配置等
-        
-        # 一个示例静态文本
-        label = wx.StaticText(self.settings_panel, label=setting.lang_dict[setting.current_lang]['app_name'])
-        sizer.Add(label, 0, wx.ALIGN_CENTER | wx.ALL, 10)
+        """设置功能面板的UI元素 """
+        # 主布局管理器，垂直方向
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        self.settings_panel.SetSizer(sizer)
+        # --- 1. 浏览翻译模型分组 ---
+        # 创建 StaticBox 和 StaticBoxSizer
+        browse_model_static_box = wx.StaticBox(self.settings_panel, label="浏览翻译模型")
+        browse_model_sizer = wx.StaticBoxSizer(browse_model_static_box, wx.VERTICAL)
+
+        # 创建按钮并添加到该分组的 sizer
+        browse_model_button = wx.Button(self.settings_panel, label="浏览...")
+        # browse_model_button.Bind(wx.EVT_BUTTON, self.on_browse_model_click) # 绑定事件（如果需要）
+        browse_model_sizer.Add(browse_model_button, 0, wx.EXPAND | wx.ALL, 5)
+
+        # 将整个分组 sizer 添加到主 sizer
+        main_sizer.Add(browse_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # --- 2. 锁定旁白音量分组 ---
+        lock_volume_static_box = wx.StaticBox(self.settings_panel, label="锁定旁白音量")
+        lock_volume_sizer = wx.StaticBoxSizer(lock_volume_static_box, wx.VERTICAL)
+
+        # 为了在分组内水平排列编辑框和复选框
+        inner_h_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # 创建编辑框和复选框
+        volume_input = wx.TextCtrl(self.settings_panel, value="", style=wx.TE_RIGHT)
+        volume_input.Bind(wx.EVT_TEXT, lambda evt: self.on_volume_text_change(evt, volume_input))
+        toggle_lock_checkbox = wx.CheckBox(self.settings_panel, label="开/关")
+
+        # 将编辑框和复选框添加到内部的水平 sizer
+        inner_h_sizer.Add(volume_input, 1, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5) # 给复选框留点空间
+        inner_h_sizer.Add(toggle_lock_checkbox, 0, wx.ALIGN_CENTER_VERTICAL)
+
+        # 将内部的水平 sizer 整体添加到分组的 sizer
+        lock_volume_sizer.Add(inner_h_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # 将整个分组 sizer 添加到主 sizer
+        main_sizer.Add(lock_volume_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+
+        # 应用主布局到 settings_panel
+        self.settings_panel.SetSizer(main_sizer)
+
+
 
 
     def on_exit(self, event):
@@ -609,7 +656,7 @@ class MainFrame(wx.Frame):
             self.switch_to_module("translation")
         elif "剪贴板" in selection or "Clipboard" in selection:
             self.switch_to_module("clipboard")
-        elif "设置" in selection or "Settings" in selection:
+        elif "操作" in selection or "Settings" in selection:
             self.switch_to_module("settings")
 
 
@@ -1224,13 +1271,6 @@ class MainFrame(wx.Frame):
         self.vo_handler.speak_text(result_text)
 
 
-    def on_text_changed(self, event):
-        """文本框内容变化：自动朗读"""
-        current_text = self.text_ctrl.GetValue()
-        self.vo_handler.speak_text(current_text)
-        event.Skip()
-
-
     def on_to_translate(self, event, langType: str):
         """Option + 回车键：翻译文本"""
         if not self.translator:
@@ -1285,8 +1325,10 @@ class MainFrame(wx.Frame):
         """更新编辑框内容"""
         self.text_ctrl.SetValue(translated_text)
 
+
     def on_new_clipboard_content(self, content: str, timestamp: float):
         wx.CallAfter(self._update_list_with_new_content, content, timestamp)
+
 
     def _update_list_with_new_content(self, content: str, timestamp: float):
         # 更新剪贴板
@@ -1294,7 +1336,7 @@ class MainFrame(wx.Frame):
 
 
     def on_reboot_vo_processer(self, event):
-        """重启VoiceOver处理器线程"""
+        """重启处理器线程"""
 
         try:
             
@@ -1312,7 +1354,7 @@ class MainFrame(wx.Frame):
             )
             self.clipboard_monitor.start_worker(callback=self.on_new_clipboard_content)
             
-            logging.info("VO处理器线程已重启")
+            logging.info("处理器线程已重启")
 
         except Exception as e:
             logging.error(f"重启处理器失败: {str(e)}")
@@ -1320,9 +1362,43 @@ class MainFrame(wx.Frame):
 
     def on_clean_list(self, event):
         self.clipboard_list_data = []
-        self.list_Box.Clear()  # 清空列表同时清空勾选状态
+        if self.current_module == 'clipboard':
+            self.list_Box.Clear()  # 清空列表同时清空勾选状态
         self.update_clipboard_buttons_state()
         self.save_clipboard_data()
+
+
+    def on_volume_text_change(self, event, text_ctrl):
+        """
+        只允许输入数字和小数
+        """
+        current_value = text_ctrl.GetValue()
+        # 允许的字符：数字和小数点
+        allowed_chars = set("0123456789.")
+        new_value = ""
+        decimal_point_count = 0
+
+        # 遍历当前文本
+        for char in current_value:
+            if len(new_value) >= 4:
+                break
+            if char in allowed_chars:
+                # 检查小数点的数量
+                if char == '.':
+                    if decimal_point_count >= 1:
+                        # 如果已经有小数点了，就跳过当前的小数点
+                        continue
+                    else:
+                        decimal_point_count += 1
+                new_value += char
+
+        # 如果过滤后的文本与原文本不同，则更新控件内容
+        if new_value != current_value:
+            text_ctrl.ChangeValue(new_value)
+            # 光标移到末尾
+            text_ctrl.SetInsertionPointEnd()
+
+        event.Skip()
 
 
     def save_clipboard_data(self):
@@ -1337,7 +1413,7 @@ class MainFrame(wx.Frame):
 
     def system_level_hide_window(self, window):
         """
-        调用 macOS 系统 API 隐藏窗口，效果和 Cmd+H 完全一致
+         macOS 系统 API 隐藏窗口
         :param window: wx.Frame 实例（主窗口）
         """
         try:
