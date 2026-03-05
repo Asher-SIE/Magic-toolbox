@@ -12,6 +12,8 @@ from AppKit import NSApplication, NSApp, NSWindow
 from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler
 from typing import Optional, Tuple
 
+VERSION_INFO = f'V1.0.3\nBuild: 251230'
+
 
 # 剪贴板编辑对话框
 class EditDialog(wx.Dialog):
@@ -313,7 +315,6 @@ class MainFrame(wx.Frame):
         super(MainFrame, self).__init__(parent, title=title, size=(1024, 768))
         
         # 状态变量
-        self.version='V1.0.3\nBuild: 251230'""''
         self.clipboard_list_data = []  # 剪贴板列表
         self.current_clipboard_idx = -1
         self.current_module = "translation"
@@ -574,7 +575,7 @@ class MainFrame(wx.Frame):
 
 
     def on_about(self, event):
-        about_content = f"""{self.version} """
+        
         dialog = wx.Dialog(self, title="关于 Magic Toolbox", size=(500, 400))
         panel = wx.Panel(dialog)
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -584,7 +585,7 @@ class MainFrame(wx.Frame):
             panel, 
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL | wx.VSCROLL
         )
-        text_ctrl.SetValue(about_content)
+        text_ctrl.SetValue(VERSION_INFO)
         text_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
 
         # 关闭按钮
@@ -1257,9 +1258,15 @@ class MainFrame(wx.Frame):
         """alt+shift+m: 剪贴板综述"""
         row_column = self.TB._row_column
         total_chars = self.TB._total_chars
+        total_lines = len(self.TB.current_text.split('\n'))
         if row_column:
+            row_label = setting.lang_dict[setting.current_lang]['row']
+            col_label = setting.lang_dict[setting.current_lang]['column']
+            total_lines_label = setting.lang_dict[setting.current_lang]['total_lines']
+            total_chars_label = setting.lang_dict[setting.current_lang]['total_chars']
+            print(f'当前语言{setting.current_lang}')
             self.vo_handler.speak_text(
-                f"{setting.lang_dict[setting.current_lang]['now']}: {row_column[0]} {setting.lang_dict[setting.current_lang]['row']}; {row_column[1]} {setting.lang_dict[setting.current_lang]['column']}; {total_chars}: {setting.lang_dict[setting.current_lang]['total_chars']}"
+                f"{row_column[0]} {row_label}; {row_column[1]} {col_label}; {total_lines_label}{total_lines} {row_label}; {total_chars}{total_chars_label}"
             )
 
 
