@@ -329,7 +329,18 @@ class MainFrame(wx.Frame):
         
         self.edit_dialog = None
         
-        self.trans_lang_options = ["English", "Chinese", "Japanese", "Korean", "French", "German", "Spanish", "Russian"]
+        self.lang_codes = [
+            "English", "Chinese", "French", "Portuguese", "Spanish", "Japanese", 
+            "Turkish", "Russian", "Arabic", "Korean", "Thai", "Italian", "German", 
+            "Vietnamese", "Malay", "Indonesian", "Filipino", "Hindi", "Traditional Chinese",
+            "Polish", "Czech", "Dutch", "Khmer", "Burmese", "Persian", "Gujarati", 
+            "Urdu", "Telugu", "Marathi", "Hebrew", "Bengali", "Tamil", "Ukrainian",
+            "Tibetan", "Kazakh", "Mongolian", "Uyghur", "Cantonese"
+        ]
+        
+        current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
+        self.trans_source_options = [current_lang_dict.get(f'lang_{code}', code) for code in self.lang_codes]
+        self.trans_target_options = self.trans_source_options
         
         self._source_lang = "English"
         self._target_lang = "Chinese"
@@ -337,6 +348,10 @@ class MainFrame(wx.Frame):
 
         # 创建UI组件
         self.init_toolbar()
+        
+        self._toolbar_source_choice = None
+        self._toolbar_target_choice = None
+        
         self.init_ui()
         self.create_menu_bar()
 
@@ -426,28 +441,6 @@ class MainFrame(wx.Frame):
         # 创建左侧导航容器
         self.nav_container_panel = wx.Panel(self.splitter)
 
-        # 语言选择区域 - 放在"选择功能："前面
-        lang_box = wx.StaticBox(self.nav_container_panel, label=setting.lang_dict[setting.current_lang]['trans_lang_box'] + '：')
-        lang_box_sizer = wx.StaticBoxSizer(lang_box, wx.VERTICAL)
-        
-        source_label = wx.StaticText(self.nav_container_panel, label=setting.lang_dict[setting.current_lang]['source_lang'] + ':')
-        self.source_lang_choice = wx.Choice(self.nav_container_panel, choices=self.trans_lang_options)
-        self.source_lang_choice.SetStringSelection(self._source_lang)
-        self.source_lang_choice.Bind(wx.EVT_CHOICE, self.on_source_lang_changed)
-        
-        target_label = wx.StaticText(self.nav_container_panel, label=setting.lang_dict[setting.current_lang]['target_lang'] + ':')
-        self.target_lang_choice = wx.Choice(self.nav_container_panel, choices=self.trans_lang_options)
-        self.target_lang_choice.SetStringSelection(self._target_lang)
-        self.target_lang_choice.Bind(wx.EVT_CHOICE, self.on_target_lang_changed)
-        
-        lang_inner_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        lang_inner_sizer.Add(source_label, 0, wx.CENTER | wx.ALL, 3)
-        lang_inner_sizer.Add(self.source_lang_choice, 0, wx.ALL, 3)
-        lang_inner_sizer.Add(target_label, 0, wx.CENTER | wx.ALL, 3)
-        lang_inner_sizer.Add(self.target_lang_choice, 0, wx.ALL, 3)
-        
-        lang_box_sizer.Add(lang_inner_sizer, 0, wx.EXPAND)
-        
         static_box = wx.StaticBox(self.nav_container_panel, label="选择功能：") 
         static_box_sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
 
@@ -461,12 +454,7 @@ class MainFrame(wx.Frame):
         self.nav_list.Bind(wx.EVT_LISTBOX, self.on_nav_selection_changed)
 
         static_box_sizer.Add(self.nav_list, 1, wx.EXPAND | wx.ALL, 5) # 拉伸填充并添加边    距
-        
-        # 将语言选择放在"选择功能"之前
-        self.nav_container_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.nav_container_sizer.Add(lang_box_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        self.nav_container_sizer.Add(static_box_sizer, 1, wx.EXPAND)
-        self.nav_container_panel.SetSizer(self.nav_container_sizer)
+        self.nav_container_panel.SetSizer(static_box_sizer)
 
 
         # 创建右侧内容面板容器
@@ -524,13 +512,31 @@ class MainFrame(wx.Frame):
         
         self.translation_panel.SetSizer(sizer)
     
+    def on_toolbar_source_lang_changed(self, event):
+        if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice:
+            display_text = self._toolbar_source_choice.GetStringSelection()
+            current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
+            for code in self.lang_codes:
+                if current_lang_dict.get(f'lang_{code}', code) == display_text:
+                    self._source_lang = code
+                    break
+            self.save_config()
+    
+    def on_toolbar_target_lang_changed(self, event):
+        if hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
+            display_text = self._toolbar_target_choice.GetStringSelection()
+            current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
+            for code in self.lang_codes:
+                if current_lang_dict.get(f'lang_{code}', code) == display_text:
+                    self._target_lang = code
+                    break
+            self.save_config()
+    
     def on_source_lang_changed(self, event):
-        self._source_lang = self.source_lang_choice.GetStringSelection()
-        self.save_config()
+        pass
     
     def on_target_lang_changed(self, event):
-        self._target_lang = self.target_lang_choice.GetStringSelection()
-        self.save_config()
+        pass
     
     def load_config(self):
         try:
@@ -541,6 +547,13 @@ class MainFrame(wx.Frame):
                 self._target_lang = config.get('target_lang', 'Chinese')
         except Exception as e:
             logging.warning(f"加载配置失败: {e}")
+        
+        if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
+            current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
+            source_display = current_lang_dict.get(f'lang_{self._source_lang}', self._source_lang)
+            target_display = current_lang_dict.get(f'lang_{self._target_lang}', self._target_lang)
+            self._toolbar_source_choice.SetStringSelection(source_display)
+            self._toolbar_target_choice.SetStringSelection(target_display)
     
     def save_config(self):
         try:
@@ -667,10 +680,9 @@ class MainFrame(wx.Frame):
 
     def update_toolbar_for_module(self, module_name: str):
         """更新工具栏"""
-        self.toolbar.ClearTools()  # 清除旧工具
+        self.toolbar.ClearTools()
         
         if module_name == "clipboard":
-            # 添加剪贴板工具
             self.toolbar.AddTool(
                 self.copy_btn_id,
                 setting.lang_dict[setting.current_lang]['copy_btn'],
@@ -692,20 +704,41 @@ class MainFrame(wx.Frame):
                 setting.lang_dict[setting.current_lang]['delete_btn_tips']
             )
 
-            # 绑定事件
             self.Bind(wx.EVT_TOOL, self.on_copy_btn, id=self.copy_btn_id)
             self.Bind(wx.EVT_TOOL, self.on_edit_btn, id=self.edit_btn_id)
             self.Bind(wx.EVT_TOOL, self.on_delete_btn, id=self.delete_btn_id)
 
-            # 初始禁用状态
             self.toolbar.EnableTool(self.copy_btn_id, False)
             self.toolbar.EnableTool(self.edit_btn_id, False)
             self.toolbar.EnableTool(self.delete_btn_id, False)
 
         elif module_name == "translation":
-            pass
+            if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice:
+                self._toolbar_source_choice.Destroy()
+            if hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
+                self._toolbar_target_choice.Destroy()
+            
+            current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
+            source_display = current_lang_dict.get(f'lang_{self._source_lang}', self._source_lang)
+            target_display = current_lang_dict.get(f'lang_{self._target_lang}', self._target_lang)
+            
+            source_label = wx.StaticText(self.toolbar, label=setting.lang_dict[setting.current_lang]['source_lang'] + ':')
+            self.toolbar.AddControl(source_label)
+            
+            self._toolbar_source_choice = wx.Choice(self.toolbar, choices=self.trans_source_options)
+            self._toolbar_source_choice.SetStringSelection(source_display)
+            self._toolbar_source_choice.Bind(wx.EVT_CHOICE, self.on_toolbar_source_lang_changed)
+            self.toolbar.AddControl(self._toolbar_source_choice)
+            
+            target_label = wx.StaticText(self.toolbar, label=setting.lang_dict[setting.current_lang]['target_lang'] + ':')
+            self.toolbar.AddControl(target_label)
+            
+            self._toolbar_target_choice = wx.Choice(self.toolbar, choices=self.trans_target_options)
+            self._toolbar_target_choice.SetStringSelection(target_display)
+            self._toolbar_target_choice.Bind(wx.EVT_CHOICE, self.on_toolbar_target_lang_changed)
+            self.toolbar.AddControl(self._toolbar_target_choice)
         
-        self.toolbar.Realize()  # 刷新显示
+        self.toolbar.Realize()
 
 
 
@@ -1374,8 +1407,12 @@ class MainFrame(wx.Frame):
             )
             return
         
-        source_lang = self._source_lang
-        target_lang = self._target_lang
+        if langType == "reverse":
+            source_lang = self._target_lang
+            target_lang = self._source_lang
+        else:
+            source_lang = self._source_lang
+            target_lang = self._target_lang
         
         text = self.text_ctrl.GetValue().strip()
         if not text:
@@ -1396,14 +1433,12 @@ class MainFrame(wx.Frame):
 
 
     def on_key_to_translate(self, event):
-        # 检查按键
         key_code = event.GetKeyCode()
         modifiers = event.GetModifiers()
         if key_code == wx.WXK_RETURN and modifiers == wx.MOD_ALT:
-            self.on_to_translate(event, "EN")
-
+            self.on_to_translate(event)
         elif key_code == wx.WXK_RETURN and modifiers == (wx.MOD_ALT | wx.MOD_SHIFT):
-            self.on_to_translate(event, "ZH")
+            self.on_to_translate(event, "reverse")
         else:
             event.Skip()
 
