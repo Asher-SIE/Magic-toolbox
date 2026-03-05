@@ -233,6 +233,9 @@ lang_dict = {
         'edd_punc_to_newline_btn': '分句',
         'msg_motice': '提示',
         'msg_is_close': '确定要退出吗？',
+        'trans_lang_box': '翻译语言',
+        'source_lang': '源语言',
+        'target_lang': '目标语言',
     },
     'en': {
 'app_name': 'Magic Toolbox',
@@ -266,7 +269,10 @@ lang_dict = {
         'edd_num_to_chinese_btn': 'Convert Numbers to Chinese',
         'edd_punc_to_newline_btn': 'Split into Sentences',
         'msg_motice': 'Notice',
-        'msg_is_close': 'Are you sure you want to quit?'
+        'msg_is_close': 'Are you sure you want to quit?',
+        'trans_lang_box': 'Translation Language',
+        'source_lang': 'Source',
+        'target_lang': 'Target',
     }
 }
 

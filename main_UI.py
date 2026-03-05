@@ -1,8 +1,10 @@
+import json
 import logging
 import objc
 import os
 import pickle
 import setting
+import subprocess
 import sys
 import time
 import wx
@@ -323,7 +325,15 @@ class MainFrame(wx.Frame):
         self.app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
         os.makedirs(self.app_data_dir, exist_ok=True)
         self._clipboard_data_path = os.path.join(self.app_data_dir, ".clipboard_data")  # 剪贴板数据文件
+        self._config_path = os.path.join(self.app_data_dir, "config.json")  # 配置文件
+        
         self.edit_dialog = None
+        
+        self.trans_lang_options = ["English", "Chinese", "Japanese", "Korean", "French", "German", "Spanish", "Russian"]
+        
+        self._source_lang = "English"
+        self._target_lang = "Chinese"
+        self.load_config()
 
         # 创建UI组件
         self.init_toolbar()
@@ -416,6 +426,28 @@ class MainFrame(wx.Frame):
         # 创建左侧导航容器
         self.nav_container_panel = wx.Panel(self.splitter)
 
+        # 语言选择区域 - 放在"选择功能："前面
+        lang_box = wx.StaticBox(self.nav_container_panel, label=setting.lang_dict[setting.current_lang]['trans_lang_box'] + '：')
+        lang_box_sizer = wx.StaticBoxSizer(lang_box, wx.VERTICAL)
+        
+        source_label = wx.StaticText(self.nav_container_panel, label=setting.lang_dict[setting.current_lang]['source_lang'] + ':')
+        self.source_lang_choice = wx.Choice(self.nav_container_panel, choices=self.trans_lang_options)
+        self.source_lang_choice.SetStringSelection(self._source_lang)
+        self.source_lang_choice.Bind(wx.EVT_CHOICE, self.on_source_lang_changed)
+        
+        target_label = wx.StaticText(self.nav_container_panel, label=setting.lang_dict[setting.current_lang]['target_lang'] + ':')
+        self.target_lang_choice = wx.Choice(self.nav_container_panel, choices=self.trans_lang_options)
+        self.target_lang_choice.SetStringSelection(self._target_lang)
+        self.target_lang_choice.Bind(wx.EVT_CHOICE, self.on_target_lang_changed)
+        
+        lang_inner_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        lang_inner_sizer.Add(source_label, 0, wx.CENTER | wx.ALL, 3)
+        lang_inner_sizer.Add(self.source_lang_choice, 0, wx.ALL, 3)
+        lang_inner_sizer.Add(target_label, 0, wx.CENTER | wx.ALL, 3)
+        lang_inner_sizer.Add(self.target_lang_choice, 0, wx.ALL, 3)
+        
+        lang_box_sizer.Add(lang_inner_sizer, 0, wx.EXPAND)
+        
         static_box = wx.StaticBox(self.nav_container_panel, label="选择功能：") 
         static_box_sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
 
@@ -429,7 +461,12 @@ class MainFrame(wx.Frame):
         self.nav_list.Bind(wx.EVT_LISTBOX, self.on_nav_selection_changed)
 
         static_box_sizer.Add(self.nav_list, 1, wx.EXPAND | wx.ALL, 5) # 拉伸填充并添加边    距
-        self.nav_container_panel.SetSizer(static_box_sizer)
+        
+        # 将语言选择放在"选择功能"之前
+        self.nav_container_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.nav_container_sizer.Add(lang_box_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        self.nav_container_sizer.Add(static_box_sizer, 1, wx.EXPAND)
+        self.nav_container_panel.SetSizer(self.nav_container_sizer)
 
 
         # 创建右侧内容面板容器
@@ -477,18 +514,44 @@ class MainFrame(wx.Frame):
 
     def setup_translation_panel(self):
         """设置翻译功能面板的UI元素"""
-        # 创建 StaticBox，其 label 说明文字
         static_box = wx.StaticBox(self.translation_panel, label="请输入待翻译文本：") 
-        
-        #  创建 StaticBoxSizer，将 StaticBox 与 Panel 关联
         sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
-
+        
         self.text_ctrl = wx.TextCtrl(self.translation_panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
-        self.text_ctrl.Bind(wx.EVT_CHAR_HOOK, self.on_key_to_translate) # 绑定按键钩子以捕获 Option+Enter
-
-        sizer.Add(self.text_ctrl, 1, wx.EXPAND | wx.ALL, 5) # 拉伸填充并添加边距
-
+        self.text_ctrl.Bind(wx.EVT_CHAR_HOOK, self.on_key_to_translate)
+        
+        sizer.Add(self.text_ctrl, 1, wx.EXPAND | wx.ALL, 5)
+        
         self.translation_panel.SetSizer(sizer)
+    
+    def on_source_lang_changed(self, event):
+        self._source_lang = self.source_lang_choice.GetStringSelection()
+        self.save_config()
+    
+    def on_target_lang_changed(self, event):
+        self._target_lang = self.target_lang_choice.GetStringSelection()
+        self.save_config()
+    
+    def load_config(self):
+        try:
+            if os.path.exists(self._config_path):
+                with open(self._config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                self._source_lang = config.get('source_lang', 'English')
+                self._target_lang = config.get('target_lang', 'Chinese')
+        except Exception as e:
+            logging.warning(f"加载配置失败: {e}")
+    
+    def save_config(self):
+        try:
+            config = {
+                'source_lang': self._source_lang,
+                'target_lang': self._target_lang
+            }
+            with open(self._config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logging.warning(f"保存配置失败: {e}")
 
 
     def setup_clipboard_panel(self):
@@ -640,10 +703,7 @@ class MainFrame(wx.Frame):
             self.toolbar.EnableTool(self.delete_btn_id, False)
 
         elif module_name == "translation":
-            # 添加翻译工具栏
-            translate_id = wx.NewIdRef()
-            self.toolbar.AddTool(translate_id, "翻译", wx.ArtProvider.GetBitmap(wx.ART_FIND), "翻译为英文")
-            self.Bind(wx.EVT_TOOL, lambda e: self.on_to_translate(e, "EN"), id=translate_id)
+            pass
         
         self.toolbar.Realize()  # 刷新显示
 
@@ -698,7 +758,14 @@ class MainFrame(wx.Frame):
 
 
     def init_translator(self):
-        """初始化翻译器"""
+        """初始化翻译
+        
+        
+        
+        
+        
+        
+        器"""
         try:
             self.translator = Translator(
                 log_level=logging.INFO,
@@ -979,7 +1046,7 @@ class MainFrame(wx.Frame):
                 if result_text:
                     self.vo_handler.speak_text(result_text)
                     return
-                result_text = self.translator.translate(vo_text, "English", "Chinese")
+                result_text = self.translator.translate(vo_text, self._source_lang, self._target_lang)
                 self.vo_handler.speak_text(result_text)
         else:
             self.text_ctrl.SetValue(setting.lang_dict[setting.current_lang]['vo_warning'])
@@ -1006,7 +1073,7 @@ class MainFrame(wx.Frame):
                 if result_text:
                     self.vo_handler.speak_text(result_text)
                     return
-                result_text = self.translator.translate(vo_text, "Chinese", "English")
+                result_text = self.translator.translate(vo_text, self._target_lang, self._source_lang)
                 self.vo_handler.speak_text(result_text)
         else:
             self.text_ctrl.SetValue(setting.lang_dict[setting.current_lang]['vo_warning'])
@@ -1275,10 +1342,29 @@ class MainFrame(wx.Frame):
         result_text = self.TB._current_line
         if not result_text:
             return
-        self.vo_handler.speak_text(result_text)
+        
+        try:
+            from AppKit import NSPasteboard
+            from ApplicationServices import AXUIElementCreateSystemWide, AXUIElementCopyAttributeValue, AXUIElementSetAttributeValue
+            
+            pasteboard = NSPasteboard.general()
+            pasteboard.clearContents()
+            pasteboard.setString_forType_(result_text, 'public.utf8-plain-text')
+            
+            system_wide = AXUIElementCreateSystemWide()
+            focused_app, _ = AXUIElementCopyAttributeValue(system_wide, "AXFocusedApplication")
+            if focused_app:
+                focused_element, _ = AXUIElementCopyAttributeValue(focused_app, "AXFocusedUIElement")
+                if focused_element:
+                    AXUIElementSetAttributeValue(focused_element, "AXValue", result_text)
+                    return
+            
+            subprocess.run(['osascript', '-e', 'tell application "System Events" to keystroke "v" using command down'], capture_output=True)
+        except Exception as e:
+            logging.warning(f"粘贴失败: {e}")
 
 
-    def on_to_translate(self, event, langType: str):
+    def on_to_translate(self, event, langType: str = None):
         """Option + 回车键：翻译文本"""
         if not self.translator:
             wx.MessageBox(
@@ -1286,29 +1372,27 @@ class MainFrame(wx.Frame):
                 "Error", 
                 wx.OK | wx.ICON_ERROR
             )
-        if langType == 'EN':
-            text = self.text_ctrl.GetValue().strip()
-            if text:
-                result_text = self.translator.lookup_dictionary(text)
-                if result_text:
-                    self.text_ctrl.SetValue(result_text)
-                    return
-                result_text = self.translator.translate(text, "English", "Chinese")
-                if result_text:
-                    self.text_ctrl.SetValue(result_text)
-
-        if langType == 'ZH':
-            text = self.text_ctrl.GetValue().strip()
-            if text:
-                result_text = self.translator.lookup_dictionary(text)
-                if result_text:
-                    self.text_ctrl.SetValue(result_text)
-                    return
-                result_text = self.translator.translate(text, "Chinese", "English")
-                if result_text:
-                    self.text_ctrl.SetValue(result_text)
-
-        self.vo_handler.speak_text(result_text)
+            return
+        
+        source_lang = self._source_lang
+        target_lang = self._target_lang
+        
+        text = self.text_ctrl.GetValue().strip()
+        if not text:
+            return
+        
+        result_text = self.translator.lookup_dictionary(text)
+        if result_text:
+            self.text_ctrl.SetValue(result_text)
+            self.vo_handler.speak_text(result_text)
+            return
+        
+        result_text = self.translator.translate(text, source_lang, target_lang)
+        if result_text:
+            self.text_ctrl.SetValue(result_text)
+            self.vo_handler.speak_text(result_text)
+        else:
+            self.vo_handler.speak_text("翻译失败")
 
 
     def on_key_to_translate(self, event):

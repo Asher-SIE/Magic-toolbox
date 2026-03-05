@@ -239,10 +239,7 @@ class Translator(BaseThreadedWorker):
         source_lang = source_lang
         target_lang = target_lang
 
-        if target_lang == "Chinese":
-            prompt = f"""Translate the following text from {source_lang} to {target_lang}, without additional explanation.
-Text: {text}"""
-        elif target_lang == "English":
+        if target_lang:
             prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
 Text: {text}"""
 
