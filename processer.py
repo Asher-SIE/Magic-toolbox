@@ -154,32 +154,69 @@ class Translator(BaseThreadedWorker):
         self.model_available = False
         self._current_dir = os.path.dirname(os.path.abspath(__file__))
         self.external_dir = os.path.expanduser("~/Downloads")
-        self.model_path = os.path.expanduser(
-            "~/Downloads/model/HY-MT1.5-1.8B/HY-MT1.5-1.8B-Q4_K_M.gguf"
-        )
+        self.model_path = None
         self._dict_path = os.path.join(self._current_dir, "resources", "dict.txt")
 
         # 加载词典
         self._load_dictionary()
-        # 加载模型
-        self._load_model()
 
-    def _load_model(self) -> llama_cpp.Llama:
-        """加载模型"""
-        if not os.path.exists(self.model_path):
-            raise FileNotFoundError(f"模型文件未找到：{self.model_path}")
+    def load_model(self, model_path: str) -> bool:
+        """加载翻译模型
+        
+        Args:
+            model_path: 模型文件路径
+            
+        Returns:
+            是否加载成功
+        """
+        if not model_path:
+            self.model_available = False
+            self.logger.warning("未提供模型路径")
+            return False
+            
+        if not os.path.exists(model_path):
+            self.model_available = False
+            self.logger.warning(f"模型文件未找到：{model_path}")
+            return False
         
         try:
-            self.model_available = True
-            # 仅修复：赋值给self._model（原代码仅return，无赋值导致调用失败）
+            self.model_path = model_path
             self._model = llama_cpp.Llama(
                 model_path=self.model_path,
                 **self.DEFAULT_CONFIG
-        )
+            )
+            self.model_available = True
+            self.logger.info(f"模型加载成功：{self.model_path}")
+            return True
+        except Exception as e:
+            self.model_available = False
+            self._model = None
+            self.logger.error(f"模型加载失败：{str(e)}")
+            return False
+
+    def _load_model(self) -> Optional[llama_cpp.Llama]:
+        """加载模型"""
+        if not self.model_path:
+            self.model_available = False
+            self.logger.warning("模型路径未设置，请通过浏览按钮选择翻译模型")
+            return None
+        
+        if not os.path.exists(self.model_path):
+            self.model_available = False
+            self.logger.warning(f"模型文件未找到：{self.model_path}")
+            return None
+        
+        try:
+            self.model_available = True
+            self._model = llama_cpp.Llama(
+                model_path=self.model_path,
+                **self.DEFAULT_CONFIG
+            )
             return self._model
         except Exception as e:
             self.model_available = False
-            raise RuntimeError(f"模型加载失败：{str(e)}") from e
+            self.logger.error(f"模型加载失败：{str(e)}")
+            return None
 
     def _load_dictionary(self):
         """本地词典加载（完全原始代码，一字未改，包括故意的文件格式实现）"""
@@ -230,12 +267,13 @@ class Translator(BaseThreadedWorker):
 
     def translate(self, original_text, source_lang, target_lang):
         """公有方法：翻译接口"""
+        if not self.model_available or not self._model:
+            raise RuntimeError("翻译模型不可用，请通过设置面板浏览并选择翻译模型")
+
         text = original_text.strip()
-        # 仅修复：非空判断用处理后的text，解决原代码全空白字符可传入的问题
         if not text:
             raise ValueError("请输入要翻译的内容")
 
-        # 构建提示词
         source_lang = source_lang
         target_lang = target_lang
 
@@ -244,7 +282,6 @@ class Translator(BaseThreadedWorker):
 Text: {text}"""
 
         try:
-            # 仅修复：调用self._model而非self.model，解决原代码属性不存在的致命错误
             output = self._model.create_completion(
                 prompt=prompt,
                 max_tokens=768,
@@ -259,10 +296,9 @@ Text: {text}"""
         except Exception as e:
             raise RuntimeError(f"翻译失败：{str(e)}") from e
         finally:
-            # 仅修复：self.model改为self._model，+ 缩进修复（提示词清洗移至finally内）
-            self._model.reset()
+            if self._model:
+                self._model.reset()
             time.sleep(0.05)
-            # 移除提示词残留（原始代码，仅修复缩进，无其他修改）
             clean_patterns = [
                 r"^.*?###T###",
                 r"^.*?#.*?T.*?#",
@@ -273,7 +309,6 @@ Text: {text}"""
                     pattern, "", translated_text, flags=re.DOTALL | re.IGNORECASE
                 ).strip()
 
-            # 无效结果校验（原始代码，仅修复缩进，无其他修改）
             if not translated_text or re.match(r'^[\s\.,!?;:\'"]*$', translated_text):
                 return f"未生成有效结果\n输入：{original_text}"
             return translated_text

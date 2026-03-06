@@ -545,8 +545,10 @@ class MainFrame(wx.Frame):
                     config = json.load(f)
                 self._source_lang = config.get('source_lang', 'English')
                 self._target_lang = config.get('target_lang', 'Chinese')
+                self._model_path = config.get('model_path', '')
         except Exception as e:
             logging.warning(f"加载配置失败: {e}")
+            self._model_path = ''
         
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
@@ -557,9 +559,11 @@ class MainFrame(wx.Frame):
     
     def save_config(self):
         try:
+            model_path = getattr(self, '_model_path', '') or ''
             config = {
                 'source_lang': self._source_lang,
-                'target_lang': self._target_lang
+                'target_lang': self._target_lang,
+                'model_path': model_path
             }
             with open(self._config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
@@ -586,20 +590,21 @@ class MainFrame(wx.Frame):
 
     def setup_settings_panel(self):
         """设置功能面板的UI元素 """
-        # 主布局管理器，垂直方向
         main_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        # --- 1. 浏览翻译模型分组 ---
-        # 创建 StaticBox 和 StaticBoxSizer
         browse_model_static_box = wx.StaticBox(self.settings_panel, label="浏览翻译模型")
         browse_model_sizer = wx.StaticBoxSizer(browse_model_static_box, wx.VERTICAL)
 
-        # 创建按钮并添加到该分组的 sizer
-        browse_model_button = wx.Button(self.settings_panel, label="浏览...")
-        # browse_model_button.Bind(wx.EVT_BUTTON, self.on_browse_model_click) # 绑定事件（如果需要）
-        browse_model_sizer.Add(browse_model_button, 0, wx.EXPAND | wx.ALL, 5)
+        model_path_h_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.model_path_text = wx.TextCtrl(self.settings_panel, style=wx.TE_READONLY)
+        model_path_h_sizer.Add(self.model_path_text, 1, wx.EXPAND | wx.RIGHT, 5)
+        
+        self.browse_model_button = wx.Button(self.settings_panel, label="浏览...")
+        self.browse_model_button.Bind(wx.EVT_BUTTON, self.on_browse_model_click)
+        model_path_h_sizer.Add(self.browse_model_button, 0)
+        
+        browse_model_sizer.Add(model_path_h_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
-        # 将整个分组 sizer 添加到主 sizer
         main_sizer.Add(browse_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # --- 2. 锁定旁白音量分组 ---
@@ -625,10 +630,34 @@ class MainFrame(wx.Frame):
         main_sizer.Add(lock_volume_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
 
-        # 应用主布局到 settings_panel
         self.settings_panel.SetSizer(main_sizer)
 
 
+    def on_browse_model_click(self, event):
+        """浏览并选择翻译模型"""
+        wildcard = "GGUF Model (*.gguf)|*.gguf|All Files (*.*)|*.*"
+        dialog = wx.FileDialog(
+            self,
+            message="选择翻译模型文件",
+            wildcard=wildcard,
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+        )
+        
+        if dialog.ShowModal() == wx.ID_OK:
+            model_path = dialog.GetPath()
+            self._model_path = model_path
+            self.model_path_text.SetValue(model_path)
+            self.save_config()
+            
+            if self.translator:
+                success = self.translator.load_model(model_path)
+                if success:
+                    wx.MessageBox("翻译模型加载成功", "成功", wx.OK | wx.ICON_INFORMATION)
+                    self.text_ctrl.SetValue("")
+                else:
+                    wx.MessageBox("翻译模型加载失败", "错误", wx.OK | wx.ICON_WARNING)
+        
+        dialog.Destroy()
 
 
     def on_exit(self, event):
@@ -791,23 +820,25 @@ class MainFrame(wx.Frame):
 
 
     def init_translator(self):
-        """初始化翻译
-        
-        
-        
-        
-        
-        
-        器"""
+        """初始化翻译器"""
         try:
             self.translator = Translator(
                 log_level=logging.INFO,
                 loop_interval=0.1
             )
+            model_path = getattr(self, '_model_path', '') or ''
+            if model_path and os.path.exists(model_path):
+                self.translator.load_model(model_path)
+                if hasattr(self, 'model_path_text'):
+                    self.model_path_text.SetValue(model_path)
         except Exception as e:
-            wx.MessageBox(str(e), "初始化错误", wx.OK | wx.ICON_ERROR)
-            self.translator = None
-        if self.translator.model_available == False:
+            logging.warning(f"翻译器初始化: {str(e)}")
+            self.translator = Translator(
+                log_level=logging.INFO,
+                loop_interval=0.1
+            )
+        
+        if not self.translator or self.translator.model_available == False:
             self.text_ctrl.SetValue(setting.lang_dict[setting.current_lang]['model_warning'])
 
 
@@ -1424,11 +1455,19 @@ class MainFrame(wx.Frame):
             self.vo_handler.speak_text(result_text)
             return
         
-        result_text = self.translator.translate(text, source_lang, target_lang)
-        if result_text:
-            self.text_ctrl.SetValue(result_text)
-            self.vo_handler.speak_text(result_text)
-        else:
+        if not self.translator.model_available:
+            self.vo_handler.speak_text("翻译模型不可用，请通过设置面板选择翻译模型")
+            return
+        
+        try:
+            result_text = self.translator.translate(text, source_lang, target_lang)
+            if result_text:
+                self.text_ctrl.SetValue(result_text)
+                self.vo_handler.speak_text(result_text)
+            else:
+                self.vo_handler.speak_text("翻译失败")
+        except Exception as e:
+            logging.warning(f"翻译失败: {e}")
             self.vo_handler.speak_text("翻译失败")
 
 
