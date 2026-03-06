@@ -324,8 +324,7 @@ class MainFrame(wx.Frame):
         app_support_dir = os.path.expanduser("~/Library/Application Support/")
         self.app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
         os.makedirs(self.app_data_dir, exist_ok=True)
-        self._clipboard_data_path = os.path.join(self.app_data_dir, ".clipboard_data")  # 剪贴板数据文件
-        self._config_path = os.path.join(self.app_data_dir, "config.json")  # 配置文件
+        self._clipboard_data_path = os.path.join(self.app_data_dir, ".clipboard_data")
         
         self.edit_dialog = None
         
@@ -539,16 +538,10 @@ class MainFrame(wx.Frame):
         pass
     
     def load_config(self):
-        try:
-            if os.path.exists(self._config_path):
-                with open(self._config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                self._source_lang = config.get('source_lang', 'English')
-                self._target_lang = config.get('target_lang', 'Chinese')
-                self._model_path = config.get('model_path', '')
-        except Exception as e:
-            logging.warning(f"加载配置失败: {e}")
-            self._model_path = ''
+        config = setting.load_config()
+        self._source_lang = config.get('source_lang', 'English')
+        self._target_lang = config.get('target_lang', 'Chinese')
+        self._model_path = config.get('model_path', '')
         
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
@@ -558,17 +551,8 @@ class MainFrame(wx.Frame):
             self._toolbar_target_choice.SetStringSelection(target_display)
     
     def save_config(self):
-        try:
-            model_path = getattr(self, '_model_path', '') or ''
-            config = {
-                'source_lang': self._source_lang,
-                'target_lang': self._target_lang,
-                'model_path': model_path
-            }
-            with open(self._config_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logging.warning(f"保存配置失败: {e}")
+        model_path = getattr(self, '_model_path', '') or ''
+        setting.save_config(self._source_lang, self._target_lang, model_path)
 
 
     def setup_clipboard_panel(self):

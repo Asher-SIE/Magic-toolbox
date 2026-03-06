@@ -1,5 +1,7 @@
-import plistlib
+import json
+import logging
 import os
+import plistlib
 
 
 #  字符集合
@@ -499,4 +501,41 @@ hotKeys = [
         "description": "alt+shift+p: 粘贴剪贴板当前行"
     }
 ]
+
+
+app_support_dir = os.path.expanduser("~/Library/Application Support/")
+app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
+os.makedirs(app_data_dir, exist_ok=True)
+config_path = os.path.join(app_data_dir, "config.json")
+
+
+def load_config():
+    """加载配置"""
+    config = {
+        'source_lang': 'English',
+        'target_lang': 'Chinese',
+        'model_path': ''
+    }
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                saved_config = json.load(f)
+                config.update(saved_config)
+    except Exception as e:
+        logging.warning(f"加载配置失败: {e}")
+    return config
+
+
+def save_config(source_lang: str, target_lang: str, model_path: str = ''):
+    """保存配置"""
+    try:
+        config = {
+            'source_lang': source_lang,
+            'target_lang': target_lang,
+            'model_path': model_path
+        }
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.warning(f"保存配置失败: {e}")
 
