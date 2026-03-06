@@ -58,10 +58,19 @@ RESOURCE_PATH="$SCRIPT_DIR/$RESOURCE_DIR"
 if [ ! -d "$RESOURCE_PATH" ]; then
     echo "警告：资源目录 $RESOURCE_PATH 不存在，终止打包！"
     RESOURCE_EXIST=0
-    exit 1
 else
     RESOURCE_EXIST=1
     echo "找到资源目录：$RESOURCE_PATH"
+fi
+
+# 检查 locales 目录是否存在
+LOCALES_PATH="$SCRIPT_DIR/locales"
+if [ ! -d "$LOCALES_PATH" ]; then
+    echo "警告：locales 目录 $LOCALES_PATH 不存在"
+    LOCALES_EXIST=0
+else
+    LOCALES_EXIST=1
+    echo "找到 locales 目录：$LOCALES_PATH"
 fi
 
 # 清除之前的构建文件
@@ -92,6 +101,13 @@ if [ -d "$APP_BUNDLE" ]; then
         echo "正在复制资源文件..."
         cp -R "$RESOURCE_PATH"/* "$APP_BUNDLE/Contents/Resources/"
         echo "资源复制完成！"
+    fi
+    
+    # 复制 locales
+    if [ $LOCALES_EXIST -eq 1 ] && [ -d "$APP_BUNDLE/Contents/Resources" ]; then
+        echo "正在复制 locales 文件..."
+        cp -R "$LOCALES_PATH" "$APP_BUNDLE/Contents/Resources/"
+        echo "locales 复制完成！"
     fi
 else
     echo "打包失败，请检查终端错误信息"

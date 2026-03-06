@@ -5,7 +5,7 @@ a = Analysis(
     ['main_UI.py'],
     pathex=[],
     binaries=[('venv/lib/python3.13/site-packages/llama_cpp/lib', '.')],
-    datas=[('resources', 'resources')],
+    datas=[('resources', 'resources'), ('locales', 'locales')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

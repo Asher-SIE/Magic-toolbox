@@ -322,3 +322,95 @@ msgstr "Exit Magic Toolbox"
 #: main_UI.py
 msgid "exit_app_tips"
 msgstr "Exit application (Shortcut: ⌘Q)"
+
+#: main_UI.py
+msgid "nav_select_func"
+msgstr "Select Function:"
+
+#: main_UI.py
+msgid "trans_input_placeholder"
+msgstr "Enter text to translate:"
+
+#: main_UI.py
+msgid "clipboard_history"
+msgstr "Clipboard History:"
+
+#: main_UI.py
+msgid "browse_model"
+msgstr "Browse Translation Model"
+
+#: main_UI.py
+msgid "browse_btn"
+msgstr "Browse..."
+
+#: main_UI.py
+msgid "lock_volume"
+msgstr "Lock VoiceOver Volume"
+
+#: main_UI.py
+msgid "on_off"
+msgstr "On/Off"
+
+#: main_UI.py
+msgid "select_model_file"
+msgstr "Select Translation Model File"
+
+#: main_UI.py
+msgid "model_load_success"
+msgstr "Translation model loaded successfully"
+
+#: main_UI.py
+msgid "model_load_failed"
+msgstr "Failed to load translation model"
+
+#: main_UI.py
+msgid "about_title"
+msgstr "About Magic Toolbox"
+
+#: main_UI.py
+msgid "got_it_btn"
+msgstr "Got it"
+
+#: main_UI.py
+msgid "edit_single_item_tips"
+msgstr "Edit function only supports single item, please uncheck other items and try again"
+
+#: main_UI.py
+msgid "init_failed"
+msgstr "Initialization failed"
+
+#: main_UI.py
+msgid "model_unavailable_alt"
+msgstr "Translation model unavailable, please select a model in settings panel"
+
+#: main_UI.py
+msgid "translation_failed_alt"
+msgstr "Translation failed"
+
+#: main_UI.py
+msgid "set_clipboard_failed"
+msgstr "Failed to set clipboard"
+
+#: main_UI.py
+msgid "success"
+msgstr "Success"
+
+#: main_UI.py
+msgid "error"
+msgstr "Error"
+
+#: main_UI.py
+msgid "notice"
+msgstr "Notice"
+
+#: main_UI.py
+msgid "nav_translation"
+msgstr "Translation"
+
+#: main_UI.py
+msgid "nav_clipboard"
+msgstr "Clipboard"
+
+#: main_UI.py
+msgid "nav_settings"
+msgstr "Settings"

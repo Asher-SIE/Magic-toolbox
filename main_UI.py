@@ -439,13 +439,13 @@ class MainFrame(wx.Frame):
         # 创建左侧导航容器
         self.nav_container_panel = wx.Panel(self.splitter)
 
-        static_box = wx.StaticBox(self.nav_container_panel, label="选择功能：") 
+        static_box = wx.StaticBox(self.nav_container_panel, label=setting._("nav_select_func")) 
         static_box_sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
 
         self.nav_list = wx.ListBox(self.nav_container_panel, choices=[
-            setting._('trans_radio'),  # "翻译 / Translation"
-            setting._('clipboard_radio'),   # "剪贴板 / Clipboard"
-            setting._('menubar_opt')     # "设置 / Settings"
+            setting._('nav_translation'),
+            setting._('nav_clipboard'),
+            setting._('nav_settings')
         ])
         self.nav_list.SetMinSize((150, -1)) # 设置最小宽度
         self.nav_list.SetSelection(0)
@@ -500,7 +500,7 @@ class MainFrame(wx.Frame):
 
     def setup_translation_panel(self):
         """设置翻译功能面板的UI元素"""
-        static_box = wx.StaticBox(self.translation_panel, label="请输入待翻译文本：") 
+        static_box = wx.StaticBox(self.translation_panel, label=setting._("trans_input_placeholder")) 
         sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
         
         self.text_ctrl = wx.TextCtrl(self.translation_panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
@@ -553,7 +553,7 @@ class MainFrame(wx.Frame):
 
     def setup_clipboard_panel(self):
         """设置剪贴板功能面板的UI元素"""
-        static_box = wx.StaticBox(self.clipboard_panel, label="剪贴板历史记录：")
+        static_box = wx.StaticBox(self.clipboard_panel, label=setting._("clipboard_history"))
         
         sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
 
@@ -572,14 +572,14 @@ class MainFrame(wx.Frame):
         """设置功能面板的UI元素 """
         main_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        browse_model_static_box = wx.StaticBox(self.settings_panel, label="浏览翻译模型")
+        browse_model_static_box = wx.StaticBox(self.settings_panel, label=setting._("browse_model"))
         browse_model_sizer = wx.StaticBoxSizer(browse_model_static_box, wx.VERTICAL)
 
         model_path_h_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.model_path_text = wx.TextCtrl(self.settings_panel, style=wx.TE_READONLY)
         model_path_h_sizer.Add(self.model_path_text, 1, wx.EXPAND | wx.RIGHT, 5)
         
-        self.browse_model_button = wx.Button(self.settings_panel, label="浏览...")
+        self.browse_model_button = wx.Button(self.settings_panel, label=setting._("browse_btn"))
         self.browse_model_button.Bind(wx.EVT_BUTTON, self.on_browse_model_click)
         model_path_h_sizer.Add(self.browse_model_button, 0)
         
@@ -588,7 +588,7 @@ class MainFrame(wx.Frame):
         main_sizer.Add(browse_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # --- 2. 锁定旁白音量分组 ---
-        lock_volume_static_box = wx.StaticBox(self.settings_panel, label="锁定旁白音量")
+        lock_volume_static_box = wx.StaticBox(self.settings_panel, label=setting._("lock_volume"))
         lock_volume_sizer = wx.StaticBoxSizer(lock_volume_static_box, wx.VERTICAL)
 
         # 为了在分组内水平排列编辑框和复选框
@@ -597,7 +597,7 @@ class MainFrame(wx.Frame):
         # 创建编辑框和复选框
         volume_input = wx.TextCtrl(self.settings_panel, value="", style=wx.TE_RIGHT)
         volume_input.Bind(wx.EVT_TEXT, lambda evt: self.on_volume_text_change(evt, volume_input))
-        toggle_lock_checkbox = wx.CheckBox(self.settings_panel, label="开/关")
+        toggle_lock_checkbox = wx.CheckBox(self.settings_panel, label=setting._("on_off"))
 
         # 将编辑框和复选框添加到内部的水平 sizer
         inner_h_sizer.Add(volume_input, 1, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5) # 给复选框留点空间
@@ -618,7 +618,7 @@ class MainFrame(wx.Frame):
         wildcard = "GGUF Model (*.gguf)|*.gguf|All Files (*.*)|*.*"
         dialog = wx.FileDialog(
             self,
-            message="选择翻译模型文件",
+            message=setting._("select_model_file"),
             wildcard=wildcard,
             style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
         )
@@ -632,10 +632,10 @@ class MainFrame(wx.Frame):
                 if success:
                     self._model_path = model_path
                     self.save_config()
-                    wx.MessageBox("翻译模型加载成功", "成功", wx.OK | wx.ICON_INFORMATION)
+                    wx.MessageBox(setting._("model_load_success"), setting._("success"), wx.OK | wx.ICON_INFORMATION)
                     self.text_ctrl.SetValue("")
                 else:
-                    wx.MessageBox("翻译模型加载失败", "错误", wx.OK | wx.ICON_WARNING)
+                    wx.MessageBox(setting._("model_load_failed"), setting._("error"), wx.OK | wx.ICON_WARNING)
         
         dialog.Destroy()
 
@@ -661,7 +661,7 @@ class MainFrame(wx.Frame):
 
     def on_about(self, event):
         
-        dialog = wx.Dialog(self, title="关于 Magic Toolbox", size=(500, 400))
+        dialog = wx.Dialog(self, title=setting._("about_title"), size=(500, 400))
         panel = wx.Panel(dialog)
         sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -674,7 +674,7 @@ class MainFrame(wx.Frame):
         text_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
 
         # 关闭按钮
-        btn = wx.Button(panel, label="Got it")
+        btn = wx.Button(panel, label=setting._("got_it_btn"))
         btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
 
         sizer.Add(text_ctrl, 1, wx.EXPAND | wx.ALL, 10)
@@ -754,11 +754,11 @@ class MainFrame(wx.Frame):
     def on_nav_selection_changed(self, event):
         """导航选择事件：切换内容面板 + 更新工具栏"""
         selection = event.GetString()
-        if "翻译" in selection or "Translation" in selection:
+        if selection == setting._('nav_translation'):
             self.switch_to_module("translation")
-        elif "剪贴板" in selection or "Clipboard" in selection:
+        elif selection == setting._('nav_clipboard'):
             self.switch_to_module("clipboard")
-        elif "操作" in selection or "Settings" in selection:
+        elif selection == setting._('nav_settings'):
             self.switch_to_module("settings")
 
 
@@ -971,7 +971,7 @@ class MainFrame(wx.Frame):
         
         # 多选时提示仅编辑第一个
         if len(checked_indices) > 1:
-            wx.MessageBox("编辑功能仅支持单个项，请取消其他勾选后重试", "提示", wx.OK | wx.ICON_INFORMATION)
+            wx.MessageBox(setting._("edit_single_item_tips"), setting._("notice"), wx.OK | wx.ICON_INFORMATION)
             return
 
         idx = checked_indices[0]
@@ -1025,7 +1025,7 @@ class MainFrame(wx.Frame):
             if len(checked_indices) == 1:
                 self.on_edit_btn(None)
             else:
-                wx.MessageBox("编辑功能仅支持单个项，请取消其他勾选后重试", "提示", wx.OK | wx.ICON_INFORMATION)
+                wx.MessageBox(setting._("edit_single_item_tips"), setting._("notice"), wx.OK | wx.ICON_INFORMATION)
         else:
             event.Skip()
 
@@ -1339,7 +1339,7 @@ class MainFrame(wx.Frame):
             
             clipboard.SetData(wx.TextDataObject(target_text))
         except Exception as e:
-            wx.MessageBox(f"设置剪贴板失败：{str(e)}", "错误", wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(f"{setting._('set_clipboard_failed')}: {str(e)}", setting._("error"), wx.OK | wx.ICON_ERROR)
         finally:
             if clipboard.IsOpened():
                 clipboard.Close()
@@ -1411,8 +1411,8 @@ class MainFrame(wx.Frame):
         """Option + 回车键：翻译文本"""
         if not self.translator:
             wx.MessageBox(
-                "initialization failed", 
-                "Error", 
+                setting._("init_failed"), 
+                setting._("error"), 
                 wx.OK | wx.ICON_ERROR
             )
             return
@@ -1435,7 +1435,7 @@ class MainFrame(wx.Frame):
             return
         
         if not self.translator.model_available:
-            self.vo_handler.speak_text("翻译模型不可用，请通过设置面板选择翻译模型")
+            self.vo_handler.speak_text(setting._("model_unavailable"))
             return
         
         try:
@@ -1444,10 +1444,10 @@ class MainFrame(wx.Frame):
                 self.text_ctrl.SetValue(result_text)
                 self.vo_handler.speak_text(result_text)
             else:
-                self.vo_handler.speak_text("翻译失败")
+                self.vo_handler.speak_text(setting._("translation_failed"))
         except Exception as e:
             logging.warning(f"翻译失败: {e}")
-            self.vo_handler.speak_text("翻译失败")
+            self.vo_handler.speak_text(setting._("translation_failed"))
 
 
     def on_key_to_translate(self, event):

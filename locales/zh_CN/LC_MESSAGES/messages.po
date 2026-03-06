@@ -322,3 +322,95 @@ msgstr "退出 Magic Toolbox"
 #: main_UI.py
 msgid "exit_app_tips"
 msgstr "退出应用（快捷键：⌘Q）"
+
+#: main_UI.py
+msgid "nav_select_func"
+msgstr "选择功能："
+
+#: main_UI.py
+msgid "trans_input_placeholder"
+msgstr "请输入待翻译文本："
+
+#: main_UI.py
+msgid "clipboard_history"
+msgstr "剪贴板历史记录："
+
+#: main_UI.py
+msgid "browse_model"
+msgstr "选择翻译模型路径"
+
+#: main_UI.py
+msgid "browse_btn"
+msgstr "打开..."
+
+#: main_UI.py
+msgid "lock_volume"
+msgstr "锁定旁白音量"
+
+#: main_UI.py
+msgid "on_off"
+msgstr "开/关"
+
+#: main_UI.py
+msgid "select_model_file"
+msgstr "选择翻译模型文件"
+
+#: main_UI.py
+msgid "model_load_success"
+msgstr "翻译模型加载成功"
+
+#: main_UI.py
+msgid "model_load_failed"
+msgstr "翻译模型加载失败"
+
+#: main_UI.py
+msgid "about_title"
+msgstr "关于 Magic Toolbox"
+
+#: main_UI.py
+msgid "got_it_btn"
+msgstr "Got it"
+
+#: main_UI.py
+msgid "edit_single_item_tips"
+msgstr "编辑功能仅支持单个项，请取消其他勾选后重试"
+
+#: main_UI.py
+msgid "init_failed"
+msgstr "初始化失败"
+
+#: main_UI.py
+msgid "model_unavailable_alt"
+msgstr "翻译模型不可用，请通过设置面板选择翻译模型"
+
+#: main_UI.py
+msgid "translation_failed_alt"
+msgstr "翻译失败"
+
+#: main_UI.py
+msgid "set_clipboard_failed"
+msgstr "设置剪贴板失败"
+
+#: main_UI.py
+msgid "success"
+msgstr "成功"
+
+#: main_UI.py
+msgid "error"
+msgstr "错误"
+
+#: main_UI.py
+msgid "notice"
+msgstr "提示"
+
+#: main_UI.py
+msgid "nav_translation"
+msgstr "翻译"
+
+#: main_UI.py
+msgid "nav_clipboard"
+msgstr "剪贴板"
+
+#: main_UI.py
+msgid "nav_settings"
+msgstr "设置"
