@@ -1,0 +1,324 @@
+# Chinese translations for Magic Toolbox.
+# Copyright (C) 2024 Magic Toolbox
+# This file is distributed under the same license as the Magic Toolbox package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Magic Toolbox 1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-01 00:00+0000\n"
+"PO-Revision-Date: 2024-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Chinese\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: main_UI.py
+msgid "app_name"
+msgstr "Magic Toolbox"
+
+#: main_UI.py
+msgid "editor_title"
+msgstr "编辑剪贴板内容"
+
+#: main_UI.py
+msgid "tbr_mode"
+msgstr "模式"
+
+#: main_UI.py
+msgid "trans_radio"
+msgstr "翻译"
+
+#: main_UI.py
+msgid "clipboard_radio"
+msgstr "剪贴板"
+
+#: main_UI.py
+msgid "copy_btn"
+msgstr "拷贝"
+
+#: main_UI.py
+msgid "copy_btn_tips"
+msgstr "复制到剪贴板"
+
+#: main_UI.py
+msgid "delete_btn"
+msgstr "删除"
+
+#: main_UI.py
+msgid "delete_btn_tips"
+msgstr "删除选中项"
+
+#: main_UI.py
+msgid "edit_btn"
+msgstr "编辑"
+
+#: main_UI.py
+msgid "edit_btn_tips"
+msgstr "编辑选中项"
+
+#: main_UI.py
+msgid "confirm_btn"
+msgstr "确定"
+
+#: main_UI.py
+msgid "cancel_btn"
+msgstr "取消"
+
+#: main_UI.py
+msgid "vo_warning"
+msgstr "获取VoiceOver朗读内容失败"
+
+#: main_UI.py
+msgid "model_warning"
+msgstr "翻译模型加载失败,仅保留本地词典功能"
+
+#: main_UI.py
+msgid "menu_about"
+msgstr "关于 Magic Toolbox"
+
+#: main_UI.py
+msgid "menubar_opt"
+msgstr "操作"
+
+#: main_UI.py
+msgid "menu_opt_rebootVO"
+msgstr "重启旁白"
+
+#: main_UI.py
+msgid "menu_opt_reboot_proc"
+msgstr "重启处理器"
+
+#: main_UI.py
+msgid "menu_opt_clean_list"
+msgstr "清空剪贴板列表"
+
+#: main_UI.py
+msgid "now"
+msgstr "当前"
+
+#: main_UI.py
+msgid "row"
+msgstr "行"
+
+#: main_UI.py
+msgid "column"
+msgstr "列"
+
+#: main_UI.py
+msgid "total_lines"
+msgstr "共"
+
+#: main_UI.py
+msgid "total_chars"
+msgstr "个字"
+
+#: main_UI.py
+msgid "edd_more_btn"
+msgstr "更多"
+
+#: main_UI.py
+msgid "edd_remove_whitespace_btn"
+msgstr "删除所有空白符"
+
+#: main_UI.py
+msgid "edd_merge_spaces_btn"
+msgstr "合并连续空格"
+
+#: main_UI.py
+msgid "edd_num_to_chinese_btn"
+msgstr "数字转中文"
+
+#: main_UI.py
+msgid "edd_punc_to_newline_btn"
+msgstr "分句"
+
+#: main_UI.py
+msgid "msg_motice"
+msgstr "提示"
+
+#: main_UI.py
+msgid "msg_is_close"
+msgstr "确定要退出吗？"
+
+#: main_UI.py
+msgid "trans_lang_box"
+msgstr "翻译语言"
+
+#: main_UI.py
+msgid "source_lang"
+msgstr "源语言"
+
+#: main_UI.py
+msgid "target_lang"
+msgstr "目标语言"
+
+#: main_UI.py
+msgid "lang_English"
+msgstr "英语"
+
+#: main_UI.py
+msgid "lang_Chinese"
+msgstr "中文"
+
+#: main_UI.py
+msgid "lang_French"
+msgstr "法语"
+
+#: main_UI.py
+msgid "lang_Portuguese"
+msgstr "葡萄牙语"
+
+#: main_UI.py
+msgid "lang_Spanish"
+msgstr "西班牙语"
+
+#: main_UI.py
+msgid "lang_Japanese"
+msgstr "日语"
+
+#: main_UI.py
+msgid "lang_Turkish"
+msgstr "土耳其语"
+
+#: main_UI.py
+msgid "lang_Russian"
+msgstr "俄语"
+
+#: main_UI.py
+msgid "lang_Arabic"
+msgstr "阿拉伯语"
+
+#: main_UI.py
+msgid "lang_Korean"
+msgstr "韩语"
+
+#: main_UI.py
+msgid "lang_Thai"
+msgstr "泰语"
+
+#: main_UI.py
+msgid "lang_Italian"
+msgstr "意大利语"
+
+#: main_UI.py
+msgid "lang_German"
+msgstr "德语"
+
+#: main_UI.py
+msgid "lang_Vietnamese"
+msgstr "越南语"
+
+#: main_UI.py
+msgid "lang_Malay"
+msgstr "马来语"
+
+#: main_UI.py
+msgid "lang_Indonesian"
+msgstr "印尼语"
+
+#: main_UI.py
+msgid "lang_Filipino"
+msgstr "菲律宾语"
+
+#: main_UI.py
+msgid "lang_Hindi"
+msgstr "印地语"
+
+#: main_UI.py
+msgid "lang_Traditional Chinese"
+msgstr "繁体中文"
+
+#: main_UI.py
+msgid "lang_Polish"
+msgstr "波兰语"
+
+#: main_UI.py
+msgid "lang_Czech"
+msgstr "捷克语"
+
+#: main_UI.py
+msgid "lang_Dutch"
+msgstr "荷兰语"
+
+#: main_UI.py
+msgid "lang_Khmer"
+msgstr "高棉语"
+
+#: main_UI.py
+msgid "lang_Burmese"
+msgstr "缅甸语"
+
+#: main_UI.py
+msgid "lang_Persian"
+msgstr "波斯语"
+
+#: main_UI.py
+msgid "lang_Gujarati"
+msgstr "古吉拉特语"
+
+#: main_UI.py
+msgid "lang_Urdu"
+msgstr "乌尔都语"
+
+#: main_UI.py
+msgid "lang_Telugu"
+msgstr "泰卢固语"
+
+#: main_UI.py
+msgid "lang_Marathi"
+msgstr "马拉地语"
+
+#: main_UI.py
+msgid "lang_Hebrew"
+msgstr "希伯来语"
+
+#: main_UI.py
+msgid "lang_Bengali"
+msgstr "孟加拉语"
+
+#: main_UI.py
+msgid "lang_Tamil"
+msgstr "泰米尔语"
+
+#: main_UI.py
+msgid "lang_Ukrainian"
+msgstr "乌克兰语"
+
+#: main_UI.py
+msgid "lang_Tibetan"
+msgstr "藏语"
+
+#: main_UI.py
+msgid "lang_Kazakh"
+msgstr "哈萨克语"
+
+#: main_UI.py
+msgid "lang_Mongolian"
+msgstr "蒙古语"
+
+#: main_UI.py
+msgid "lang_Uyghur"
+msgstr "维吾尔语"
+
+#: main_UI.py
+msgid "lang_Cantonese"
+msgstr "粤语"
+
+#: main_UI.py
+msgid "model_unavailable"
+msgstr "翻译模型不可用，请通过设置面板选择翻译模型"
+
+#: main_UI.py
+msgid "translation_failed"
+msgstr "翻译失败"
+
+#: main_UI.py
+msgid "exit_app"
+msgstr "退出 Magic Toolbox"
+
+#: main_UI.py
+msgid "exit_app_tips"
+msgstr "退出应用（快捷键：⌘Q）"

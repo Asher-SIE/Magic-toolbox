@@ -1,0 +1,324 @@
+# English translations for Magic Toolbox.
+# Copyright (C) 2024 Magic Toolbox
+# This file is distributed under the same license as the Magic Toolbox package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Magic Toolbox 1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-01 00:00+0000\n"
+"PO-Revision-Date: 2024-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: English\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: main_UI.py
+msgid "app_name"
+msgstr "Magic Toolbox"
+
+#: main_UI.py
+msgid "editor_title"
+msgstr "Edit clipboard contents"
+
+#: main_UI.py
+msgid "tbr_mode"
+msgstr "Mode"
+
+#: main_UI.py
+msgid "trans_radio"
+msgstr "Translation"
+
+#: main_UI.py
+msgid "clipboard_radio"
+msgstr "Clipboard"
+
+#: main_UI.py
+msgid "copy_btn"
+msgstr "Copy"
+
+#: main_UI.py
+msgid "copy_btn_tips"
+msgstr "Copy to clipboard"
+
+#: main_UI.py
+msgid "delete_btn"
+msgstr "Delete"
+
+#: main_UI.py
+msgid "delete_btn_tips"
+msgstr "Delete current item"
+
+#: main_UI.py
+msgid "edit_btn"
+msgstr "Edit"
+
+#: main_UI.py
+msgid "edit_btn_tips"
+msgstr "Edit current item"
+
+#: main_UI.py
+msgid "confirm_btn"
+msgstr "OK"
+
+#: main_UI.py
+msgid "cancel_btn"
+msgstr "Cancel"
+
+#: main_UI.py
+msgid "vo_warning"
+msgstr "Getting VoiceOver Reading Failed"
+
+#: main_UI.py
+msgid "model_warning"
+msgstr "Translation model loading failed, retaining only local dictionary functions"
+
+#: main_UI.py
+msgid "menu_about"
+msgstr "About Magic Toolbox"
+
+#: main_UI.py
+msgid "menubar_opt"
+msgstr "Operation"
+
+#: main_UI.py
+msgid "menu_opt_rebootVO"
+msgstr "Reboot VoiceOver"
+
+#: main_UI.py
+msgid "menu_opt_reboot_proc"
+msgstr "Reboot Processer"
+
+#: main_UI.py
+msgid "menu_opt_clean_list"
+msgstr "Empty Clipboard List"
+
+#: main_UI.py
+msgid "now"
+msgstr "Is"
+
+#: main_UI.py
+msgid "row"
+msgstr "Row"
+
+#: main_UI.py
+msgid "column"
+msgstr "Column"
+
+#: main_UI.py
+msgid "total_lines"
+msgstr "Total"
+
+#: main_UI.py
+msgid "total_chars"
+msgstr "Characters"
+
+#: main_UI.py
+msgid "edd_more_btn"
+msgstr "More"
+
+#: main_UI.py
+msgid "edd_remove_whitespace_btn"
+msgstr "Remove All Whitespace"
+
+#: main_UI.py
+msgid "edd_merge_spaces_btn"
+msgstr "Merge Consecutive Spaces"
+
+#: main_UI.py
+msgid "edd_num_to_chinese_btn"
+msgstr "Convert Numbers to Chinese"
+
+#: main_UI.py
+msgid "edd_punc_to_newline_btn"
+msgstr "Split into Sentences"
+
+#: main_UI.py
+msgid "msg_motice"
+msgstr "Notice"
+
+#: main_UI.py
+msgid "msg_is_close"
+msgstr "Are you sure you want to quit?"
+
+#: main_UI.py
+msgid "trans_lang_box"
+msgstr "Translation Language"
+
+#: main_UI.py
+msgid "source_lang"
+msgstr "Source"
+
+#: main_UI.py
+msgid "target_lang"
+msgstr "Target"
+
+#: main_UI.py
+msgid "lang_English"
+msgstr "English"
+
+#: main_UI.py
+msgid "lang_Chinese"
+msgstr "Chinese"
+
+#: main_UI.py
+msgid "lang_French"
+msgstr "French"
+
+#: main_UI.py
+msgid "lang_Portuguese"
+msgstr "Portuguese"
+
+#: main_UI.py
+msgid "lang_Spanish"
+msgstr "Spanish"
+
+#: main_UI.py
+msgid "lang_Japanese"
+msgstr "Japanese"
+
+#: main_UI.py
+msgid "lang_Turkish"
+msgstr "Turkish"
+
+#: main_UI.py
+msgid "lang_Russian"
+msgstr "Russian"
+
+#: main_UI.py
+msgid "lang_Arabic"
+msgstr "Arabic"
+
+#: main_UI.py
+msgid "lang_Korean"
+msgstr "Korean"
+
+#: main_UI.py
+msgid "lang_Thai"
+msgstr "Thai"
+
+#: main_UI.py
+msgid "lang_Italian"
+msgstr "Italian"
+
+#: main_UI.py
+msgid "lang_German"
+msgstr "German"
+
+#: main_UI.py
+msgid "lang_Vietnamese"
+msgstr "Vietnamese"
+
+#: main_UI.py
+msgid "lang_Malay"
+msgstr "Malay"
+
+#: main_UI.py
+msgid "lang_Indonesian"
+msgstr "Indonesian"
+
+#: main_UI.py
+msgid "lang_Filipino"
+msgstr "Filipino"
+
+#: main_UI.py
+msgid "lang_Hindi"
+msgstr "Hindi"
+
+#: main_UI.py
+msgid "lang_Traditional Chinese"
+msgstr "Traditional Chinese"
+
+#: main_UI.py
+msgid "lang_Polish"
+msgstr "Polish"
+
+#: main_UI.py
+msgid "lang_Czech"
+msgstr "Czech"
+
+#: main_UI.py
+msgid "lang_Dutch"
+msgstr "Dutch"
+
+#: main_UI.py
+msgid "lang_Khmer"
+msgstr "Khmer"
+
+#: main_UI.py
+msgid "lang_Burmese"
+msgstr "Burmese"
+
+#: main_UI.py
+msgid "lang_Persian"
+msgstr "Persian"
+
+#: main_UI.py
+msgid "lang_Gujarati"
+msgstr "Gujarati"
+
+#: main_UI.py
+msgid "lang_Urdu"
+msgstr "Urdu"
+
+#: main_UI.py
+msgid "lang_Telugu"
+msgstr "Telugu"
+
+#: main_UI.py
+msgid "lang_Marathi"
+msgstr "Marathi"
+
+#: main_UI.py
+msgid "lang_Hebrew"
+msgstr "Hebrew"
+
+#: main_UI.py
+msgid "lang_Bengali"
+msgstr "Bengali"
+
+#: main_UI.py
+msgid "lang_Tamil"
+msgstr "Tamil"
+
+#: main_UI.py
+msgid "lang_Ukrainian"
+msgstr "Ukrainian"
+
+#: main_UI.py
+msgid "lang_Tibetan"
+msgstr "Tibetan"
+
+#: main_UI.py
+msgid "lang_Kazakh"
+msgstr "Kazakh"
+
+#: main_UI.py
+msgid "lang_Mongolian"
+msgstr "Mongolian"
+
+#: main_UI.py
+msgid "lang_Uyghur"
+msgstr "Uyghur"
+
+#: main_UI.py
+msgid "lang_Cantonese"
+msgstr "Cantonese"
+
+#: main_UI.py
+msgid "model_unavailable"
+msgstr "Translation model unavailable, please select a model in settings panel"
+
+#: main_UI.py
+msgid "translation_failed"
+msgstr "Translation failed"
+
+#: main_UI.py
+msgid "exit_app"
+msgstr "Exit Magic Toolbox"
+
+#: main_UI.py
+msgid "exit_app_tips"
+msgstr "Exit application (Shortcut: ⌘Q)"

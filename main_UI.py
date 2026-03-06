@@ -49,11 +49,11 @@ class EditDialog(wx.Dialog):
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.more_btn = wx.Button(
             panel,
-            label=setting.lang_dict[setting.current_lang].get('edd_more_btn', ' More'),
+            label=setting._('edd_more_btn'),
             style=wx.BU_EXACTFIT
         )
-        self.ok_btn = wx.Button(panel, label=setting.lang_dict[setting.current_lang]['confirm_btn'])
-        self.cancel_btn = wx.Button(panel, label=setting.lang_dict[setting.current_lang]['cancel_btn'])
+        self.ok_btn = wx.Button(panel, label=setting._('confirm_btn'))
+        self.cancel_btn = wx.Button(panel, label=setting._('cancel_btn'))
 
         self.more_btn.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
 
@@ -61,19 +61,19 @@ class EditDialog(wx.Dialog):
         self.func_menu = wx.Menu()
         self.remove_whitespace_menu = self.func_menu.Append(
             wx.NewIdRef(),
-            f"{setting.lang_dict[setting.current_lang]['edd_remove_whitespace_btn']} ⌥+1"
+            f"{setting._('edd_remove_whitespace_btn')} ⌥+1"
         )
         self.merge_spaces_menu = self.func_menu.Append(
             wx.NewIdRef(),
-            f"{setting.lang_dict[setting.current_lang]['edd_merge_spaces_btn']} ⌥+2"
+            f"{setting._('edd_merge_spaces_btn')} ⌥+2"
         )
         self.num_to_chinese_menu = self.func_menu.Append(
             wx.NewIdRef(),
-            f"{setting.lang_dict[setting.current_lang]['edd_num_to_chinese_btn']} ⌥+3"
+            f"{setting._('edd_num_to_chinese_btn')} ⌥+3"
         )
         self.punc_to_newline_menu = self.func_menu.Append(
             wx.NewIdRef(),
-            f"{setting.lang_dict[setting.current_lang]['edd_punc_to_newline_btn']} ⌥+4"
+            f"{setting._('edd_punc_to_newline_btn')} ⌥+4"
         )
 
         # 按钮布局
@@ -248,8 +248,8 @@ class EditDialog(wx.Dialog):
     def on_cancel(self, event):
         """取消按钮：放弃编辑并关闭窗口"""
         is_close = wx.MessageBox(
-            setting.lang_dict[setting.current_lang].get('msg_is_close', '确定要退出吗？'),
-            setting.lang_dict[setting.current_lang].get('msg_motice', '提示'),
+            setting._('msg_is_close'),
+            setting._('msg_motice'),
             wx.YES_NO | wx.ICON_QUESTION | wx.NO_DEFAULT
         )
         if is_close == wx.NO:
@@ -337,8 +337,7 @@ class MainFrame(wx.Frame):
             "Tibetan", "Kazakh", "Mongolian", "Uyghur", "Cantonese"
         ]
         
-        current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
-        self.trans_source_options = [current_lang_dict.get(f'lang_{code}', code) for code in self.lang_codes]
+        self.trans_source_options = [setting.get_lang_display(code) for code in self.lang_codes]
         self.trans_target_options = self.trans_source_options
         
         self._source_lang = "English"
@@ -404,7 +403,7 @@ class MainFrame(wx.Frame):
         # 关于
         about_item = app_menu.Append(
             wx.ID_ABOUT,  # 使用系统默认ID
-            setting.lang_dict[setting.current_lang]['menu_about']
+            setting._('menu_about')
         )
         self.Bind(wx.EVT_MENU, self.on_about, about_item)
 
@@ -414,20 +413,20 @@ class MainFrame(wx.Frame):
         # 退出
         exit_item = app_menu.Append(
             wx.ID_EXIT, 
-            "退出 Magic Toolbox",
-            "退出应用（快捷键：⌘Q）"  
+            setting._('exit_app'),
+            setting._('exit_app_tips')  
         )
         self.Bind(wx.EVT_MENU, self.on_exit, exit_item)
-        rebootVO = app_menu.Append(wx.NewId(), setting.lang_dict[setting.current_lang]['menu_opt_rebootVO'])
+        rebootVO = app_menu.Append(wx.NewId(), setting._('menu_opt_rebootVO'))
         self.Bind(wx.EVT_MENU, reboot_VoiceOver, rebootVO)
-        rebootProc = app_menu.Append(wx.NewId(), setting.lang_dict[setting.current_lang]['menu_opt_reboot_proc'])
+        rebootProc = app_menu.Append(wx.NewId(), setting._('menu_opt_reboot_proc'))
         self.Bind(wx.EVT_MENU, self.on_reboot_vo_processer, rebootProc)
-        cleanList = app_menu.Append(wx.NewId(), setting.lang_dict[setting.current_lang]['menu_opt_clean_list'])
+        cleanList = app_menu.Append(wx.NewId(), setting._('menu_opt_clean_list'))
         self.Bind(wx.EVT_MENU, self.on_clean_list, cleanList)
 
 
         # 添加到菜单栏
-        menubar.Append(app_menu, setting.lang_dict[setting.current_lang]['menubar_opt'])
+        menubar.Append(app_menu, setting._('menubar_opt'))
 
        # 设置菜单栏到窗口
         self.SetMenuBar(menubar)
@@ -444,9 +443,9 @@ class MainFrame(wx.Frame):
         static_box_sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
 
         self.nav_list = wx.ListBox(self.nav_container_panel, choices=[
-            setting.lang_dict[setting.current_lang]['trans_radio'],  # "翻译 / Translation"
-            setting.lang_dict[setting.current_lang]['clipboard_radio'],   # "剪贴板 / Clipboard"
-            setting.lang_dict[setting.current_lang]['menubar_opt']     # "设置 / Settings"
+            setting._('trans_radio'),  # "翻译 / Translation"
+            setting._('clipboard_radio'),   # "剪贴板 / Clipboard"
+            setting._('menubar_opt')     # "设置 / Settings"
         ])
         self.nav_list.SetMinSize((150, -1)) # 设置最小宽度
         self.nav_list.SetSelection(0)
@@ -514,9 +513,8 @@ class MainFrame(wx.Frame):
     def on_toolbar_source_lang_changed(self, event):
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice:
             display_text = self._toolbar_source_choice.GetStringSelection()
-            current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
             for code in self.lang_codes:
-                if current_lang_dict.get(f'lang_{code}', code) == display_text:
+                if setting.get_lang_display(code) == display_text:
                     self._source_lang = code
                     break
             self.save_config()
@@ -524,9 +522,8 @@ class MainFrame(wx.Frame):
     def on_toolbar_target_lang_changed(self, event):
         if hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             display_text = self._toolbar_target_choice.GetStringSelection()
-            current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
             for code in self.lang_codes:
-                if current_lang_dict.get(f'lang_{code}', code) == display_text:
+                if setting.get_lang_display(code) == display_text:
                     self._target_lang = code
                     break
             self.save_config()
@@ -544,9 +541,8 @@ class MainFrame(wx.Frame):
         self._model_path = config.get('model_path', '')
         
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
-            current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
-            source_display = current_lang_dict.get(f'lang_{self._source_lang}', self._source_lang)
-            target_display = current_lang_dict.get(f'lang_{self._target_lang}', self._target_lang)
+            source_display = setting.get_lang_display(self._source_lang)
+            target_display = setting.get_lang_display(self._target_lang)
             self._toolbar_source_choice.SetStringSelection(source_display)
             self._toolbar_target_choice.SetStringSelection(target_display)
     
@@ -629,13 +625,13 @@ class MainFrame(wx.Frame):
         
         if dialog.ShowModal() == wx.ID_OK:
             model_path = dialog.GetPath()
-            self._model_path = model_path
             self.model_path_text.SetValue(model_path)
-            self.save_config()
             
             if self.translator:
                 success = self.translator.load_model(model_path)
                 if success:
+                    self._model_path = model_path
+                    self.save_config()
                     wx.MessageBox("翻译模型加载成功", "成功", wx.OK | wx.ICON_INFORMATION)
                     self.text_ctrl.SetValue("")
                 else:
@@ -698,23 +694,23 @@ class MainFrame(wx.Frame):
         if module_name == "clipboard":
             self.toolbar.AddTool(
                 self.copy_btn_id,
-                setting.lang_dict[setting.current_lang]['copy_btn'],
+                setting._('copy_btn'),
                 wx.NullBitmap,
-                setting.lang_dict[setting.current_lang]['copy_btn_tips']
+                setting._('copy_btn_tips')
             )
 
             self.toolbar.AddTool(
                 self.edit_btn_id,
-                setting.lang_dict[setting.current_lang]['edit_btn'],
+                setting._('edit_btn'),
                 wx.NullBitmap,
-                setting.lang_dict[setting.current_lang]['edit_btn_tips']
+                setting._('edit_btn_tips')
             )
 
             self.toolbar.AddTool(
                 self.delete_btn_id,
-                setting.lang_dict[setting.current_lang]['delete_btn'],
+                setting._('delete_btn'),
                 wx.NullBitmap,
-                setting.lang_dict[setting.current_lang]['delete_btn_tips']
+                setting._('delete_btn_tips')
             )
 
             self.Bind(wx.EVT_TOOL, self.on_copy_btn, id=self.copy_btn_id)
@@ -731,11 +727,10 @@ class MainFrame(wx.Frame):
             if hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
                 self._toolbar_target_choice.Destroy()
             
-            current_lang_dict = setting.lang_dict.get(setting.current_lang, setting.lang_dict['en'])
-            source_display = current_lang_dict.get(f'lang_{self._source_lang}', self._source_lang)
-            target_display = current_lang_dict.get(f'lang_{self._target_lang}', self._target_lang)
+            source_display = setting.get_lang_display(self._source_lang)
+            target_display = setting.get_lang_display(self._target_lang)
             
-            source_label = wx.StaticText(self.toolbar, label=setting.lang_dict[setting.current_lang]['source_lang'] + ':')
+            source_label = wx.StaticText(self.toolbar, label=setting._('source_lang') + ':')
             self.toolbar.AddControl(source_label)
             
             self._toolbar_source_choice = wx.Choice(self.toolbar, choices=self.trans_source_options)
@@ -743,7 +738,7 @@ class MainFrame(wx.Frame):
             self._toolbar_source_choice.Bind(wx.EVT_CHOICE, self.on_toolbar_source_lang_changed)
             self.toolbar.AddControl(self._toolbar_source_choice)
             
-            target_label = wx.StaticText(self.toolbar, label=setting.lang_dict[setting.current_lang]['target_lang'] + ':')
+            target_label = wx.StaticText(self.toolbar, label=setting._('target_lang') + ':')
             self.toolbar.AddControl(target_label)
             
             self._toolbar_target_choice = wx.Choice(self.toolbar, choices=self.trans_target_options)
@@ -823,7 +818,7 @@ class MainFrame(wx.Frame):
             )
         
         if not self.translator or self.translator.model_available == False:
-            self.text_ctrl.SetValue(setting.lang_dict[setting.current_lang]['model_warning'])
+            self.text_ctrl.SetValue(setting._('model_warning'))
 
 
     def register_hotkeys(self):
@@ -947,7 +942,7 @@ class MainFrame(wx.Frame):
             return
 
         # 确认删除
-        if wx.MessageBox(setting.lang_dict[setting.current_lang]['delete_btn_tips'], setting.lang_dict[setting.current_lang]['confirm_btn'], wx.YES_NO | wx.ICON_WARNING) != wx.YES:
+        if wx.MessageBox(setting._('delete_btn_tips'), setting._('confirm_btn'), wx.YES_NO | wx.ICON_WARNING) != wx.YES:
             return
 
         # 倒序删除
@@ -983,7 +978,7 @@ class MainFrame(wx.Frame):
         init_content = self.clipboard_list_data[idx]
         # 打开编辑窗口
         dialog = EditDialog(
-            self, setting.lang_dict[setting.current_lang]['editor_title'],
+            self, setting._('editor_title'),
             init_content)
         if dialog.ShowModal() == wx.ID_OK:
             new_content = dialog.get_result()
@@ -1097,7 +1092,7 @@ class MainFrame(wx.Frame):
                 result_text = self.translator.translate(vo_text, self._source_lang, self._target_lang)
                 self.vo_handler.speak_text(result_text)
         else:
-            self.text_ctrl.SetValue(setting.lang_dict[setting.current_lang]['vo_warning'])
+            self.text_ctrl.SetValue(setting._('vo_warning'))
 
 
     def on_hotkey_altshiftd(self, event):
@@ -1124,7 +1119,7 @@ class MainFrame(wx.Frame):
                 result_text = self.translator.translate(vo_text, self._target_lang, self._source_lang)
                 self.vo_handler.speak_text(result_text)
         else:
-            self.text_ctrl.SetValue(setting.lang_dict[setting.current_lang]['vo_warning'])
+            self.text_ctrl.SetValue(setting._('vo_warning'))
 
 
     def on_hotkey_altt(self, event):
@@ -1147,7 +1142,7 @@ class MainFrame(wx.Frame):
                 init_content = text_data.GetText()
             clipboard.Close()
 
-        self.edit_dialog = EditDialog(self, setting.lang_dict[setting.current_lang]["editor_title"], 
+        self.edit_dialog = EditDialog(self, setting._("editor_title"), 
             init_content)
         if self.edit_dialog.ShowModal() == wx.ID_OK:
             new_content = self.edit_dialog.get_result()
@@ -1375,10 +1370,10 @@ class MainFrame(wx.Frame):
         total_chars = self.TB._total_chars
         total_lines = len(self.TB.current_text.split('\n'))
         if row_column:
-            row_label = setting.lang_dict[setting.current_lang]['row']
-            col_label = setting.lang_dict[setting.current_lang]['column']
-            total_lines_label = setting.lang_dict[setting.current_lang]['total_lines']
-            total_chars_label = setting.lang_dict[setting.current_lang]['total_chars']
+            row_label = setting._('row')
+            col_label = setting._('column')
+            total_lines_label = setting._('total_lines')
+            total_chars_label = setting._('total_chars')
             print(f'当前语言{setting.current_lang}')
             self.vo_handler.speak_text(
                 f"{row_column[0]} {row_label}; {row_column[1]} {col_label}; {total_lines_label}{total_lines} {row_label}; {total_chars}{total_chars_label}"
@@ -1590,7 +1585,7 @@ def main():
     #设置非后台应用
     if sys.platform == 'darwin':
         app.SetExitOnFrameDelete(True)  # 主窗口关闭时自动退出应用
-    frame = MainFrame(None, setting.lang_dict[setting.current_lang]['app_name'])
+    frame = MainFrame(None, setting._('app_name'))
     app.MainLoop()
     logging.info("应用主循环已结束，进程即将退出")
     sys.exit(0)

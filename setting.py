@@ -1,7 +1,45 @@
+import gettext
 import json
 import logging
 import os
 import plistlib
+
+
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_locale_dir = os.path.join(_current_dir, "locales")
+
+
+def _get_system_locale():
+    """通过读取系统plist文件获取macOS语言设置"""
+    try:
+        plist_path = os.path.expanduser("~/Library/Preferences/.GlobalPreferences.plist")
+        with open(plist_path, 'rb') as f:
+            plist_data = plistlib.load(f)
+        apple_languages = plist_data.get('AppleLanguages', [])
+        if not apple_languages:
+            return 'en'
+        primary_lang = apple_languages[0]
+        if primary_lang.startswith('zh'):
+            return 'zh_CN'
+        else:
+            return 'en'
+    except Exception:
+        return 'en'
+
+
+_locale = _get_system_locale()
+try:
+    _trans = gettext.translation('messages', localedir=_locale_dir, languages=[_locale])
+except FileNotFoundError:
+    _trans = gettext.NullTranslations()
+
+
+def _(s):
+    """翻译函数"""
+    return _trans.gettext(s)
+
+
+current_lang = 'zh' if _locale.startswith('zh') else 'en'
 
 
 #  字符集合
@@ -199,199 +237,53 @@ chars_dict = {
 }
 
 
-# 语言字典
-lang_dict = {
-    'zh': {
-        'app_name': 'Magic Toolbox',
-        'editor_title': '编辑剪贴板内容',
-        'tbr_mode': '模式',
-        'trans_radio': '翻译',
-        'clipboard_radio': '剪贴板',
-        'copy_btn': '拷贝',
-        'copy_btn_tips': '复制到剪贴板',
-        'delete_btn': '删除',
-        'delete_btn_tips': '删除选中项',
-        'edit_btn': '编辑',
-        'edit_btn_tips': '编辑选中项',
-        'confirm_btn': '确定',
-        'cancel_btn': '取消',
-        'vo_warning': '获取VoiceOver朗读内容失败',
-        'model_warning': '翻译模型加载失败,仅保留本地词典功能',
-        'menu_about': '关于 Magic Toolbox',
-        'menubar_opt': '操作',
-        'menu_opt_rebootVO': '重启旁白',
-        'menu_opt_reboot_proc': '重启处理器',
-        'menu_opt_clean_list': '清空剪贴板列表',
-        'about_dialog': ''' ''',
-        'now': '当前',
-        'row': '行',
-        'column': '列',
-        'total_lines': '共',
-        'total_chars': '个字',
-        'edd_more_btn': '更多',
-        'edd_remove_whitespace_btn': '删除所有空白符',
-        'edd_merge_spaces_btn': '合并连续空格',
-        'edd_num_to_chinese_btn': '数字转中文',
-        'edd_punc_to_newline_btn': '分句',
-        'msg_motice': '提示',
-        'msg_is_close': '确定要退出吗？',
-        'trans_lang_box': '翻译语言',
-        'source_lang': '源语言',
-        'target_lang': '目标语言',
-        'lang_English': '英语',
-        'lang_Chinese': '中文',
-        'lang_French': '法语',
-        'lang_Portuguese': '葡萄牙语',
-        'lang_Spanish': '西班牙语',
-        'lang_Japanese': '日语',
-        'lang_Turkish': '土耳其语',
-        'lang_Russian': '俄语',
-        'lang_Arabic': '阿拉伯语',
-        'lang_Korean': '韩语',
-        'lang_Thai': '泰语',
-        'lang_Italian': '意大利语',
-        'lang_German': '德语',
-        'lang_Vietnamese': '越南语',
-        'lang_Malay': '马来语',
-        'lang_Indonesian': '印尼语',
-        'lang_Filipino': '菲律宾语',
-        'lang_Hindi': '印地语',
-        'lang_Traditional Chinese': '繁体中文',
-        'lang_Polish': '波兰语',
-        'lang_Czech': '捷克语',
-        'lang_Dutch': '荷兰语',
-        'lang_Khmer': '高棉语',
-        'lang_Burmese': '缅甸语',
-        'lang_Persian': '波斯语',
-        'lang_Gujarati': '古吉拉特语',
-        'lang_Urdu': '乌尔都语',
-        'lang_Telugu': '泰卢固语',
-        'lang_Marathi': '马拉地语',
-        'lang_Hebrew': '希伯来语',
-        'lang_Bengali': '孟加拉语',
-        'lang_Tamil': '泰米尔语',
-        'lang_Ukrainian': '乌克兰语',
-        'lang_Tibetan': '藏语',
-        'lang_Kazakh': '哈萨克语',
-        'lang_Mongolian': '蒙古语',
-        'lang_Uyghur': '维吾尔语',
-        'lang_Cantonese': '粤语',
-    },
-    'en': {
-'app_name': 'Magic Toolbox',
-        'editor_title': 'Edit clipboard contents',
-        'tbr_mode': 'Mode',
-        'trans_radio': 'Translation',
-        'clipboard_radio': 'Clipboard',
-        'copy_btn': 'Copy',
-        'copy_btn_tips': 'Copy to clipboard',
-        'delete_btn': 'Delete',
-        'delete_btn_tips': 'Delete current item',
-        'edit_btn': 'Edit',
-        'edit_btn_tips': 'Edit current item',
-        'confirm_btn': 'OK',
-        'cancel_btn': 'Cancel',
-        'vo_warning': 'Getting VoiceOver Reading Failed',
-        'model_warning': 'Translation model loading failed, retaining only local dictionary functions',
-        'menu_about': 'About Magic Toolbox',
-        'menubar_opt': 'Operation',
-        'menu_opt_rebootVO': 'Reboot VoiceOver',
-        'menu_opt_reboot_proc': 'Reboot Processer',
-        'menu_opt_clean_list': 'Empty Clipboard List',
-        'now': 'Is',
-        'row': 'Row',
-        'column': 'Column',
-        'total_lines': 'Total',
-        'total_chars': 'Characters',
-        'edd_more_btn': 'More',
-        'edd_remove_whitespace_btn': 'Remove All Whitespace',
-        'edd_merge_spaces_btn': 'Merge Consecutive Spaces',
-        'edd_num_to_chinese_btn': 'Convert Numbers to Chinese',
-        'edd_punc_to_newline_btn': 'Split into Sentences',
-        'msg_motice': 'Notice',
-        'msg_is_close': 'Are you sure you want to quit?',
-        'trans_lang_box': 'Translation Language',
-        'source_lang': 'Source',
-        'target_lang': 'Target',
-        'lang_English': 'English',
-        'lang_Chinese': 'Chinese',
-        'lang_French': 'French',
-        'lang_Portuguese': 'Portuguese',
-        'lang_Spanish': 'Spanish',
-        'lang_Japanese': 'Japanese',
-        'lang_Turkish': 'Turkish',
-        'lang_Russian': 'Russian',
-        'lang_Arabic': 'Arabic',
-        'lang_Korean': 'Korean',
-        'lang_Thai': 'Thai',
-        'lang_Italian': 'Italian',
-        'lang_German': 'German',
-        'lang_Vietnamese': 'Vietnamese',
-        'lang_Malay': 'Malay',
-        'lang_Indonesian': 'Indonesian',
-        'lang_Filipino': 'Filipino',
-        'lang_Hindi': 'Hindi',
-        'lang_Traditional Chinese': 'Traditional Chinese',
-        'lang_Polish': 'Polish',
-        'lang_Czech': 'Czech',
-        'lang_Dutch': 'Dutch',
-        'lang_Khmer': 'Khmer',
-        'lang_Burmese': 'Burmese',
-        'lang_Persian': 'Persian',
-        'lang_Gujarati': 'Gujarati',
-        'lang_Urdu': 'Urdu',
-        'lang_Telugu': 'Telugu',
-        'lang_Marathi': 'Marathi',
-        'lang_Hebrew': 'Hebrew',
-        'lang_Bengali': 'Bengali',
-        'lang_Tamil': 'Tamil',
-        'lang_Ukrainian': 'Ukrainian',
-        'lang_Tibetan': 'Tibetan',
-        'lang_Kazakh': 'Kazakh',
-        'lang_Mongolian': 'Mongolian',
-        'lang_Uyghur': 'Uyghur',
-        'lang_Cantonese': 'Cantonese',
-    }
+lang_code_to_trans = {
+    'English': 'lang_English',
+    'Chinese': 'lang_Chinese',
+    'French': 'lang_French',
+    'Portuguese': 'lang_Portuguese',
+    'Spanish': 'lang_Spanish',
+    'Japanese': 'lang_Japanese',
+    'Turkish': 'lang_Turkish',
+    'Russian': 'lang_Russian',
+    'Arabic': 'lang_Arabic',
+    'Korean': 'lang_Korean',
+    'Thai': 'lang_Thai',
+    'Italian': 'lang_Italian',
+    'German': 'lang_German',
+    'Vietnamese': 'lang_Vietnamese',
+    'Malay': 'lang_Malay',
+    'Indonesian': 'lang_Indonesian',
+    'Filipino': 'lang_Filipino',
+    'Hindi': 'lang_Hindi',
+    'Traditional Chinese': 'lang_Traditional Chinese',
+    'Polish': 'lang_Polish',
+    'Czech': 'lang_Czech',
+    'Dutch': 'lang_Dutch',
+    'Khmer': 'lang_Khmer',
+    'Burmese': 'lang_Burmese',
+    'Persian': 'lang_Persian',
+    'Gujarati': 'lang_Gujarati',
+    'Urdu': 'lang_Urdu',
+    'Telugu': 'lang_Telugu',
+    'Marathi': 'lang_Marathi',
+    'Hebrew': 'lang_Hebrew',
+    'Bengali': 'lang_Bengali',
+    'Tamil': 'lang_Tamil',
+    'Ukrainian': 'lang_Ukrainian',
+    'Tibetan': 'lang_Tibetan',
+    'Kazakh': 'lang_Kazakh',
+    'Mongolian': 'lang_Mongolian',
+    'Uyghur': 'lang_Uyghur',
+    'Cantonese': 'lang_Cantonese',
 }
 
 
-def get_system_language():
-    """通过读取系统plist文件获取macOS语言设置"""
-    try:
-        # macOS语言设置存储路径
-        plist_path = os.path.expanduser("~/Library/Preferences/.GlobalPreferences.plist")
-        
-        # 读取plist文件
-        with open(plist_path, 'rb') as f:
-            plist_data = plistlib.load(f)
-        
-        # 获取首选语言列表
-        apple_languages = plist_data.get('AppleLanguages', [])
-        print(f"首选语言列表: {apple_languages}")
-        
-        if not apple_languages:
-            print("未找到语言设置")
-            return 'en'
-            
-        # 取第一个语言作为首选语言
-        primary_lang = apple_languages[0]
-        print(f"首选语言: {primary_lang}")
-        
-        if primary_lang.startswith('zh'):
-            return 'zh'
-        else:
-            return 'en'
-            
-    except FileNotFoundError:
-        print("未找到语言设置文件")
-        return 'en'
-    except Exception as e:
-        print(f"获取语言失败: {str(e)}")
-        return 'en'
+def get_lang_display(code: str) -> str:
+    """获取语言代码对应的显示名称（通过gettext翻译）"""
+    key = lang_code_to_trans.get(code, code)
+    return _(key)
 
-
-# 全局语言变量
-current_lang = get_system_language()
 
 #快捷键定义
 hotKeys = [
@@ -538,4 +430,3 @@ def save_config(source_lang: str, target_lang: str, model_path: str = ''):
             json.dump(config, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logging.warning(f"保存配置失败: {e}")
-
