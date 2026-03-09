@@ -344,12 +344,8 @@ msgid "browse_btn"
 msgstr "打开..."
 
 #: main_UI.py
-msgid "lock_volume"
-msgstr "锁定旁白音量"
-
-#: main_UI.py
-msgid "on_off"
-msgstr "开/关"
+msgid "clipboard_max_count"
+msgstr "剪贴板最大条数"
 
 #: main_UI.py
 msgid "select_model_file"

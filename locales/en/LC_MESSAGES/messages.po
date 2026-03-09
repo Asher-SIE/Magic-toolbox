@@ -344,12 +344,8 @@ msgid "browse_btn"
 msgstr "Browse..."
 
 #: main_UI.py
-msgid "lock_volume"
-msgstr "Lock VoiceOver Volume"
-
-#: main_UI.py
-msgid "on_off"
-msgstr "On/Off"
+msgid "clipboard_max_count"
+msgstr "Clipboard Max Records"
 
 #: main_UI.py
 msgid "select_model_file"

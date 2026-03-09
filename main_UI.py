@@ -539,16 +539,21 @@ class MainFrame(wx.Frame):
         self._source_lang = config.get('source_lang', 'English')
         self._target_lang = config.get('target_lang', 'Chinese')
         self._model_path = config.get('model_path', '')
+        self._clipboard_max_count = config.get('clipboard_max_count', 1000)
         
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             source_display = setting.get_lang_display(self._source_lang)
             target_display = setting.get_lang_display(self._target_lang)
             self._toolbar_source_choice.SetStringSelection(source_display)
             self._toolbar_target_choice.SetStringSelection(target_display)
+        
+        if hasattr(self, 'clipboard_count_input') and self.clipboard_count_input:
+            self.clipboard_count_input.SetValue(str(self._clipboard_max_count))
     
     def save_config(self):
         model_path = getattr(self, '_model_path', '') or ''
-        setting.save_config(self._source_lang, self._target_lang, model_path)
+        clipboard_max_count = getattr(self, '_clipboard_max_count', 1000)
+        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count)
 
 
     def setup_clipboard_panel(self):
@@ -587,27 +592,17 @@ class MainFrame(wx.Frame):
 
         main_sizer.Add(browse_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
-        # --- 2. 锁定旁白音量分组 ---
-        lock_volume_static_box = wx.StaticBox(self.settings_panel, label=setting._("lock_volume"))
-        lock_volume_sizer = wx.StaticBoxSizer(lock_volume_static_box, wx.VERTICAL)
+        # --- 2. 剪贴板最大条数分组 ---
+        clipboard_count_static_box = wx.StaticBox(self.settings_panel, label=setting._("clipboard_max_count"))
+        clipboard_count_sizer = wx.StaticBoxSizer(clipboard_count_static_box, wx.VERTICAL)
 
-        # 为了在分组内水平排列编辑框和复选框
-        inner_h_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.clipboard_count_input = wx.TextCtrl(self.settings_panel, value=str(getattr(self, '_clipboard_max_count', 1000)), style=wx.TE_RIGHT)
+        self.clipboard_count_input.Bind(wx.EVT_TEXT, self.on_clipboard_count_text_change)
+        self.clipboard_count_input.Bind(wx.EVT_KILL_FOCUS, self.on_clipboard_count_focus_lost)
 
-        # 创建编辑框和复选框
-        volume_input = wx.TextCtrl(self.settings_panel, value="", style=wx.TE_RIGHT)
-        volume_input.Bind(wx.EVT_TEXT, lambda evt: self.on_volume_text_change(evt, volume_input))
-        toggle_lock_checkbox = wx.CheckBox(self.settings_panel, label=setting._("on_off"))
+        clipboard_count_sizer.Add(self.clipboard_count_input, 0, wx.EXPAND | wx.ALL, 5)
 
-        # 将编辑框和复选框添加到内部的水平 sizer
-        inner_h_sizer.Add(volume_input, 1, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5) # 给复选框留点空间
-        inner_h_sizer.Add(toggle_lock_checkbox, 0, wx.ALIGN_CENTER_VERTICAL)
-
-        # 将内部的水平 sizer 整体添加到分组的 sizer
-        lock_volume_sizer.Add(inner_h_sizer, 0, wx.EXPAND | wx.ALL, 5)
-
-        # 将整个分组 sizer 添加到主 sizer
-        main_sizer.Add(lock_volume_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(clipboard_count_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
 
         self.settings_panel.SetSizer(main_sizer)
@@ -891,13 +886,19 @@ class MainFrame(wx.Frame):
         if not content:  # 空内容不处理
             return
         
-        #  倒序删除
+        max_count = getattr(self, '_clipboard_max_count', 1000)
+        
+        #  倒序删除重复项
         indices_to_remove = [i for i, item in enumerate(self.clipboard_list_data) if item == content]
         for i in reversed(indices_to_remove):
             del self.clipboard_list_data[i]
         
         #  插入到开头
         self.clipboard_list_data.insert(0, content)
+        
+        #  超过最大数量时删除最旧的记录
+        if len(self.clipboard_list_data) > max_count:
+            self.clipboard_list_data = self.clipboard_list_data[:max_count]
         
         #  刷新UI
         if self.current_module == "clipboard":
@@ -1512,36 +1513,34 @@ class MainFrame(wx.Frame):
         self.save_clipboard_data()
 
 
-    def on_volume_text_change(self, event, text_ctrl):
-        """
-        只允许输入数字和小数
-        """
-        current_value = text_ctrl.GetValue()
-        # 允许的字符：数字和小数点
-        allowed_chars = set("0123456789.")
+    def on_clipboard_count_text_change(self, event):
+        """处理剪贴板记录数量文本输入，只允许数字"""
+        current_value = self.clipboard_count_input.GetValue()
         new_value = ""
-        decimal_point_count = 0
-
-        # 遍历当前文本
         for char in current_value:
-            if len(new_value) >= 4:
-                break
-            if char in allowed_chars:
-                # 检查小数点的数量
-                if char == '.':
-                    if decimal_point_count >= 1:
-                        # 如果已经有小数点了，就跳过当前的小数点
-                        continue
-                    else:
-                        decimal_point_count += 1
+            if char.isdigit():
                 new_value += char
-
-        # 如果过滤后的文本与原文本不同，则更新控件内容
         if new_value != current_value:
-            text_ctrl.ChangeValue(new_value)
-            # 光标移到末尾
-            text_ctrl.SetInsertionPointEnd()
+            self.clipboard_count_input.ChangeValue(new_value)
+        if new_value and int(new_value) > 2000:
+            self.clipboard_count_input.SetValue("2000")
+        event.Skip()
 
+    def on_clipboard_count_focus_lost(self, event):
+        """处理剪贴板记录数量编辑框失去焦点"""
+        current_value = self.clipboard_count_input.GetValue()
+        if not current_value:
+            value = 1000
+        else:
+            value = int(current_value)
+            if value > 2000:
+                value = 2000
+                self.clipboard_count_input.SetValue("2000")
+            elif value < 0:
+                value = 0
+                self.clipboard_count_input.SetValue("0")
+        self._clipboard_max_count = value
+        self.save_config()
         event.Skip()
 
 

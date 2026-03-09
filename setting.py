@@ -406,7 +406,8 @@ def load_config():
     config = {
         'source_lang': 'English',
         'target_lang': 'Chinese',
-        'model_path': ''
+        'model_path': '',
+        'clipboard_max_count': 1000
     }
     try:
         if os.path.exists(config_path):
@@ -418,13 +419,14 @@ def load_config():
     return config
 
 
-def save_config(source_lang: str, target_lang: str, model_path: str = ''):
+def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000):
     """保存配置"""
     try:
         config = {
             'source_lang': source_lang,
             'target_lang': target_lang,
-            'model_path': model_path
+            'model_path': model_path,
+            'clipboard_max_count': clipboard_max_count
         }
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
