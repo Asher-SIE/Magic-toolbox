@@ -68,6 +68,10 @@ msgid "cancel_btn"
 msgstr "Cancel"
 
 #: main_UI.py
+msgid "close_btn"
+msgstr "Close"
+
+#: main_UI.py
 msgid "vo_warning"
 msgstr "Getting VoiceOver Reading Failed"
 
@@ -134,6 +138,62 @@ msgstr "Convert Numbers to Chinese"
 #: main_UI.py
 msgid "edd_punc_to_newline_btn"
 msgstr "Split into Sentences"
+
+#: main_UI.py
+msgid "edd_find_btn"
+msgstr "Find"
+
+#: main_UI.py
+msgid "edd_replace_btn"
+msgstr "Replace"
+
+#: main_UI.py
+msgid "edd_find_replace_title"
+msgstr "Find/Replace"
+
+#: main_UI.py
+msgid "edd_find_next"
+msgstr "Find Next"
+
+#: main_UI.py
+msgid "edd_find_prev"
+msgstr "Find Previous"
+
+#: main_UI.py
+msgid "edd_replace_one"
+msgstr "Replace"
+
+#: main_UI.py
+msgid "edd_replace_all"
+msgstr "Replace All"
+
+#: main_UI.py
+msgid "edd_use_regex"
+msgstr "Regex"
+
+#: main_UI.py
+msgid "edd_case_sensitive"
+msgstr "Case Sensitive"
+
+#: main_UI.py
+msgid "edd_escape"
+msgstr "Escape"
+
+#: main_UI.py
+msgid "edd_replaced_count"
+msgstr "Replaced %d occurrences"
+
+#: main_UI.py
+msgid "edd_find_label"
+msgstr "Find:"
+
+#: main_UI.py
+msgid "edd_replace_label"
+msgstr "Replace with:"
+
+#: main_UI.py
+msgid "edd_not_found"
+msgstr "Not found"
 
 #: main_UI.py
 msgid "msg_motice"

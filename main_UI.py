@@ -3,6 +3,7 @@ import logging
 import objc
 import os
 import pickle
+import re
 import setting
 import subprocess
 import sys
@@ -15,6 +16,197 @@ from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOve
 from typing import Optional, Tuple
 
 VERSION_INFO = f'V1.1.0\nBuild: 260313'
+
+
+class FindReplaceDialog(wx.Dialog):
+    def __init__(self, parent, text_ctrl, show_replace=False):
+        super().__init__(parent, title=setting._('edd_find_replace_title'), size=(420, 220))
+        self.text_ctrl = text_ctrl
+        self.parent = parent
+        self.last_find_pos = 0
+        
+        panel = wx.Panel(self)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        find_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        find_sizer.Add(wx.StaticText(panel, label=setting._('edd_find_label')), 0, wx.CENTER | wx.RIGHT, 5)
+        self.find_input = wx.TextCtrl(panel, size=(250, -1))
+        find_sizer.Add(self.find_input, 1, wx.RIGHT, 10)
+        
+        self.find_next_btn = wx.Button(panel, label=setting._('edd_find_next'))
+        self.find_prev_btn = wx.Button(panel, label=setting._('edd_find_prev'))
+        self.close_btn = wx.Button(panel, label=setting._('close_btn'))
+        find_sizer.Add(self.find_next_btn)
+        find_sizer.Add(self.find_prev_btn, 0, wx.LEFT, 5)
+        find_sizer.Add(self.close_btn, 0, wx.LEFT, 10)
+        
+        sizer.Add(find_sizer, 0, wx.EXPAND | wx.ALL, 10)
+        
+        self.replace_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.replace_sizer.Add(wx.StaticText(panel, label=setting._('edd_replace_label')), 0, wx.CENTER | wx.RIGHT, 5)
+        self.replace_input = wx.TextCtrl(panel, size=(250, -1))
+        self.replace_sizer.Add(self.replace_input, 1, wx.RIGHT, 10)
+        
+        self.replace_one_btn = wx.Button(panel, label=setting._('edd_replace_one'))
+        self.replace_all_btn = wx.Button(panel, label=setting._('edd_replace_all'))
+        self.replace_sizer.Add(self.replace_one_btn)
+        self.replace_sizer.Add(self.replace_all_btn, 0, wx.LEFT, 5)
+        
+        sizer.Add(self.replace_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+        
+        option_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.regex_check = wx.CheckBox(panel, label=setting._('edd_use_regex'))
+        self.case_check = wx.CheckBox(panel, label=setting._('edd_case_sensitive'))
+        self.escape_check = wx.CheckBox(panel, label=setting._('edd_escape'))
+        option_sizer.Add(self.regex_check, 0, wx.RIGHT, 10)
+        option_sizer.Add(self.case_check, 0, wx.RIGHT, 10)
+        option_sizer.Add(self.escape_check)
+        
+        sizer.Add(option_sizer, 0, wx.LEFT | wx.BOTTOM, 10)
+        
+        self.status_text = wx.StaticText(panel, label="")
+        sizer.Add(self.status_text, 0, wx.LEFT | wx.BOTTOM, 10)
+        
+        panel.SetSizer(sizer)
+        
+        self.find_next_btn.Bind(wx.EVT_BUTTON, self.on_find_next)
+        self.find_prev_btn.Bind(wx.EVT_BUTTON, self.on_find_prev)
+        self.close_btn.Bind(wx.EVT_BUTTON, self.on_close)
+        self.replace_one_btn.Bind(wx.EVT_BUTTON, self.on_replace_one)
+        self.replace_all_btn.Bind(wx.EVT_BUTTON, self.on_replace_all)
+        
+        if not show_replace:
+            self.replace_sizer.ShowItems(False)
+        
+        self.Centre()
+    
+    def show_replace_panel(self, show=True):
+        self.replace_sizer.ShowItems(show)
+        self.GetSizer().Fit(self)
+    
+    def _get_pattern(self, search_text):
+        use_regex = self.regex_check.GetValue()
+        case_sensitive = self.case_check.GetValue()
+        use_escape = self.escape_check.GetValue()
+        
+        if not search_text:
+            return None, 0
+        
+        flags = 0 if case_sensitive else re.IGNORECASE
+        
+        if use_regex:
+            try:
+                pattern = re.compile(search_text, flags)
+            except re.error:
+                return None, 0
+        else:
+            if use_escape:
+                escaped = re.escape(search_text)
+            else:
+                escaped = re.escape(search_text)
+            pattern = re.compile(escaped, flags)
+        
+        return pattern, 1 if use_regex else 0
+    
+    def _find(self, direction='next'):
+        search_text = self.find_input.GetValue()
+        if not search_text:
+            return False
+        
+        pattern, pattern_type = self._get_pattern(search_text)
+        if not pattern:
+            return False
+        
+        full_text = self.text_ctrl.GetValue()
+        text_len = len(full_text)
+        
+        if direction == 'next':
+            start_pos = self.last_find_pos if self.last_find_pos < text_len else 0
+            match = pattern.search(full_text, start_pos)
+            if not match:
+                match = pattern.search(full_text, 0)
+        else:
+            start_pos = self.last_find_pos - 1 if self.last_find_pos > 0 else text_len - 1
+            matches = list(pattern.finditer(full_text))
+            if not matches:
+                self.status_text.SetLabel(setting._('edd_not_found'))
+                return False
+            match = None
+            for m in matches:
+                if m.start() < start_pos:
+                    match = m
+            if match is None:
+                match = matches[-1]
+        
+        if match:
+            start, end = match.span()
+            self.text_ctrl.SetSelection(start, end)
+            self.text_ctrl.SetInsertionPoint(end)
+            self.last_find_pos = end if direction == 'next' else start
+            self.status_text.SetLabel("")
+            return True
+        else:
+            self.status_text.SetLabel(setting._('edd_not_found'))
+            return False
+    
+    def on_find_next(self, event):
+        if self._find('next'):
+            self.EndModal(wx.ID_OK)
+    
+    def on_find_prev(self, event):
+        if self._find('prev'):
+            self.EndModal(wx.ID_OK)
+    
+    def on_close(self, event):
+        self.EndModal(wx.ID_CANCEL)
+    
+    def on_replace_one(self, event):
+        search_text = self.find_input.GetValue()
+        replace_text = self.replace_input.GetValue()
+        
+        if not search_text:
+            return
+        
+        pattern, pattern_type = self._get_pattern(search_text)
+        if not pattern:
+            return
+        
+        full_text = self.text_ctrl.GetValue()
+        
+        match = pattern.search(full_text, self.last_find_pos)
+        if not match:
+            match = pattern.search(full_text, 0)
+        
+        if match:
+            start, end = match.span()
+            new_text = full_text[:start] + replace_text + full_text[end:]
+            self.text_ctrl.SetValue(new_text)
+            new_cursor = start + len(replace_text)
+            self.text_ctrl.SetSelection(new_cursor, new_cursor)
+            self.text_ctrl.SetInsertionPoint(new_cursor)
+            self.last_find_pos = new_cursor
+            self.status_text.SetLabel(setting._('edd_replaced_count') % 1)
+        else:
+            self.status_text.SetLabel(setting._('edd_not_found'))
+    
+    def on_replace_all(self, event):
+        search_text = self.find_input.GetValue()
+        replace_text = self.replace_input.GetValue()
+        
+        if not search_text:
+            return
+        
+        pattern, pattern_type = self._get_pattern(search_text)
+        if not pattern:
+            return
+        
+        full_text = self.text_ctrl.GetValue()
+        
+        new_text, count = pattern.subn(replace_text, full_text)
+        
+        self.text_ctrl.SetValue(new_text)
+        self.last_find_pos = 0
+        self.status_text.SetLabel(setting._('edd_replaced_count') % count)
 
 
 # 剪贴板编辑对话框
@@ -49,6 +241,16 @@ class EditDialog(wx.Dialog):
 
         # 按钮区
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.find_btn = wx.Button(
+            panel,
+            label=setting._('edd_find_btn'),
+            style=wx.BU_EXACTFIT
+        )
+        self.replace_btn = wx.Button(
+            panel,
+            label=setting._('edd_replace_btn'),
+            style=wx.BU_EXACTFIT
+        )
         self.more_btn = wx.Button(
             panel,
             label=setting._('edd_more_btn'),
@@ -57,6 +259,8 @@ class EditDialog(wx.Dialog):
         self.ok_btn = wx.Button(panel, label=setting._('confirm_btn'))
         self.cancel_btn = wx.Button(panel, label=setting._('cancel_btn'))
 
+        self.find_btn.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        self.replace_btn.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
         self.more_btn.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
 
         # 弹出菜单
@@ -79,6 +283,8 @@ class EditDialog(wx.Dialog):
         )
 
         # 按钮布局
+        btn_sizer.Add(self.find_btn, 0, wx.RIGHT, 10)
+        btn_sizer.Add(self.replace_btn, 0, wx.RIGHT, 10)
         btn_sizer.Add(self.more_btn, 0, wx.RIGHT, 10)
         btn_sizer.Add(self.ok_btn, 0, wx.RIGHT, 10)
         btn_sizer.Add(self.cancel_btn, 0)
@@ -90,6 +296,8 @@ class EditDialog(wx.Dialog):
         # 事件绑定
         self.ok_btn.Bind(wx.EVT_BUTTON, self.on_ok)
         self.cancel_btn.Bind(wx.EVT_BUTTON, self.on_cancel)
+        self.find_btn.Bind(wx.EVT_BUTTON, self.on_find_click)
+        self.replace_btn.Bind(wx.EVT_BUTTON, self.on_replace_click)
         self.text_ctrl.Bind(wx.EVT_TEXT, self.on_text_changed)
         self.text_ctrl.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
 
@@ -171,6 +379,12 @@ class EditDialog(wx.Dialog):
                 event.Skip(False)
             elif key_code in (ord('X'), ord('x')):
                 self.on_ok(None)
+                event.Skip(False)
+            elif key_code in (ord('F'), ord('f')):
+                self.on_find_click(None)
+                event.Skip(False)
+            elif key_code in (ord('H'), ord('h')):
+                self.on_replace_click(None)
                 event.Skip(False)
             else:
                 event.Skip(True)  # 放行未处理的 ALT+按键（如 Option+Arrow）
@@ -263,6 +477,31 @@ class EditDialog(wx.Dialog):
     def get_result(self) -> str:
         """获取编辑结果"""
         return self.edit_content
+
+
+    def on_find_click(self, event):
+        """点击查找按钮"""
+        if not hasattr(self, 'find_replace_dialog') or self.find_replace_dialog is None:
+            self.find_replace_dialog = FindReplaceDialog(self, self.text_ctrl)
+            self.find_replace_dialog.ShowModal()
+            self.find_replace_dialog = None
+        else:
+            self.find_replace_dialog.find_input.SetFocus()
+            self.find_replace_dialog.ShowModal()
+            self.find_replace_dialog = None
+
+
+    def on_replace_click(self, event):
+        """点击替换按钮"""
+        if not hasattr(self, 'find_replace_dialog') or self.find_replace_dialog is None:
+            self.find_replace_dialog = FindReplaceDialog(self, self.text_ctrl, show_replace=True)
+            self.find_replace_dialog.ShowModal()
+            self.find_replace_dialog = None
+        else:
+            self.find_replace_dialog.show_replace_panel(True)
+            self.find_replace_dialog.replace_input.SetFocus()
+            self.find_replace_dialog.ShowModal()
+            self.find_replace_dialog = None
 
 
     def on_more_btn_click(self, event):

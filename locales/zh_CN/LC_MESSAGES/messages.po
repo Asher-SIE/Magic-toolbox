@@ -68,6 +68,10 @@ msgid "cancel_btn"
 msgstr "取消"
 
 #: main_UI.py
+msgid "close_btn"
+msgstr "关闭"
+
+#: main_UI.py
 msgid "vo_warning"
 msgstr "获取VoiceOver朗读内容失败"
 
@@ -134,6 +138,62 @@ msgstr "数字转中文"
 #: main_UI.py
 msgid "edd_punc_to_newline_btn"
 msgstr "分句"
+
+#: main_UI.py
+msgid "edd_find_btn"
+msgstr "查找"
+
+#: main_UI.py
+msgid "edd_replace_btn"
+msgstr "替换"
+
+#: main_UI.py
+msgid "edd_find_replace_title"
+msgstr "查找/替换"
+
+#: main_UI.py
+msgid "edd_find_next"
+msgstr "查找下一个"
+
+#: main_UI.py
+msgid "edd_find_prev"
+msgstr "查找上一个"
+
+#: main_UI.py
+msgid "edd_replace_one"
+msgstr "替换"
+
+#: main_UI.py
+msgid "edd_replace_all"
+msgstr "替换全部"
+
+#: main_UI.py
+msgid "edd_use_regex"
+msgstr "正则表达式"
+
+#: main_UI.py
+msgid "edd_case_sensitive"
+msgstr "区分大小写"
+
+#: main_UI.py
+msgid "edd_escape"
+msgstr "转义符"
+
+#: main_UI.py
+msgid "edd_replaced_count"
+msgstr "已替换 %d 处"
+
+#: main_UI.py
+msgid "edd_find_label"
+msgstr "查找:"
+
+#: main_UI.py
+msgid "edd_replace_label"
+msgstr "替换为:"
+
+#: main_UI.py
+msgid "edd_not_found"
+msgstr "未找到"
 
 #: main_UI.py
 msgid "msg_motice"
