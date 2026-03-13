@@ -106,9 +106,7 @@ class EditDialog(wx.Dialog):
 
         # 将初始状态存入撤销栈（仅初始时执行一次）
         self.save_state_to_undo()
-        # 强制获取焦点
-        self.get_textCtrl_focus()
-
+        
 
     def save_state_to_undo(self):
         """保存当前文本状态到撤销栈（去重+限制栈大小）"""
@@ -172,6 +170,8 @@ class EditDialog(wx.Dialog):
             elif key_code in (ord('X'), ord('x')):
                 self.on_ok(None)
                 event.Skip(False)
+            else:
+                event.Skip(True)  # 放行未处理的 ALT+按键（如 Option+Arrow）
         elif key_code == wx.WXK_ESCAPE:
             self.on_cancel(None)
             event.Skip(False)
@@ -261,19 +261,6 @@ class EditDialog(wx.Dialog):
     def get_result(self) -> str:
         """获取编辑结果"""
         return self.edit_content
-
-    def get_textCtrl_focus(self):
-        """macOS专用：强制激活应用并给输入框设置焦点（解决焦点丢失问题）"""
-        try:
-            app = NSApp()
-            app.activateIgnoringOtherApps_(True)  # 激活当前应用
-            ns_window = self.GetHandle()
-            if ns_window:
-                ns_window.makeKeyAndOrderFront_(None)  # 置顶窗口
-            self.text_ctrl.SetFocus()
-            self.text_ctrl.SetInsertionPointEnd()  # 光标定位到末尾
-        except Exception as e:
-            logging.error(f"EditDialog: macOS 强制焦点失败: {str(e)}")
 
 
     def on_more_btn_click(self, event):
