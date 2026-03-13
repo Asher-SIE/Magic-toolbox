@@ -422,3 +422,7 @@ msgstr "Current clipboard has {current} records, which exceeds the new limit of 
 #: main_UI.py
 msgid "clipboard_max_count_confirm"
 msgstr "Confirm"
+
+#: main_UI.py
+msgid "clipboard_search_placeholder"
+msgstr "Search..."

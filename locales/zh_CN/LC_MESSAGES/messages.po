@@ -422,3 +422,7 @@ msgstr "当前剪贴板有 {current} 条记录，已超过新设定的最大值 
 #: main_UI.py
 msgid "clipboard_max_count_confirm"
 msgstr "确认"
+
+#: main_UI.py
+msgid "clipboard_search_placeholder"
+msgstr "搜索..."

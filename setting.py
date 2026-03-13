@@ -432,3 +432,47 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
             json.dump(config, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logging.warning(f"保存配置失败: {e}")
+
+
+def _get_clipboard_data_path():
+    """获取剪贴板数据文件路径"""
+    app_data_dir = os.path.expanduser("~/Library/Application Support/MagicToolbox")
+    os.makedirs(app_data_dir, exist_ok=True)
+    return os.path.join(app_data_dir, ".clipboard_data")
+
+
+def load_clipboard_data(max_count: int = 1000):
+    """加载剪贴板数据"""
+    import pickle
+    data_path = _get_clipboard_data_path()
+    try:
+        if os.path.exists(data_path):
+            with open(data_path, "rb") as f:
+                data = pickle.load(f)
+            if len(data) > max_count:
+                data = data[:max_count]
+            logging.info(f"加载剪贴板数据成功，共 {len(data)} 条")
+            return data
+    except Exception as e:
+        logging.warning(f"加载剪贴板数据失败: {e}")
+    return []
+
+
+def save_clipboard_data(data):
+    """保存剪贴板数据"""
+    import pickle
+    data_path = _get_clipboard_data_path()
+    try:
+        with open(data_path, "wb") as f:
+            pickle.dump(data, f)
+        logging.debug(f"保存剪贴板数据成功（{len(data)} 条）")
+    except Exception as e:
+        logging.error(f"保存剪贴板数据失败: {e}")
+
+
+def filter_clipboard_records(records: list, keyword: str) -> list:
+    """筛选剪贴板记录，返回包含关键词的记录"""
+    if not keyword:
+        return records
+    keyword_lower = keyword.lower()
+    return [r for r in records if keyword_lower in r.lower()]

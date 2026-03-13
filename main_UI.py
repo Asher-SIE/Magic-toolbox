@@ -14,7 +14,7 @@ from AppKit import NSApplication, NSApp, NSWindow
 from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler
 from typing import Optional, Tuple
 
-VERSION_INFO = f'V1.0.3\nBuild: 251230'
+VERSION_INFO = f'V1.1.0\nBuild: 260313'
 
 
 # 剪贴板编辑对话框
@@ -320,11 +320,8 @@ class MainFrame(wx.Frame):
         self.clipboard_list_data = []  # 剪贴板列表
         self.current_clipboard_idx = -1
         self.current_module = "translation"
-        # 外部剪贴板数据
-        app_support_dir = os.path.expanduser("~/Library/Application Support/")
-        self.app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
-        os.makedirs(self.app_data_dir, exist_ok=True)
-        self._clipboard_data_path = os.path.join(self.app_data_dir, ".clipboard_data")
+        self._clipboard_filter_keyword = ""  # 搜索关键词
+        self._clipboard_filtered_data = None  # 筛选后的数据
         
         self.edit_dialog = None
         
@@ -709,6 +706,15 @@ class MainFrame(wx.Frame):
                 setting._('delete_btn_tips')
             )
 
+            self.toolbar.AddSeparator()
+
+            if hasattr(self, '_clipboard_search_input') and self._clipboard_search_input:
+                self._clipboard_search_input.Destroy()
+            self._clipboard_search_input = wx.TextCtrl(self.toolbar, value=self._clipboard_filter_keyword, style=wx.TE_PROCESS_ENTER, size=(150, -1))
+            self._clipboard_search_input.Bind(wx.EVT_TEXT, self.on_clipboard_search_text_changed)
+            self._clipboard_search_input.Bind(wx.EVT_TEXT_ENTER, self.on_clipboard_search_enter)
+            self.toolbar.AddControl(self._clipboard_search_input)
+
             self.Bind(wx.EVT_TOOL, self.on_copy_btn, id=self.copy_btn_id)
             self.Bind(wx.EVT_TOOL, self.on_edit_btn, id=self.edit_btn_id)
             self.Bind(wx.EVT_TOOL, self.on_delete_btn, id=self.delete_btn_id)
@@ -776,6 +782,11 @@ class MainFrame(wx.Frame):
         elif module_name == "settings":
             self.settings_panel.Show()
         
+        # 切换到其他模块时清空搜索
+        if module_name != "clipboard":
+            self._clipboard_filter_keyword = ""
+            self._clipboard_filtered_data = None
+        
         # 更新状态与工具栏
         self.current_module = module_name
         self.update_toolbar_for_module(module_name)
@@ -784,17 +795,10 @@ class MainFrame(wx.Frame):
 
     def load_clipboard_data(self):
         """加载外部剪贴板列表"""
-        try:
-            if os.path.exists(self._clipboard_data_path):
-                with open(self._clipboard_data_path, "rb") as f:  # 二进制读取
-                    self.clipboard_list_data = pickle.load(f)  # 列表对象
-                max_count = getattr(self, '_clipboard_max_count', 1000)
-                if len(self.clipboard_list_data) > max_count:
-                    self.clipboard_list_data = self.clipboard_list_data[:max_count]
-                self.refresh_list_box()
-                logging.info(f"加载剪贴板数据成功，共 {len(self.clipboard_list_data)} 条")
-        except Exception as e:
-            logging.warning(f"加载剪贴板数据失败（首次运行或文件损坏）: {str(e)}")
+        max_count = getattr(self, '_clipboard_max_count', 1000)
+        self.clipboard_list_data = setting.load_clipboard_data(max_count)
+        self._apply_clipboard_filter()
+        self.refresh_list_box()
 
 
     def init_translator(self):
@@ -863,13 +867,25 @@ class MainFrame(wx.Frame):
 
     def refresh_list_box(self):
         """刷新列表数据：仅加载原始文本，原生复选框自动显示勾选状态"""
+        display_data = self._clipboard_filtered_data if self._clipboard_filtered_data is not None else self.clipboard_list_data
         self.list_Box.Clear()
-        for item in self.clipboard_list_data:
+        for item in display_data:
             if len(item) > 100:
                 display_text = f"{item[:100]} ~~"
             else:
                 display_text = item
             self.list_Box.Append(display_text)
+
+    def _apply_clipboard_filter(self):
+        """应用搜索筛选"""
+        self._clipboard_filtered_data = setting.filter_clipboard_records(
+            self.clipboard_list_data, 
+            self._clipboard_filter_keyword
+        )
+
+    def _get_display_data(self):
+        """获取当前显示的数据（筛选数据或原始数据）"""
+        return self._clipboard_filtered_data if self._clipboard_filtered_data is not None else self.clipboard_list_data
 
 
     def update_clipboard_buttons_state(self):
@@ -904,6 +920,8 @@ class MainFrame(wx.Frame):
         if len(self.clipboard_list_data) > max_count:
             self.clipboard_list_data = self.clipboard_list_data[:max_count]
         
+        self._apply_clipboard_filter()
+        
         #  刷新UI
         if self.current_module == "clipboard":
             self.refresh_list_box()
@@ -921,8 +939,11 @@ class MainFrame(wx.Frame):
         if not checked_indices:
             return
         
+        # 获取显示数据
+        display_data = self._get_display_data()
+        
         # 拼接
-        content_list = [self.clipboard_list_data[idx] for idx in checked_indices]
+        content_list = [display_data[idx] for idx in checked_indices]
         content = "\n".join(content_list)
         
         # 复制到系统剪贴板
@@ -931,11 +952,17 @@ class MainFrame(wx.Frame):
         clipboard.SetData(wx.TextDataObject(content))
         clipboard.Close()
 
-        # 仅单选时删除原项
+        # 仅单选时删除原项（从原始数据中删除匹配项）
         if len(checked_indices) == 1:
             idx = checked_indices[0]
-            if idx > 0:
-                del self.clipboard_list_data[idx]
+            if 0 <= idx < len(display_data):
+                content_to_delete = display_data[idx]
+                # 在原始数据中找到并删除
+                for i, item in enumerate(self.clipboard_list_data):
+                    if item == content_to_delete:
+                        del self.clipboard_list_data[i]
+                        break
+                self._apply_clipboard_filter()
                 self.refresh_list_box()
 
 
@@ -950,20 +977,31 @@ class MainFrame(wx.Frame):
         if wx.MessageBox(setting._('delete_btn_tips'), setting._('confirm_btn'), wx.YES_NO | wx.ICON_WARNING) != wx.YES:
             return
 
-        # 倒序删除
-        sorted_indices = sorted(checked_indices, reverse=True)
-        for idx in sorted_indices:
-            if 0 <= idx < len(self.clipboard_list_data):
-                del self.clipboard_list_data[idx]
+        # 获取显示数据
+        display_data = self._get_display_data()
+        
+        # 收集要删除的内容
+        contents_to_delete = [display_data[idx] for idx in sorted(checked_indices) if 0 <= idx < len(display_data)]
+        
+        # 从原始数据中删除匹配项
+        for content in contents_to_delete:
+            for i, item in enumerate(self.clipboard_list_data):
+                if item == content:
+                    del self.clipboard_list_data[i]
+                    break
 
+        # 重新应用筛选
+        self._apply_clipboard_filter()
+        
         # 刷新
         self.refresh_list_box()
         self.update_clipboard_buttons_state()
         # 同步系统剪贴板
-        clipboard = wx.Clipboard()
-        clipboard.Open()
-        clipboard.SetData(wx.TextDataObject(self.clipboard_list_data[0]))
-        clipboard.Close()
+        if self.clipboard_list_data:
+            clipboard = wx.Clipboard()
+            clipboard.Open()
+            clipboard.SetData(wx.TextDataObject(self.clipboard_list_data[0]))
+            clipboard.Close()
         self.save_clipboard_data()
 
 
@@ -979,35 +1017,43 @@ class MainFrame(wx.Frame):
             wx.MessageBox(setting._("edit_single_item_tips"), setting._("notice"), wx.OK | wx.ICON_INFORMATION)
             return
 
+        # 获取显示数据
+        display_data = self._get_display_data()
+        
         idx = checked_indices[0]
-        init_content = self.clipboard_list_data[idx]
+        if idx >= len(display_data):
+            return
+            
+        init_content = display_data[idx]
+        
         # 打开编辑窗口
         dialog = EditDialog(
             self, setting._('editor_title'),
             init_content)
         if dialog.ShowModal() == wx.ID_OK:
             new_content = dialog.get_result()
-            list_len = len(self.clipboard_list_data)  # 记录当前列表长度
-            if not new_content:
-                del self.clipboard_list_data[idx]
-                # 刷新
-                self.refresh_list_box()
-                if list_len > 1:
-                    new_idx = idx - 1 if idx == list_len - 1 else idx
-                    # 取消所有勾选，选中新项
-                    self.list_Box.UncheckAll()
-                    if new_idx >= 0:
-                        self.list_Box.SetSelection(new_idx)
-                else:
-                    new_idx = -1
-            else:
-                self.clipboard_list_data[idx] = new_content
-                new_idx = idx  # 选中当前项
+            
+            # 在原始数据中找到并更新
+            for i, item in enumerate(self.clipboard_list_data):
+                if item == init_content:
+                    if not new_content:
+                        del self.clipboard_list_data[i]
+                    else:
+                        self.clipboard_list_data[i] = new_content
+                    break
+            
+            # 重新应用筛选
+            self._apply_clipboard_filter()
+            
+            # 刷新
             self.refresh_list_box()
-            if self.clipboard_list_data and new_idx != -1:
-                self.list_Box.SetSelection(new_idx)  # 确保选中有效项
-                self.list_Box.Check(new_idx, True)  # 勾选新项
-                self.on_copy_btn(event)
+            self.update_clipboard_buttons_state()
+            # 同步系统剪贴板
+            if self.clipboard_list_data:
+                clipboard = wx.Clipboard()
+                clipboard.Open()
+                clipboard.SetData(wx.TextDataObject(self.clipboard_list_data[0]))
+                clipboard.Close()
 
         dialog.Destroy()
         self.save_clipboard_data()
@@ -1042,8 +1088,9 @@ class MainFrame(wx.Frame):
         self.current_clipboard_idx = selected_idx  # 同步索引
         
         #  加载文本到TextBrowser
-        if selected_idx != -1 and 0 <= selected_idx < len(self.clipboard_list_data):
-            selected_content = self.clipboard_list_data[selected_idx]
+        display_data = self._get_display_data()
+        if selected_idx != -1 and 0 <= selected_idx < len(display_data):
+            selected_content = display_data[selected_idx]
             self.TB.set_text(selected_content) 
 
         self.update_clipboard_buttons_state()
@@ -1214,33 +1261,28 @@ class MainFrame(wx.Frame):
 
     def on_hotkey_altshift7(self, event):
         """alt+shift+7: 剪贴板列表上一条"""
-        # 数据列表为空直接返回
-        if not self.clipboard_list_data:
+        display_data = self._clipboard_filtered_data if self._clipboard_filtered_data is not None else self.clipboard_list_data
+        if not display_data:
             if hasattr(self, 'list_Box') and self.list_Box and self.current_module == 'clipboard':
                 self.list_Box.SetSelection(-1)
             self.current_clipboard_idx = -1
             return
 
-        total_count = len(self.clipboard_list_data)
+        total_count = len(display_data)
         current_idx = self.current_clipboard_idx
 
-        # 计算上一条索引
         if current_idx == -1 or current_idx == 0:
-            # 无选中 或 已到第一项 → 切换到最后一项
             new_idx = total_count - 1
         else:
-            # 否则切换到上一项
             new_idx = current_idx - 1
 
         self.current_clipboard_idx = new_idx
 
-        selected_content = self.clipboard_list_data[new_idx]
+        selected_content = display_data[new_idx]
         print(f"切换到索引 {new_idx}，内容：{selected_content[:20]}...")
         if self.current_module == 'clipboard':
-            self.list_Box.SetSelection(new_idx)  # UI选中对应行
-        # 调用vo_handler朗读
+            self.list_Box.SetSelection(new_idx)
         self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
-        # 更新按钮状态
         self.update_clipboard_buttons_state()
 
         self.TB.set_text(selected_content)
@@ -1255,28 +1297,26 @@ class MainFrame(wx.Frame):
 
     def on_hotkey_altshift9(self, event):
         """alt+shift+9: 剪贴板列表下一条"""
-        if not self.clipboard_list_data:
+        display_data = self._clipboard_filtered_data if self._clipboard_filtered_data is not None else self.clipboard_list_data
+        if not display_data:
             if hasattr(self, 'list_Box') and self.list_Box and self.current_module == 'clipboard':
                 self.list_Box.SetSelection(-1)
             self.current_clipboard_idx = -1
             return
 
-        total_count = len(self.clipboard_list_data)
+        total_count = len(display_data)
         current_idx = self.current_clipboard_idx
 
-        # 下一条索引
         if current_idx == -1 or current_idx >= total_count - 1:
             new_idx = 0
         else:
             new_idx = current_idx + 1
 
         self.current_clipboard_idx = new_idx
-        # 获取选中内容
-        selected_content = self.clipboard_list_data[new_idx]
+        selected_content = display_data[new_idx]
         if self.current_module == 'clipboard':
             self.list_Box.SetSelection(new_idx)
         
-        # 调用vo_handler朗读
         self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
         self.TB.set_text(selected_content)
         self.TB.browse("prev_line")
@@ -1312,11 +1352,12 @@ class MainFrame(wx.Frame):
 
     def on_hotkey_altshiftj(self, event):
         """alt+shift+j: 剪贴板列表内容设置到系统"""
-        if not self.clipboard_list_data or self.current_clipboard_idx < 0 or self.current_clipboard_idx >= len(self.clipboard_list_data):
+        display_data = self._get_display_data()
+        if not display_data or self.current_clipboard_idx < 0 or self.current_clipboard_idx >= len(display_data):
             return
         
         # 目标文本
-        target_text = self.clipboard_list_data[self.current_clipboard_idx]
+        target_text = display_data[self.current_clipboard_idx]
         
         #  对比
         current_clipboard_text = ""
@@ -1350,14 +1391,21 @@ class MainFrame(wx.Frame):
                 clipboard.Close()
         
 
-        del self.clipboard_list_data[self.current_clipboard_idx]
+        # 从原始数据中删除匹配项
+        for i, item in enumerate(self.clipboard_list_data):
+            if item == target_text:
+                del self.clipboard_list_data[i]
+                break
+        
+        # 重新应用筛选
+        self._apply_clipboard_filter()
         
         # 校准current_clipboard_idx
-
-        if not self.clipboard_list_data:
+        display_data = self._get_display_data()
+        if not display_data:
             self.current_clipboard_idx = -1
-        elif self.current_clipboard_idx >= len(self.clipboard_list_data):
-            self.current_clipboard_idx = len(self.clipboard_list_data) - 1
+        elif self.current_clipboard_idx >= len(display_data):
+            self.current_clipboard_idx = len(display_data) - 1
 
         
         self.refresh_list_box()
@@ -1517,6 +1565,19 @@ class MainFrame(wx.Frame):
         self.save_clipboard_data()
 
 
+    def on_clipboard_search_text_changed(self, event):
+        """实时搜索剪贴板记录"""
+        keyword = self._clipboard_search_input.GetValue()
+        self._clipboard_filter_keyword = keyword
+        self._apply_clipboard_filter()
+        self.refresh_list_box()
+
+
+    def on_clipboard_search_enter(self, event):
+        """搜索框回车事件"""
+        pass
+
+
     def on_clipboard_count_text_change(self, event):
         """处理剪贴板记录数量文本输入，只允许数字"""
         current_value = self.clipboard_count_input.GetValue()
@@ -1578,12 +1639,7 @@ class MainFrame(wx.Frame):
 
     def save_clipboard_data(self):
         """保存剪贴板列表"""
-        try:
-            with open(self._clipboard_data_path, "wb") as f:  # 二进制写入
-                pickle.dump(self.clipboard_list_data, f)  # 直接存储列表对象
-            logging.debug(f"保存剪贴板数据成功（{len(self.clipboard_list_data)} 条）")
-        except Exception as e:
-            logging.error(f"保存剪贴板数据失败: {str(e)}")
+        setting.save_clipboard_data(self.clipboard_list_data)
 
 
     def system_level_hide_window(self, window):
