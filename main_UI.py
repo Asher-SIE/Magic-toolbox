@@ -19,7 +19,7 @@ VERSION_INFO = f'V1.1.0\nBuild: 260313'
 
 # 剪贴板编辑对话框
 class EditDialog(wx.Dialog):
-    def __init__(self, parent, title: str, init_content: str, size=(420, 350)):
+    def __init__(self, parent, title: str, init_content: str, cursor_pos: int = None, size=(420, 350)):
         super().__init__(parent, title=title, size=size)
         self.edit_content = init_content
 
@@ -39,6 +39,8 @@ class EditDialog(wx.Dialog):
         self.text_ctrl = wx.TextCtrl(
             panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
         self.text_ctrl.SetValue(init_content)
+        if cursor_pos is not None:
+            self.text_ctrl.SetInsertionPoint(cursor_pos)
         self.text_ctrl.SetFont(wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
         sizer.Add(self.text_ctrl, 1, wx.EXPAND | wx.ALL, 10)
 
@@ -1182,7 +1184,7 @@ class MainFrame(wx.Frame):
             clipboard.Close()
 
         self.edit_dialog = EditDialog(self, setting._("editor_title"), 
-            init_content)
+            init_content, cursor_pos=self.TB.focus_pos)
         if self.edit_dialog.ShowModal() == wx.ID_OK:
             new_content = self.edit_dialog.get_result()
             if self.clipboard_list_data:
