@@ -410,3 +410,15 @@ msgstr "Clipboard"
 #: main_UI.py
 msgid "nav_settings"
 msgstr "Settings"
+
+#: main_UI.py
+msgid "clipboard_max_count_warning_title"
+msgstr "Clipboard Records Warning"
+
+#: main_UI.py
+msgid "clipboard_max_count_warning"
+msgstr "Current clipboard has {current} records, which exceeds the new limit of {max}. Do you want to truncate the excess records?"
+
+#: main_UI.py
+msgid "clipboard_max_count_confirm"
+msgstr "Confirm"

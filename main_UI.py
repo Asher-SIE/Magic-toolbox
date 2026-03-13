@@ -637,6 +637,7 @@ class MainFrame(wx.Frame):
 
     def on_exit(self, event):
         """处理退出事件：释放线程、热键，关闭窗口"""
+        self.save_config()
         # 存储剪贴板数据
         self.save_clipboard_data()
         #  停止核心处理器线程
@@ -787,6 +788,9 @@ class MainFrame(wx.Frame):
             if os.path.exists(self._clipboard_data_path):
                 with open(self._clipboard_data_path, "rb") as f:  # 二进制读取
                     self.clipboard_list_data = pickle.load(f)  # 列表对象
+                max_count = getattr(self, '_clipboard_max_count', 1000)
+                if len(self.clipboard_list_data) > max_count:
+                    self.clipboard_list_data = self.clipboard_list_data[:max_count]
                 self.refresh_list_box()
                 logging.info(f"加载剪贴板数据成功，共 {len(self.clipboard_list_data)} 条")
         except Exception as e:
@@ -1528,19 +1532,47 @@ class MainFrame(wx.Frame):
 
     def on_clipboard_count_focus_lost(self, event):
         """处理剪贴板记录数量编辑框失去焦点"""
-        current_value = self.clipboard_count_input.GetValue()
-        if not current_value:
-            value = 1000
-        else:
-            value = int(current_value)
-            if value > 2000:
-                value = 2000
-                self.clipboard_count_input.SetValue("2000")
-            elif value < 0:
-                value = 0
-                self.clipboard_count_input.SetValue("0")
-        self._clipboard_max_count = value
-        self.save_config()
+        if hasattr(self, '_processing_clipboard_count') and self._processing_clipboard_count:
+            event.Skip()
+            return
+        
+        self._processing_clipboard_count = True
+        try:
+            current_value = self.clipboard_count_input.GetValue()
+            if not current_value:
+                value = 1000
+            else:
+                value = int(current_value)
+                if value > 2000:
+                    value = 2000
+                    self.clipboard_count_input.SetValue("2000")
+                elif value < 0:
+                    value = 0
+                    self.clipboard_count_input.SetValue("0")
+            
+            current_count = len(self.clipboard_list_data)
+            if current_count > value:
+                warning_msg = setting._("clipboard_max_count_warning").format(current=current_count, max=value)
+                dialog = wx.MessageDialog(
+                    self,
+                    warning_msg,
+                    setting._("clipboard_max_count_warning_title"),
+                    wx.YES_NO | wx.ICON_WARNING
+                )
+                result = dialog.ShowModal()
+                dialog.Destroy()
+                if result == wx.ID_YES:
+                    self.clipboard_list_data = self.clipboard_list_data[:value]
+                    if self.current_module == "clipboard":
+                        self.refresh_list_box()
+                else:
+                    value = current_count
+                    self.clipboard_count_input.SetValue(str(value))
+            
+            self._clipboard_max_count = value
+            self.save_config()
+        finally:
+            self._processing_clipboard_count = False
         event.Skip()
 
 

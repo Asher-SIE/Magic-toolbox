@@ -410,3 +410,15 @@ msgstr "剪贴板"
 #: main_UI.py
 msgid "nav_settings"
 msgstr "设置"
+
+#: main_UI.py
+msgid "clipboard_max_count_warning_title"
+msgstr "剪贴板记录警告"
+
+#: main_UI.py
+msgid "clipboard_max_count_warning"
+msgstr "当前剪贴板有 {current} 条记录，已超过新设定的最大值 {max}。是否截断超出部分的记录？"
+
+#: main_UI.py
+msgid "clipboard_max_count_confirm"
+msgstr "确认"
