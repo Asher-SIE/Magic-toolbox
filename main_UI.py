@@ -19,7 +19,8 @@ VERSION_INFO = f'V1.1.0\nBuild: 260313'
 
 
 class FindReplaceDialog(wx.Dialog):
-    def __init__(self, parent, text_ctrl, show_replace=False, last_find_pos=0):
+    def __init__(self, parent, text_ctrl, show_replace=False, last_find_pos=0,
+                 find_text="", replace_text="", use_regex=False, case_sensitive=False, use_escape=False):
         super().__init__(parent, title=setting._('edd_find_replace_title'), size=(420, 180))
         self.text_ctrl = text_ctrl
         self.parent = parent
@@ -37,6 +38,7 @@ class FindReplaceDialog(wx.Dialog):
         find_sizer = wx.BoxSizer(wx.HORIZONTAL)
         find_sizer.Add(wx.StaticText(panel, label=setting._('edd_find_label')), 0, wx.CENTER | wx.RIGHT, 5)
         self.find_input = wx.TextCtrl(panel, size=(250, -1))
+        self.find_input.SetValue(find_text)
         find_sizer.Add(self.find_input, 1, wx.RIGHT, 10)
         
         self.find_next_btn = wx.Button(panel, label=setting._('edd_find_next'))
@@ -49,6 +51,7 @@ class FindReplaceDialog(wx.Dialog):
         self.replace_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.replace_sizer.Add(wx.StaticText(panel, label=setting._('edd_replace_label')), 0, wx.CENTER | wx.RIGHT, 5)
         self.replace_input = wx.TextCtrl(panel, size=(250, -1))
+        self.replace_input.SetValue(replace_text)
         self.replace_sizer.Add(self.replace_input, 1, wx.RIGHT, 10)
         
         self.replace_one_btn = wx.Button(panel, label=setting._('edd_replace_one'))
@@ -60,8 +63,11 @@ class FindReplaceDialog(wx.Dialog):
         
         option_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.regex_check = wx.CheckBox(panel, label=setting._('edd_use_regex'))
+        self.regex_check.SetValue(use_regex)
         self.case_check = wx.CheckBox(panel, label=setting._('edd_case_sensitive'))
+        self.case_check.SetValue(case_sensitive)
         self.escape_check = wx.CheckBox(panel, label=setting._('edd_escape'))
+        self.escape_check.SetValue(use_escape)
         option_sizer.Add(self.regex_check, 0, wx.RIGHT, 10)
         option_sizer.Add(self.case_check, 0, wx.RIGHT, 10)
         option_sizer.Add(self.escape_check)
@@ -137,12 +143,14 @@ class FindReplaceDialog(wx.Dialog):
         text_len = len(full_text)
         
         if direction == 'next':
-            start_pos = self.last_find_pos if self.last_find_pos < text_len else 0
+            start_pos = self.text_ctrl.GetInsertionPoint()
+            start_pos = start_pos if start_pos < text_len else 0
             match = pattern.search(full_text, start_pos)
             if not match:
                 match = pattern.search(full_text, 0)
         else:
-            start_pos = self.last_find_pos - 1 if self.last_find_pos > 0 else text_len - 1
+            start_pos = self.text_ctrl.GetInsertionPoint() - 1
+            start_pos = start_pos if start_pos >= 0 else text_len - 1
             matches = list(pattern.finditer(full_text))
             if not matches:
                 self.status_text.SetLabel(setting._('edd_not_found'))
@@ -186,7 +194,8 @@ class FindReplaceDialog(wx.Dialog):
         
         full_text = self.text_ctrl.GetValue()
         
-        match = pattern.search(full_text, self.last_find_pos)
+        start_pos = self.text_ctrl.GetInsertionPoint()
+        match = pattern.search(full_text, start_pos)
         if not match:
             match = pattern.search(full_text, 0)
         
@@ -229,6 +238,11 @@ class EditDialog(wx.Dialog):
         self.edit_content = init_content
 
         self.last_find_pos = 0
+        self.last_find_text = ""
+        self.last_replace_text = ""
+        self.last_regex = False
+        self.last_case = False
+        self.last_escape = False
 
         #  撤销/重做
         self.undo_stack = []  # 撤销栈：存储 (文本内容
@@ -388,10 +402,19 @@ class EditDialog(wx.Dialog):
                 self.on_ok(None)
                 event.Skip(False)
             elif key_code in (ord('F'), ord('f')):
-                self.on_find_replace_click(None)
+                if modifiers & wx.MOD_SHIFT:
+                    if self.last_find_text:
+                        self._quick_find('prev')
+                    else:
+                        self.on_find_replace_click(None, show_replace=False)
+                else:
+                    if self.last_find_text:
+                        self._quick_find('next')
+                    else:
+                        self.on_find_replace_click(None, show_replace=False)
                 event.Skip(False)
             elif key_code in (ord('H'), ord('h')):
-                self.on_find_replace_click(None)
+                self.on_find_replace_click(None, show_replace=True)
                 event.Skip(False)
             else:
                 event.Skip(True)  # 放行未处理的 ALT+按键（如 Option+Arrow）
@@ -486,15 +509,28 @@ class EditDialog(wx.Dialog):
         return self.edit_content
 
 
-    def on_find_replace_click(self, event):
+    def on_find_replace_click(self, event, show_replace=False, find_next=True):
         """点击查找/替换按钮"""
         if not hasattr(self, 'find_replace_dialog') or self.find_replace_dialog is None:
             self.app.Unbind(wx.EVT_KEY_DOWN, handler=self.on_app_key_down)
             self.find_replace_dialog = FindReplaceDialog(
-                self, self.text_ctrl, show_replace=False, last_find_pos=self.last_find_pos)
+                self, self.text_ctrl, 
+                show_replace=show_replace, 
+                last_find_pos=self.last_find_pos,
+                find_text=self.last_find_text,
+                replace_text=self.last_replace_text,
+                use_regex=self.last_regex,
+                case_sensitive=self.last_case,
+                use_escape=self.last_escape
+            )
             self.Enable(False)
             result = self.find_replace_dialog.ShowModal()
             self.last_find_pos = self.find_replace_dialog.last_find_pos
+            self.last_find_text = self.find_replace_dialog.find_input.GetValue()
+            self.last_replace_text = self.find_replace_dialog.replace_input.GetValue()
+            self.last_regex = self.find_replace_dialog.regex_check.GetValue()
+            self.last_case = self.find_replace_dialog.case_check.GetValue()
+            self.last_escape = self.find_replace_dialog.escape_check.GetValue()
             self.Enable(True)
             self.app.Bind(wx.EVT_KEY_DOWN, self.on_app_key_down)
             self.find_replace_dialog = None
@@ -503,6 +539,67 @@ class EditDialog(wx.Dialog):
             self.find_replace_dialog.ShowModal()
             self.last_find_pos = self.find_replace_dialog.last_find_pos
             self.find_replace_dialog = None
+
+    def _quick_find(self, direction='next'):
+        """快速查找，不打开对话框"""
+        if not self.last_find_text:
+            return False
+        
+        pattern, _ = self._get_pattern_for_quick_find()
+        if not pattern:
+            return False
+        
+        full_text = self.text_ctrl.GetValue()
+        text_len = len(full_text)
+        
+        if direction == 'next':
+            start_pos = self.text_ctrl.GetInsertionPoint()
+            start_pos = start_pos if start_pos < text_len else 0
+            match = pattern.search(full_text, start_pos)
+            if not match:
+                match = pattern.search(full_text, 0)
+        else:
+            start_pos = self.text_ctrl.GetInsertionPoint() - 1
+            start_pos = start_pos if start_pos >= 0 else text_len - 1
+            matches = list(pattern.finditer(full_text))
+            if not matches:
+                return False
+            match = None
+            for m in matches:
+                if m.start() < start_pos:
+                    match = m
+            if match is None:
+                match = matches[-1]
+        
+        if match:
+            start, end = match.span()
+            self.text_ctrl.SetSelection(start, end)
+            self.text_ctrl.SetInsertionPoint(end)
+            self.last_find_pos = end if direction == 'next' else start
+            return True
+        return False
+    
+    def _get_pattern_for_quick_find(self):
+        """为快速查找获取模式"""
+        search_text = self.last_find_text
+        if not search_text:
+            return None, 0
+        
+        flags = 0 if self.last_case else re.IGNORECASE
+        
+        if self.last_regex:
+            try:
+                pattern = re.compile(search_text, flags)
+            except re.error:
+                return None, 0
+        else:
+            if self.last_escape:
+                escaped = re.escape(search_text)
+                pattern = re.compile(escaped, flags)
+            else:
+                pattern = re.compile(search_text, flags)
+        
+        return pattern, 1 if self.last_regex else 0
 
 
     def on_more_btn_click(self, event):
