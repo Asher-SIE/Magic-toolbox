@@ -19,11 +19,11 @@ VERSION_INFO = f'V1.1.0\nBuild: 260313'
 
 
 class FindReplaceDialog(wx.Dialog):
-    def __init__(self, parent, text_ctrl, show_replace=False):
+    def __init__(self, parent, text_ctrl, show_replace=False, last_find_pos=0):
         super().__init__(parent, title=setting._('edd_find_replace_title'), size=(420, 180))
         self.text_ctrl = text_ctrl
         self.parent = parent
-        self.last_find_pos = 0
+        self.last_find_pos = last_find_pos
         
         panel = wx.Panel(self)
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -118,9 +118,9 @@ class FindReplaceDialog(wx.Dialog):
         else:
             if use_escape:
                 escaped = re.escape(search_text)
+                pattern = re.compile(escaped, flags)
             else:
-                escaped = re.escape(search_text)
-            pattern = re.compile(escaped, flags)
+                pattern = re.compile(search_text, flags)
         
         return pattern, 1 if use_regex else 0
     
@@ -227,6 +227,8 @@ class EditDialog(wx.Dialog):
     def __init__(self, parent, title: str, init_content: str, cursor_pos: int = None, size=(420, 350)):
         super().__init__(parent, title=title, size=size)
         self.edit_content = init_content
+
+        self.last_find_pos = 0
 
         #  撤销/重做
         self.undo_stack = []  # 撤销栈：存储 (文本内容
@@ -488,15 +490,18 @@ class EditDialog(wx.Dialog):
         """点击查找/替换按钮"""
         if not hasattr(self, 'find_replace_dialog') or self.find_replace_dialog is None:
             self.app.Unbind(wx.EVT_KEY_DOWN, handler=self.on_app_key_down)
-            self.find_replace_dialog = FindReplaceDialog(self, self.text_ctrl, show_replace=False)
+            self.find_replace_dialog = FindReplaceDialog(
+                self, self.text_ctrl, show_replace=False, last_find_pos=self.last_find_pos)
             self.Enable(False)
-            self.find_replace_dialog.ShowModal()
+            result = self.find_replace_dialog.ShowModal()
+            self.last_find_pos = self.find_replace_dialog.last_find_pos
             self.Enable(True)
             self.app.Bind(wx.EVT_KEY_DOWN, self.on_app_key_down)
             self.find_replace_dialog = None
         else:
             self.find_replace_dialog.find_input.SetFocus()
             self.find_replace_dialog.ShowModal()
+            self.last_find_pos = self.find_replace_dialog.last_find_pos
             self.find_replace_dialog = None
 
 
