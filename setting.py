@@ -1,8 +1,30 @@
+import base64
 import gettext
+import hashlib
 import json
 import logging
 import os
 import plistlib
+import subprocess
+
+from cryptography.fernet import Fernet
+
+
+def _get_fernet():
+    result = subprocess.run(
+        ['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
+        capture_output=True, text=True
+    )
+    for line in result.stdout.split('\n'):
+        if 'IOPlatformUUID' in line:
+            machine_id = line.split('"')[-2] + '@Asher'
+            key = hashlib.sha256(machine_id.encode()).digest()
+            key_b64 = base64.urlsafe_b64encode(key)
+            return Fernet(key_b64)
+    raise Exception("无法获取机器UUID")
+
+
+_fernet = _get_fernet()
 
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -442,13 +464,14 @@ def _get_clipboard_data_path():
 
 
 def load_clipboard_data(max_count: int = 1000):
-    """加载剪贴板数据"""
     import pickle
     data_path = _get_clipboard_data_path()
     try:
         if os.path.exists(data_path):
             with open(data_path, "rb") as f:
-                data = pickle.load(f)
+                encrypted_data = f.read()
+            decrypted_data = _fernet.decrypt(encrypted_data)
+            data = pickle.loads(decrypted_data)
             if len(data) > max_count:
                 data = data[:max_count]
             logging.info(f"加载剪贴板数据成功，共 {len(data)} 条")
@@ -459,12 +482,13 @@ def load_clipboard_data(max_count: int = 1000):
 
 
 def save_clipboard_data(data):
-    """保存剪贴板数据"""
     import pickle
     data_path = _get_clipboard_data_path()
     try:
+        pickled_data = pickle.dumps(data)
+        encrypted_data = _fernet.encrypt(pickled_data)
         with open(data_path, "wb") as f:
-            pickle.dump(data, f)
+            f.write(encrypted_data)
         logging.debug(f"保存剪贴板数据成功（{len(data)} 条）")
     except Exception as e:
         logging.error(f"保存剪贴板数据失败: {e}")
