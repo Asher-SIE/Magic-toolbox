@@ -7,6 +7,7 @@ import re
 import setting
 import subprocess
 import sys
+import threading
 import time
 import wx
 import wx.adv
@@ -1813,7 +1814,7 @@ class MainFrame(wx.Frame):
         result_text = self.translator.lookup_dictionary(text)
         if result_text:
             self.text_ctrl.SetValue(result_text)
-            self.vo_handler.speak_text(result_text)
+            #self.vo_handler.speak_text(result_text)
             return
         
         if not self.translator.model_available:
@@ -1829,17 +1830,21 @@ class MainFrame(wx.Frame):
             self._translate_short_text(text, source_lang, target_lang)
 
     def _translate_short_text(self, text: str, source_lang: str, target_lang: str):
-        """翻译短文本（直接调用）"""
-        try:
-            result_text = self.translator.translate(text, source_lang, target_lang)
-            if result_text:
-                self.text_ctrl.SetValue(result_text)
-                self.vo_handler.speak_text(result_text)
-            else:
-                self.vo_handler.speak_text(setting._("translation_failed"))
-        except Exception as e:
-            logging.warning(f"翻译失败: {e}")
-            self.vo_handler.speak_text(setting._("translation_failed"))
+        """翻译短文本（在线程中执行）"""
+        def translate_worker():
+            try:
+                result_text = self.translator.translate(text, source_lang, target_lang)
+                if result_text:
+                    wx.CallAfter(self.text_ctrl.SetValue, result_text)
+                    #wx.CallAfter(self.vo_handler.speak_text, result_text)
+                else:
+                    wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+            except Exception as e:
+                logging.warning(f"翻译失败: {e}")
+                wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+        
+        thread = threading.Thread(target=translate_worker, daemon=True)
+        thread.start()
 
     def _translate_long_text(self, text: str, source_lang: str, target_lang: str):
         """翻译长文本（分段处理，实时返回结果）"""
@@ -1849,23 +1854,29 @@ class MainFrame(wx.Frame):
             accumulated_result.append(translated_segment)
             wx.CallAfter(self._update_translation_result, '\n\n'.join(accumulated_result))
         
-        try:
-            self.vo_handler.speak_text("开始翻译长文本")
-            result_text = self.translator.translate_with_streaming(
-                text, source_lang, target_lang, callback=segment_callback
-            )
-            if result_text:
-                wx.CallAfter(self.text_ctrl.SetValue, result_text)
-                self.vo_handler.speak_text("长文本翻译完成")
-            else:
-                self.vo_handler.speak_text(setting._("translation_failed"))
-        except Exception as e:
-            logging.warning(f"翻译失败: {e}")
-            self.vo_handler.speak_text(setting._("translation_failed"))
+        def translate_worker():
+            try:
+                wx.CallAfter(self.vo_handler.speak_text, "开始翻译长文本")
+                result_text = self.translator.translate_with_streaming(
+                    text, source_lang, target_lang, callback=segment_callback
+                )
+                if result_text:
+                    wx.CallAfter(self.text_ctrl.SetValue, result_text)
+                    wx.CallAfter(self.vo_handler.speak_text, "长文本翻译完成")
+                else:
+                    wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+            except Exception as e:
+                logging.warning(f"翻译失败: {e}")
+                wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+        
+        thread = threading.Thread(target=translate_worker, daemon=True)
+        thread.start()
 
     def _update_translation_result(self, translated_text: str):
         """实时更新翻译结果到编辑框"""
+        current_pos = self.text_ctrl.GetInsertionPoint()
         self.text_ctrl.SetValue(translated_text)
+        self.text_ctrl.SetInsertionPoint(current_pos)
 
 
     def on_key_to_translate(self, event):
@@ -1885,7 +1896,9 @@ class MainFrame(wx.Frame):
 
     def _update_ui_with_translation(self, translated_text):
         """更新编辑框内容"""
+        current_pos = self.text_ctrl.GetInsertionPoint()
         self.text_ctrl.SetValue(translated_text)
+        self.text_ctrl.SetInsertionPoint(current_pos)
 
 
     def on_new_clipboard_content(self, content: str, timestamp: float):
