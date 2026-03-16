@@ -41,10 +41,8 @@ class FindReplaceDialog(wx.Dialog):
         
         self.find_next_btn = wx.Button(panel, label=setting._('edd_find_next'))
         self.find_prev_btn = wx.Button(panel, label=setting._('edd_find_prev'))
-        self.close_btn = wx.Button(panel, label=setting._('close_btn'))
         find_sizer.Add(self.find_next_btn)
-        find_sizer.Add(self.find_prev_btn, 0, wx.LEFT, 5)
-        find_sizer.Add(self.close_btn, 0, wx.LEFT, 10)
+        find_sizer.Add(self.find_prev_btn, 0, wx.LEFT, 10)
         
         sizer.Add(find_sizer, 0, wx.EXPAND | wx.ALL, 10)
         
@@ -78,14 +76,21 @@ class FindReplaceDialog(wx.Dialog):
         self.replace_checkbox.Bind(wx.EVT_CHECKBOX, self.on_toggle_replace)
         self.find_next_btn.Bind(wx.EVT_BUTTON, self.on_find_next)
         self.find_prev_btn.Bind(wx.EVT_BUTTON, self.on_find_prev)
-        self.close_btn.Bind(wx.EVT_BUTTON, self.on_close)
         self.replace_one_btn.Bind(wx.EVT_BUTTON, self.on_replace_one)
         self.replace_all_btn.Bind(wx.EVT_BUTTON, self.on_replace_all)
+        panel.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
         
         self.replace_sizer.ShowItems(show_replace)
         self._update_size()
         
         self.Centre()
+    
+    def on_key_down(self, event):
+        key_code = event.GetKeyCode()
+        if key_code == wx.WXK_ESCAPE:
+            self.EndModal(wx.ID_CANCEL)
+        else:
+            event.Skip()
     
     def on_toggle_replace(self, event):
         show = self.replace_checkbox.GetValue()
@@ -167,9 +172,6 @@ class FindReplaceDialog(wx.Dialog):
     def on_find_prev(self, event):
         if self._find('prev'):
             self.EndModal(wx.ID_OK)
-    
-    def on_close(self, event):
-        self.EndModal(wx.ID_CANCEL)
     
     def on_replace_one(self, event):
         search_text = self.find_input.GetValue()
@@ -485,8 +487,12 @@ class EditDialog(wx.Dialog):
     def on_find_replace_click(self, event):
         """点击查找/替换按钮"""
         if not hasattr(self, 'find_replace_dialog') or self.find_replace_dialog is None:
+            self.app.Unbind(wx.EVT_KEY_DOWN, handler=self.on_app_key_down)
             self.find_replace_dialog = FindReplaceDialog(self, self.text_ctrl, show_replace=False)
+            self.Enable(False)
             self.find_replace_dialog.ShowModal()
+            self.Enable(True)
+            self.app.Bind(wx.EVT_KEY_DOWN, self.on_app_key_down)
             self.find_replace_dialog = None
         else:
             self.find_replace_dialog.find_input.SetFocus()
@@ -1414,12 +1420,15 @@ class MainFrame(wx.Frame):
 
         self.edit_dialog = EditDialog(self, setting._("editor_title"), 
             init_content, cursor_pos=self.TB.focus_pos)
-        if self.edit_dialog.ShowModal() == wx.ID_OK:
+        self.Enable(False)
+        result = self.edit_dialog.ShowModal()
+        self.Enable(True)
+        if result == wx.ID_OK:
             new_content = self.edit_dialog.get_result()
             if self.clipboard_list_data:
                 del self.clipboard_list_data[0]
             if new_content:
-                self.clipboard_list_data.insert(0, new_content)  # 新增/替换为第一项
+                self.clipboard_list_data.insert(0, new_content)
                 clipboard.Open()
                 clipboard.SetData(wx.TextDataObject(new_content))
                 clipboard.Close()
