@@ -1820,6 +1820,16 @@ class MainFrame(wx.Frame):
             self.vo_handler.speak_text(setting._("model_unavailable"))
             return
         
+        text_length = len(text)
+        LONG_TEXT_THRESHOLD = 2000
+        
+        if text_length > LONG_TEXT_THRESHOLD:
+            self._translate_long_text(text, source_lang, target_lang)
+        else:
+            self._translate_short_text(text, source_lang, target_lang)
+
+    def _translate_short_text(self, text: str, source_lang: str, target_lang: str):
+        """翻译短文本（直接调用）"""
         try:
             result_text = self.translator.translate(text, source_lang, target_lang)
             if result_text:
@@ -1830,6 +1840,32 @@ class MainFrame(wx.Frame):
         except Exception as e:
             logging.warning(f"翻译失败: {e}")
             self.vo_handler.speak_text(setting._("translation_failed"))
+
+    def _translate_long_text(self, text: str, source_lang: str, target_lang: str):
+        """翻译长文本（分段处理，实时返回结果）"""
+        accumulated_result = []
+        
+        def segment_callback(segment: str, translated_segment: str):
+            accumulated_result.append(translated_segment)
+            wx.CallAfter(self._update_translation_result, '\n\n'.join(accumulated_result))
+        
+        try:
+            self.vo_handler.speak_text("开始翻译长文本")
+            result_text = self.translator.translate_with_streaming(
+                text, source_lang, target_lang, callback=segment_callback
+            )
+            if result_text:
+                wx.CallAfter(self.text_ctrl.SetValue, result_text)
+                self.vo_handler.speak_text("长文本翻译完成")
+            else:
+                self.vo_handler.speak_text(setting._("translation_failed"))
+        except Exception as e:
+            logging.warning(f"翻译失败: {e}")
+            self.vo_handler.speak_text(setting._("translation_failed"))
+
+    def _update_translation_result(self, translated_text: str):
+        """实时更新翻译结果到编辑框"""
+        self.text_ctrl.SetValue(translated_text)
 
 
     def on_key_to_translate(self, event):

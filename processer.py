@@ -141,6 +141,7 @@ class Translator(BaseThreadedWorker):
         "fr": "法语", "de": "德语", "es": "西班牙语", "ru": "俄语"
     }
     DEFAULT_TARGET_LANG = "en"
+    MAX_INPUT_TOKENS = 800
 
     def __init__(self, log_level: int = logging.WARNING, loop_interval: float = 1):
         """初始化翻译器：加载模型、本地词典"""
@@ -274,9 +275,6 @@ class Translator(BaseThreadedWorker):
         if not text:
             raise ValueError("请输入要翻译的内容")
 
-        source_lang = source_lang
-        target_lang = target_lang
-
         if target_lang:
             prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
 Text: {text}"""
@@ -292,6 +290,7 @@ Text: {text}"""
                 repeat_penalty=1.1
             )
             translated_text = output["choices"][0]["text"].strip()
+            translated_text = self._post_process_translation(translated_text, original_text)
             return translated_text or ""
         except Exception as e:
             raise RuntimeError(f"翻译失败：{str(e)}") from e
@@ -299,19 +298,84 @@ Text: {text}"""
             if self._model:
                 self._model.reset()
             time.sleep(0.05)
-            clean_patterns = [
-                r"^.*?###T###",
-                r"^.*?#.*?T.*?#",
-                r"^.*?#.*?T"
-            ]
-            for pattern in clean_patterns:
-                translated_text = re.sub(
-                    pattern, "", translated_text, flags=re.DOTALL | re.IGNORECASE
-                ).strip()
 
-            if not translated_text or re.match(r'^[\s\.,!?;:\'"]*$', translated_text):
-                return f"未生成有效结果\n输入：{original_text}"
-            return translated_text
+    def _post_process_translation(self, translated_text: str, original_text: str) -> str:
+        """后处理翻译结果"""
+        clean_patterns = [
+            r"^.*?###T###",
+            r"^.*?#.*?T.*?#",
+            r"^.*?#.*?T"
+        ]
+        for pattern in clean_patterns:
+            translated_text = re.sub(
+                pattern, "", translated_text, flags=re.DOTALL | re.IGNORECASE
+            ).strip()
+
+        if not translated_text or re.match(r'^[\s\.,!?;:\'"]*$', translated_text):
+            return f"未生成有效结果\n输入：{original_text}"
+        return translated_text
+
+    def translate_with_streaming(self, original_text: str, source_lang: str, target_lang: str, 
+                                   callback=None) -> str:
+        """分段翻译长文本，支持流式输出
+        
+        Args:
+            original_text: 原始文本
+            source_lang: 源语言
+            target_lang: 目标语言
+            callback: 每段翻译完成后的回调函数，签名为 callback(segment_text, translated_text)
+            
+        Returns:
+            完整的翻译结果
+        """
+        if not self.model_available or not self._model:
+            raise RuntimeError("翻译模型不可用，请通过设置面板浏览并选择翻译模型")
+
+        text = original_text.strip()
+        if not text:
+            raise ValueError("请输入要翻译的内容")
+
+        segments = re.split(r'\n\n+', text)
+        all_translated = []
+        
+        for i, segment in enumerate(segments):
+            if not segment.strip():
+                continue
+                
+            segment = segment.strip()
+            prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
+Text: {segment}"""
+            
+            try:
+                output = self._model.create_completion(
+                    prompt=prompt,
+                    max_tokens=768,
+                    temperature=0.33,
+                    top_p=0.9,
+                    stop=["\n"],
+                    echo=False,
+                    repeat_penalty=1.1
+                )
+                translated_segment = output["choices"][0]["text"].strip()
+                translated_segment = self._post_process_translation(translated_segment, segment)
+                
+                all_translated.append(translated_segment)
+                
+                if callback:
+                    callback(segment, translated_segment)
+                    
+            except Exception as e:
+                self.logger.warning(f"分段翻译失败 (第{i+1}段): {e}")
+                error_msg = f"[翻译失败: {segment[:20]}...]"
+                all_translated.append(error_msg)
+                if callback:
+                    callback(segment, error_msg)
+            finally:
+                if self._model:
+                    self._model.reset()
+                time.sleep(0.05)
+        
+        return '\n\n'.join(all_translated)
 
     # 仅实现：父类抽象方法（空逻辑，满足继承要求，无任何新增功能）
     def _run_task(self) -> Optional[any]:
