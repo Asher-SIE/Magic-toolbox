@@ -752,6 +752,18 @@ class MainFrame(wx.Frame):
         # 添加到菜单栏
         menubar.Append(app_menu, setting._('menubar_opt'))
 
+        # 帮助菜单
+        help_menu = wx.Menu()
+        program_help = help_menu.Append(wx.NewId(), setting._('menu_help_program'))
+        shortcuts_help = help_menu.Append(wx.NewId(), setting._('menu_help_shortcuts'))
+        donate_help = help_menu.Append(wx.NewId(), setting._('menu_help_donate'))
+
+        self.Bind(wx.EVT_MENU, self.on_help_program, program_help)
+        self.Bind(wx.EVT_MENU, self.on_help_shortcuts, shortcuts_help)
+        self.Bind(wx.EVT_MENU, self.on_help_donate, donate_help)
+
+        menubar.Append(help_menu, setting._('menubar_help'))
+
        # 设置菜单栏到窗口
         self.SetMenuBar(menubar)
 
@@ -999,6 +1011,83 @@ class MainFrame(wx.Frame):
 
         sizer.Add(text_ctrl, 1, wx.EXPAND | wx.ALL, 10)
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
+
+        panel.SetSizer(sizer)
+        dialog.ShowModal()
+        dialog.Destroy()
+
+
+    def on_help_program(self, event):
+        content = setting.load_help_content("help.txt")
+        if not content:
+            content = setting._('help_load_failed')
+        
+        dialog = wx.Dialog(self, title=setting._("menu_help_program"), size=(500, 450))
+        panel = wx.Panel(dialog)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        text_ctrl = wx.TextCtrl(
+            panel, 
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL | wx.VSCROLL
+        )
+        text_ctrl.SetValue(content)
+        text_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+
+        btn = wx.Button(panel, label=setting._("got_it_btn"))
+        btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
+
+        sizer.Add(text_ctrl, 1, wx.EXPAND | wx.ALL, 10)
+        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
+
+        panel.SetSizer(sizer)
+        dialog.ShowModal()
+        dialog.Destroy()
+
+
+    def on_help_shortcuts(self, event):
+        content = setting.load_help_content("shortcuts.txt")
+        if not content:
+            content = setting._('help_load_failed')
+        
+        dialog = wx.Dialog(self, title=setting._("menu_help_shortcuts"), size=(500, 450))
+        panel = wx.Panel(dialog)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        text_ctrl = wx.TextCtrl(
+            panel, 
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL | wx.VSCROLL
+        )
+        text_ctrl.SetValue(content)
+        text_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+
+        btn = wx.Button(panel, label=setting._("got_it_btn"))
+        btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
+
+        sizer.Add(text_ctrl, 1, wx.EXPAND | wx.ALL, 10)
+        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
+
+        panel.SetSizer(sizer)
+        dialog.ShowModal()
+        dialog.Destroy()
+
+
+    def on_help_donate(self, event):
+        dialog = wx.Dialog(self, title=setting._("menu_help_donate"), size=(400, 300))
+        panel = wx.Panel(dialog)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        title_text = wx.StaticText(panel, label=setting._('donate_title'))
+        title_text.SetFont(wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        
+        content_text = wx.StaticText(panel, label=setting._('donate_content'))
+        content_text.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+
+        btn = wx.Button(panel, label=setting._("got_it_btn"))
+        btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
+
+        sizer.Add(title_text, 0, wx.ALIGN_CENTER | wx.TOP, 20)
+        sizer.Add(content_text, 0, wx.ALIGN_CENTER | wx.ALL, 20)
+        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM, 20)
 
         panel.SetSizer(sizer)
         dialog.ShowModal()

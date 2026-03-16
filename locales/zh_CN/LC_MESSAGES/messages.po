@@ -100,6 +100,34 @@ msgid "menu_opt_clean_list"
 msgstr "清空剪贴板列表"
 
 #: main_UI.py
+msgid "menubar_help"
+msgstr "帮助"
+
+#: main_UI.py
+msgid "menu_help_program"
+msgstr "Magictoolbox帮助"
+
+#: main_UI.py
+msgid "menu_help_shortcuts"
+msgstr "快捷键说明"
+
+#: main_UI.py
+msgid "menu_help_donate"
+msgstr "打赏"
+
+#: main_UI.py
+msgid "help_load_failed"
+msgstr "帮助文档加载失败"
+
+#: main_UI.py
+msgid "donate_title"
+msgstr "感谢支持"
+
+#: main_UI.py
+msgid "donate_content"
+msgstr "您的支持是我继续开发的最大动力！\n\n暂未设置打赏方式，敬请期待。"
+
+#: main_UI.py
 msgid "now"
 msgstr "当前"
 

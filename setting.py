@@ -500,3 +500,37 @@ def filter_clipboard_records(records: list, keyword: str) -> list:
         return records
     keyword_lower = keyword.lower()
     return [r for r in records if keyword_lower in r.lower()]
+
+
+def get_locale_dir():
+    """获取 locales 目录路径"""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(current_dir, "locales")
+
+
+def get_current_locale():
+    """获取当前语言环境"""
+    return _locale
+
+
+def load_help_content(filename: str) -> str:
+    """加载帮助文档内容"""
+    locale_dir = get_locale_dir()
+    locale = get_current_locale()
+    file_path = os.path.join(locale_dir, locale, filename)
+    try:
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+    except Exception as e:
+        logging.warning(f"加载帮助文档失败: {e}")
+    return ""
+
+
+_('menubar_help')
+_('menu_help_program')
+_('menu_help_shortcuts')
+_('menu_help_donate')
+_('help_load_failed')
+_('donate_title')
+_('donate_content')

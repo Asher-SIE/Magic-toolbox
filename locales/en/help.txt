@@ -1,0 +1,26 @@
+MagicToolbox
+MagicToolbox is an assistive tool designed exclusively for macOS VoiceOver visually impaired users, integrating core features including real-time translation, clipboard management, and one-click text processing.
+
+Features
+Translation Features
+- Real-time Translation: Supports instant translation of content read aloud by VoiceOver
+- Multi-language Support: Supports over 38 languages, including English, Chinese, French, Japanese, Korean, Spanish, etc.
+- Offline Translation: Powered by the Tencent Hunyuan Large Language Model (model file must be downloaded separately), works without an internet connection
+
+Clipboard Management
+- History Records: Automatically saves clipboard content and supports browsing history
+- Multi-selection Operations: Supports checking multiple records for batch copy and delete operations
+- Editing Function: Built-in text editor with undo and redo functionality
+- Quick Processing: Provides handy features including removing blank spaces, merging spaces, converting numbers to Chinese characters, and text splitting
+
+Voice Enhancement
+- VoiceOver Integration: Optimized for VoiceOver, works seamlessly with the screen reader
+- Character Explanation: Supports viewing detailed explanations of individual characters
+- Content Appending: Supports appending and copying text read aloud by VoiceOver
+
+Usage
+Interface Navigation
+The app uses a layout with a left navigation bar and a right content panel:
+- Translation Panel: Enter text to perform translation
+- Clipboard Panel: Browse and manage clipboard history
+- Settings Panel: Configure the translation model path and the maximum number of saved clipboard records

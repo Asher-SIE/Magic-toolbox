@@ -100,6 +100,34 @@ msgid "menu_opt_clean_list"
 msgstr "Empty Clipboard List"
 
 #: main_UI.py
+msgid "menubar_help"
+msgstr "Help"
+
+#: main_UI.py
+msgid "menu_help_program"
+msgstr "Magictoolbox Help"
+
+#: main_UI.py
+msgid "menu_help_shortcuts"
+msgstr "Keyboard Shortcuts"
+
+#: main_UI.py
+msgid "menu_help_donate"
+msgstr "Donate"
+
+#: main_UI.py
+msgid "help_load_failed"
+msgstr "Failed to load help content"
+
+#: main_UI.py
+msgid "donate_title"
+msgstr "Thank You for Your Support"
+
+#: main_UI.py
+msgid "donate_content"
+msgstr "Your support is my biggest motivation!\n\nDonation methods coming soon."
+
+#: main_UI.py
 msgid "now"
 msgstr "Is"
 
