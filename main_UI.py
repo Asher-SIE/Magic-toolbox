@@ -20,13 +20,19 @@ VERSION_INFO = f'V1.1.0\nBuild: 260313'
 
 class FindReplaceDialog(wx.Dialog):
     def __init__(self, parent, text_ctrl, show_replace=False):
-        super().__init__(parent, title=setting._('edd_find_replace_title'), size=(420, 220))
+        super().__init__(parent, title=setting._('edd_find_replace_title'), size=(420, 180))
         self.text_ctrl = text_ctrl
         self.parent = parent
         self.last_find_pos = 0
         
         panel = wx.Panel(self)
         sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.replace_checkbox = wx.CheckBox(panel, label=setting._('edd_show_replace'))
+        self.replace_checkbox.SetValue(show_replace)
+        top_sizer.Add(self.replace_checkbox, 0)
+        sizer.Add(top_sizer, 0, wx.LEFT | wx.TOP | wx.RIGHT, 10)
         
         find_sizer = wx.BoxSizer(wx.HORIZONTAL)
         find_sizer.Add(wx.StaticText(panel, label=setting._('edd_find_label')), 0, wx.CENTER | wx.RIGHT, 5)
@@ -69,20 +75,25 @@ class FindReplaceDialog(wx.Dialog):
         
         panel.SetSizer(sizer)
         
+        self.replace_checkbox.Bind(wx.EVT_CHECKBOX, self.on_toggle_replace)
         self.find_next_btn.Bind(wx.EVT_BUTTON, self.on_find_next)
         self.find_prev_btn.Bind(wx.EVT_BUTTON, self.on_find_prev)
         self.close_btn.Bind(wx.EVT_BUTTON, self.on_close)
         self.replace_one_btn.Bind(wx.EVT_BUTTON, self.on_replace_one)
         self.replace_all_btn.Bind(wx.EVT_BUTTON, self.on_replace_all)
         
-        if not show_replace:
-            self.replace_sizer.ShowItems(False)
+        self.replace_sizer.ShowItems(show_replace)
+        self._update_size()
         
         self.Centre()
     
-    def show_replace_panel(self, show=True):
+    def on_toggle_replace(self, event):
+        show = self.replace_checkbox.GetValue()
         self.replace_sizer.ShowItems(show)
-        self.GetSizer().Fit(self)
+        self.Fit()
+    
+    def _update_size(self):
+        self.Fit()
     
     def _get_pattern(self, search_text):
         use_regex = self.regex_check.GetValue()
@@ -241,14 +252,9 @@ class EditDialog(wx.Dialog):
 
         # 按钮区
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.find_btn = wx.Button(
+        self.find_replace_btn = wx.Button(
             panel,
-            label=setting._('edd_find_btn'),
-            style=wx.BU_EXACTFIT
-        )
-        self.replace_btn = wx.Button(
-            panel,
-            label=setting._('edd_replace_btn'),
+            label=setting._('edd_find_replace_btn'),
             style=wx.BU_EXACTFIT
         )
         self.more_btn = wx.Button(
@@ -259,8 +265,7 @@ class EditDialog(wx.Dialog):
         self.ok_btn = wx.Button(panel, label=setting._('confirm_btn'))
         self.cancel_btn = wx.Button(panel, label=setting._('cancel_btn'))
 
-        self.find_btn.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-        self.replace_btn.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        self.find_replace_btn.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
         self.more_btn.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
 
         # 弹出菜单
@@ -283,8 +288,7 @@ class EditDialog(wx.Dialog):
         )
 
         # 按钮布局
-        btn_sizer.Add(self.find_btn, 0, wx.RIGHT, 10)
-        btn_sizer.Add(self.replace_btn, 0, wx.RIGHT, 10)
+        btn_sizer.Add(self.find_replace_btn, 0, wx.RIGHT, 10)
         btn_sizer.Add(self.more_btn, 0, wx.RIGHT, 10)
         btn_sizer.Add(self.ok_btn, 0, wx.RIGHT, 10)
         btn_sizer.Add(self.cancel_btn, 0)
@@ -296,8 +300,7 @@ class EditDialog(wx.Dialog):
         # 事件绑定
         self.ok_btn.Bind(wx.EVT_BUTTON, self.on_ok)
         self.cancel_btn.Bind(wx.EVT_BUTTON, self.on_cancel)
-        self.find_btn.Bind(wx.EVT_BUTTON, self.on_find_click)
-        self.replace_btn.Bind(wx.EVT_BUTTON, self.on_replace_click)
+        self.find_replace_btn.Bind(wx.EVT_BUTTON, self.on_find_replace_click)
         self.text_ctrl.Bind(wx.EVT_TEXT, self.on_text_changed)
         self.text_ctrl.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
 
@@ -381,10 +384,10 @@ class EditDialog(wx.Dialog):
                 self.on_ok(None)
                 event.Skip(False)
             elif key_code in (ord('F'), ord('f')):
-                self.on_find_click(None)
+                self.on_find_replace_click(None)
                 event.Skip(False)
             elif key_code in (ord('H'), ord('h')):
-                self.on_replace_click(None)
+                self.on_find_replace_click(None)
                 event.Skip(False)
             else:
                 event.Skip(True)  # 放行未处理的 ALT+按键（如 Option+Arrow）
@@ -479,27 +482,14 @@ class EditDialog(wx.Dialog):
         return self.edit_content
 
 
-    def on_find_click(self, event):
-        """点击查找按钮"""
+    def on_find_replace_click(self, event):
+        """点击查找/替换按钮"""
         if not hasattr(self, 'find_replace_dialog') or self.find_replace_dialog is None:
-            self.find_replace_dialog = FindReplaceDialog(self, self.text_ctrl)
+            self.find_replace_dialog = FindReplaceDialog(self, self.text_ctrl, show_replace=False)
             self.find_replace_dialog.ShowModal()
             self.find_replace_dialog = None
         else:
             self.find_replace_dialog.find_input.SetFocus()
-            self.find_replace_dialog.ShowModal()
-            self.find_replace_dialog = None
-
-
-    def on_replace_click(self, event):
-        """点击替换按钮"""
-        if not hasattr(self, 'find_replace_dialog') or self.find_replace_dialog is None:
-            self.find_replace_dialog = FindReplaceDialog(self, self.text_ctrl, show_replace=True)
-            self.find_replace_dialog.ShowModal()
-            self.find_replace_dialog = None
-        else:
-            self.find_replace_dialog.show_replace_panel(True)
-            self.find_replace_dialog.replace_input.SetFocus()
             self.find_replace_dialog.ShowModal()
             self.find_replace_dialog = None
 

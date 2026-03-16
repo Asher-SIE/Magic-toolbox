@@ -140,6 +140,14 @@ msgid "edd_punc_to_newline_btn"
 msgstr "Split into Sentences"
 
 #: main_UI.py
+msgid "edd_find_replace_btn"
+msgstr "Find/Replace"
+
+#: main_UI.py
+msgid "edd_show_replace"
+msgstr "Show Replace"
+
+#: main_UI.py
 msgid "edd_find_btn"
 msgstr "Find"
 
