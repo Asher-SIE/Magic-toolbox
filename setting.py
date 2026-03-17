@@ -530,6 +530,7 @@ def load_help_content(filename: str) -> str:
 _('menubar_help')
 _('menu_help_program')
 _('menu_help_shortcuts')
+_('menu_help_changelog')
 _('menu_help_donate')
 _('help_load_failed')
 _('donate_title')
