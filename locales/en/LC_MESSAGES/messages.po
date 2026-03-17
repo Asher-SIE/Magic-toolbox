@@ -257,7 +257,7 @@ msgstr "English"
 
 #: main_UI.py
 msgid "lang_Chinese"
-msgstr "Chinese"
+msgstr "Simplified Chinese"
 
 #: main_UI.py
 msgid "lang_French"
