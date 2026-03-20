@@ -522,3 +522,15 @@ msgstr "确认"
 #: main_UI.py
 msgid "clipboard_search_placeholder"
 msgstr "搜索..."
+
+#: main_UI.py
+msgid "volume_control"
+msgstr "音量控制"
+
+#: main_UI.py
+msgid "volume_limit_label"
+msgstr "限制最大音量"
+
+#: main_UI.py
+msgid "volume_target_label"
+msgstr "音量修改为"

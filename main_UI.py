@@ -876,6 +876,8 @@ class MainFrame(wx.Frame):
         self._target_lang = config.get('target_lang', 'Chinese')
         self._model_path = config.get('model_path', '')
         self._clipboard_max_count = config.get('clipboard_max_count', 1000)
+        self._volume_limit = config.get('volume_limit', 100)
+        self._volume_target = config.get('volume_target', 80)
         
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             source_display = setting.get_lang_display(self._source_lang)
@@ -885,11 +887,17 @@ class MainFrame(wx.Frame):
         
         if hasattr(self, 'clipboard_count_input') and self.clipboard_count_input:
             self.clipboard_count_input.SetValue(str(self._clipboard_max_count))
+        if hasattr(self, 'volume_limit_input') and self.volume_limit_input:
+            self.volume_limit_input.SetValue(str(self._volume_limit))
+        if hasattr(self, 'volume_target_input') and self.volume_target_input:
+            self.volume_target_input.SetValue(str(self._volume_target))
     
     def save_config(self):
         model_path = getattr(self, '_model_path', '') or ''
         clipboard_max_count = getattr(self, '_clipboard_max_count', 1000)
-        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count)
+        volume_limit = getattr(self, '_volume_limit', 100)
+        volume_target = getattr(self, '_volume_target', 80)
+        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target)
 
 
     def setup_clipboard_panel(self):
@@ -940,6 +948,29 @@ class MainFrame(wx.Frame):
 
         main_sizer.Add(clipboard_count_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
+        volume_control_static_box = wx.StaticBox(self.settings_panel, label=setting._("volume_control"))
+        volume_sizer = wx.StaticBoxSizer(volume_control_static_box, wx.VERTICAL)
+
+        volume_limit_row = wx.BoxSizer(wx.HORIZONTAL)
+        volume_limit_label = wx.StaticText(self.settings_panel, label=setting._("volume_limit_label"))
+        volume_limit_row.Add(volume_limit_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.volume_limit_input = wx.TextCtrl(self.settings_panel, value=str(getattr(self, '_volume_limit', 100)), style=wx.TE_RIGHT)
+        self.volume_limit_input.Bind(wx.EVT_TEXT, self.on_volume_limit_text_change)
+        self.volume_limit_input.Bind(wx.EVT_KILL_FOCUS, self.on_volume_limit_focus_lost)
+        volume_limit_row.Add(self.volume_limit_input, 1, wx.EXPAND)
+
+        volume_target_row = wx.BoxSizer(wx.HORIZONTAL)
+        volume_target_label = wx.StaticText(self.settings_panel, label=setting._("volume_target_label"))
+        volume_target_row.Add(volume_target_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.volume_target_input = wx.TextCtrl(self.settings_panel, value=str(getattr(self, '_volume_target', 80)), style=wx.TE_RIGHT)
+        self.volume_target_input.Bind(wx.EVT_TEXT, self.on_volume_target_text_change)
+        self.volume_target_input.Bind(wx.EVT_KILL_FOCUS, self.on_volume_target_focus_lost)
+        volume_target_row.Add(self.volume_target_input, 1, wx.EXPAND)
+
+        volume_sizer.Add(volume_limit_row, 0, wx.EXPAND | wx.ALL, 5)
+        volume_sizer.Add(volume_target_row, 0, wx.EXPAND | wx.ALL, 5)
+
+        main_sizer.Add(volume_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         self.settings_panel.SetSizer(main_sizer)
 
@@ -2101,6 +2132,80 @@ class MainFrame(wx.Frame):
             self.save_config()
         finally:
             self._processing_clipboard_count = False
+        event.Skip()
+
+    def on_volume_limit_text_change(self, event):
+        """处理音量限制输入，只允许数字和小数点"""
+        current_value = self.volume_limit_input.GetValue()
+        new_value = ""
+        for char in current_value:
+            if char.isdigit() or char == '.':
+                new_value += char
+        if new_value != current_value:
+            self.volume_limit_input.ChangeValue(new_value)
+        event.Skip()
+
+    def on_volume_limit_focus_lost(self, event):
+        """处理音量限制编辑框失去焦点"""
+        if hasattr(self, '_processing_volume_limit') and self._processing_volume_limit:
+            event.Skip()
+            return
+        
+        self._processing_volume_limit = True
+        try:
+            current_value = self.volume_limit_input.GetValue()
+            if not current_value:
+                value = 100.0
+            else:
+                value = float(current_value)
+                if value > 100:
+                    value = 100.0
+                    self.volume_limit_input.SetValue("100")
+                elif value < 0:
+                    value = 0.0
+                    self.volume_limit_input.SetValue("0")
+            
+            self._volume_limit = value
+            self.save_config()
+        finally:
+            self._processing_volume_limit = False
+        event.Skip()
+
+    def on_volume_target_text_change(self, event):
+        """处理目标音量输入，只允许数字和小数点"""
+        current_value = self.volume_target_input.GetValue()
+        new_value = ""
+        for char in current_value:
+            if char.isdigit() or char == '.':
+                new_value += char
+        if new_value != current_value:
+            self.volume_target_input.ChangeValue(new_value)
+        event.Skip()
+
+    def on_volume_target_focus_lost(self, event):
+        """处理目标音量编辑框失去焦点"""
+        if hasattr(self, '_processing_volume_target') and self._processing_volume_target:
+            event.Skip()
+            return
+        
+        self._processing_volume_target = True
+        try:
+            current_value = self.volume_target_input.GetValue()
+            if not current_value:
+                value = 80.0
+            else:
+                value = float(current_value)
+                if value > 100:
+                    value = 100.0
+                    self.volume_target_input.SetValue("100")
+                elif value < 0:
+                    value = 0.0
+                    self.volume_target_input.SetValue("0")
+            
+            self._volume_target = value
+            self.save_config()
+        finally:
+            self._processing_volume_target = False
         event.Skip()
 
 

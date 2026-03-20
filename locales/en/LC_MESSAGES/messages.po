@@ -522,3 +522,15 @@ msgstr "Confirm"
 #: main_UI.py
 msgid "clipboard_search_placeholder"
 msgstr "Search..."
+
+#: main_UI.py
+msgid "volume_control"
+msgstr "Volume Control"
+
+#: main_UI.py
+msgid "volume_limit_label"
+msgstr "Volume Limit"
+
+#: main_UI.py
+msgid "volume_target_label"
+msgstr "Set Volume To"
