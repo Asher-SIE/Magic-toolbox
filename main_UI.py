@@ -925,10 +925,10 @@ class MainFrame(wx.Frame):
         browse_model_sizer = wx.StaticBoxSizer(browse_model_static_box, wx.VERTICAL)
 
         model_path_h_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.model_path_text = wx.TextCtrl(self.settings_panel, style=wx.TE_READONLY)
+        self.model_path_text = wx.TextCtrl(browse_model_static_box, style=wx.TE_READONLY)
         model_path_h_sizer.Add(self.model_path_text, 1, wx.EXPAND | wx.RIGHT, 5)
         
-        self.browse_model_button = wx.Button(self.settings_panel, label=setting._("browse_btn"))
+        self.browse_model_button = wx.Button(browse_model_static_box, label=setting._("browse_btn"))
         self.browse_model_button.Bind(wx.EVT_BUTTON, self.on_browse_model_click)
         model_path_h_sizer.Add(self.browse_model_button, 0)
         
@@ -940,7 +940,7 @@ class MainFrame(wx.Frame):
         clipboard_count_static_box = wx.StaticBox(self.settings_panel, label=setting._("clipboard_max_count"))
         clipboard_count_sizer = wx.StaticBoxSizer(clipboard_count_static_box, wx.VERTICAL)
 
-        self.clipboard_count_input = wx.TextCtrl(self.settings_panel, value=str(getattr(self, '_clipboard_max_count', 1000)), style=wx.TE_RIGHT)
+        self.clipboard_count_input = wx.TextCtrl(clipboard_count_static_box, value=str(getattr(self, '_clipboard_max_count', 1000)), style=wx.TE_RIGHT)
         self.clipboard_count_input.Bind(wx.EVT_TEXT, self.on_clipboard_count_text_change)
         self.clipboard_count_input.Bind(wx.EVT_KILL_FOCUS, self.on_clipboard_count_focus_lost)
 
@@ -949,28 +949,28 @@ class MainFrame(wx.Frame):
         main_sizer.Add(clipboard_count_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         volume_control_static_box = wx.StaticBox(self.settings_panel, label=setting._("volume_control"))
-        volume_sizer = wx.StaticBoxSizer(volume_control_static_box, wx.VERTICAL)
+        volume_control_sizer = wx.StaticBoxSizer(volume_control_static_box, wx.VERTICAL)
 
         volume_limit_row = wx.BoxSizer(wx.HORIZONTAL)
-        volume_limit_label = wx.StaticText(self.settings_panel, label=setting._("volume_limit_label"))
+        volume_limit_label = wx.StaticText(volume_control_static_box, label=setting._("volume_limit_label"))
         volume_limit_row.Add(volume_limit_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
-        self.volume_limit_input = wx.TextCtrl(self.settings_panel, value=str(getattr(self, '_volume_limit', 100)), style=wx.TE_RIGHT)
+        self.volume_limit_input = wx.TextCtrl(volume_control_static_box, value=str(getattr(self, '_volume_limit', 100)), style=wx.TE_RIGHT)
         self.volume_limit_input.Bind(wx.EVT_TEXT, self.on_volume_limit_text_change)
         self.volume_limit_input.Bind(wx.EVT_KILL_FOCUS, self.on_volume_limit_focus_lost)
         volume_limit_row.Add(self.volume_limit_input, 1, wx.EXPAND)
 
         volume_target_row = wx.BoxSizer(wx.HORIZONTAL)
-        volume_target_label = wx.StaticText(self.settings_panel, label=setting._("volume_target_label"))
+        volume_target_label = wx.StaticText(volume_control_static_box, label=setting._("volume_target_label"))
         volume_target_row.Add(volume_target_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
-        self.volume_target_input = wx.TextCtrl(self.settings_panel, value=str(getattr(self, '_volume_target', 80)), style=wx.TE_RIGHT)
+        self.volume_target_input = wx.TextCtrl(volume_control_static_box, value=str(getattr(self, '_volume_target', 80)), style=wx.TE_RIGHT)
         self.volume_target_input.Bind(wx.EVT_TEXT, self.on_volume_target_text_change)
         self.volume_target_input.Bind(wx.EVT_KILL_FOCUS, self.on_volume_target_focus_lost)
         volume_target_row.Add(self.volume_target_input, 1, wx.EXPAND)
 
-        volume_sizer.Add(volume_limit_row, 0, wx.EXPAND | wx.ALL, 5)
-        volume_sizer.Add(volume_target_row, 0, wx.EXPAND | wx.ALL, 5)
+        volume_control_sizer.Add(volume_limit_row, 0, wx.EXPAND | wx.ALL, 5)
+        volume_control_sizer.Add(volume_target_row, 0, wx.EXPAND | wx.ALL, 5)
 
-        main_sizer.Add(volume_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(volume_control_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         self.settings_panel.SetSizer(main_sizer)
 
