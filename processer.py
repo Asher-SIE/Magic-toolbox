@@ -1,4 +1,5 @@
 import appscript
+import ctypes
 import gzip
 import logging
 import llama_cpp
@@ -10,6 +11,7 @@ import threading
 import time
 import wx
 
+from ctypes import POINTER, c_uint32, c_float, c_bool, Structure, byref, c_void_p
 from typing import Callable, Dict, List, Optional, Tuple
 
 
@@ -517,6 +519,119 @@ class ClipboardMonitor(BaseThreadedWorker):
         finally:
             clipboard.Close()
             
+        return None
+
+
+# 音量控制器类
+class VolumeController(BaseThreadedWorker):
+    """
+    音量控制器：监控系统音量并强制修改为指定值
+    使用 CoreAudio API 实现高性能音量控制
+    """
+
+    kAudioObjectSystemObject = 1
+    kAudioObjectPropertyElementMain = 0
+    kAudioHardwarePropertyDefaultOutputDevice = int.from_bytes(b'dOut', byteorder='big')
+    kAudioHardwareServiceDeviceProperty_VirtualMainVolume = int.from_bytes(b'vmvc', byteorder='big')
+    kAudioDevicePropertyScopeOutput = int.from_bytes(b'outp', byteorder='big')
+    kAudioHardwareNoError = 0
+
+    class AudioObjectPropertyAddress(Structure):
+        _fields_ = [
+            ("mSelector", c_uint32),
+            ("mScope", c_uint32),
+            ("mElement", c_uint32),
+        ]
+
+    def __init__(self, loop_interval: float = 0.25):
+        super().__init__(loop_interval=loop_interval)
+        self.logger = logging.getLogger(__name__)
+
+        self._coreaudio = ctypes.CDLL(
+            '/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio'
+        )
+        self._coreaudio.AudioObjectGetPropertyData.argtypes = [
+            c_uint32, POINTER(self.AudioObjectPropertyAddress), c_uint32, c_void_p, POINTER(c_uint32), c_void_p
+        ]
+        self._coreaudio.AudioObjectGetPropertyData.restype = c_uint32
+        self._coreaudio.AudioObjectSetPropertyData.argtypes = [
+            c_uint32, POINTER(self.AudioObjectPropertyAddress), c_uint32, c_void_p, c_uint32, c_void_p
+        ]
+        self._coreaudio.AudioObjectSetPropertyData.restype = c_uint32
+
+        self._device_id: Optional[int] = None
+        self._volume_limit: float = 0
+        self._volume_target: float = 80
+        self._last_set_volume: Optional[float] = None
+
+    def set_config(self, volume_limit: float, volume_target: float):
+        self._volume_limit = volume_limit
+        self._volume_target = volume_target
+
+    def _get_device_id(self) -> int:
+        addr = self.AudioObjectPropertyAddress(
+            mSelector=self.kAudioHardwarePropertyDefaultOutputDevice,
+            mScope=0,
+            mElement=0
+        )
+        device_id = c_uint32(0)
+        data_size = c_uint32(ctypes.sizeof(device_id))
+        result = self._coreaudio.AudioObjectGetPropertyData(
+            self.kAudioObjectSystemObject, byref(addr), 0, None, byref(data_size), byref(device_id)
+        )
+        if result != self.kAudioHardwareNoError:
+            raise RuntimeError(f"获取输出设备失败: {result}")
+        return device_id.value
+
+    def get_volume(self) -> float:
+        if self._device_id is None:
+            self._device_id = self._get_device_id()
+
+        addr = self.AudioObjectPropertyAddress(
+            mSelector=self.kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+            mScope=self.kAudioDevicePropertyScopeOutput,
+            mElement=self.kAudioObjectPropertyElementMain
+        )
+        volume = c_float(0.0)
+        data_size = c_uint32(ctypes.sizeof(volume))
+        result = self._coreaudio.AudioObjectGetPropertyData(
+            self._device_id, byref(addr), 0, None, byref(data_size), byref(volume)
+        )
+        if result != self.kAudioHardwareNoError:
+            raise RuntimeError(f"获取音量失败: {result}")
+        return volume.value
+
+    def _set_volume(self, volume: float):
+        if self._device_id is None:
+            self._device_id = self._get_device_id()
+
+        addr = self.AudioObjectPropertyAddress(
+            mSelector=self.kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+            mScope=self.kAudioDevicePropertyScopeOutput,
+            mElement=self.kAudioObjectPropertyElementMain
+        )
+        volume_val = c_float(max(0.0, min(1.0, volume)))
+        data_size = c_uint32(ctypes.sizeof(volume_val))
+        result = self._coreaudio.AudioObjectSetPropertyData(
+            self._device_id, byref(addr), 0, None, data_size, byref(volume_val)
+        )
+        if result != self.kAudioHardwareNoError:
+            raise RuntimeError(f"设置音量失败: {result}")
+        self._last_set_volume = volume_val.value
+
+    def _run_task(self):
+        if self._volume_limit == 0:
+            return None
+
+        try:
+            current = self.get_volume()
+            current_percent = int(current * 100)
+
+            if current_percent > self._volume_limit:
+                self._set_volume(self._volume_target / 100.0)
+        except Exception as e:
+            self.logger.debug(f"音量控制异常: {e}")
+
         return None
 
 

@@ -13,7 +13,7 @@ import wx
 import wx.adv
 
 from AppKit import NSApplication, NSApp, NSWindow
-from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler
+from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController
 from typing import Optional, Tuple
 
 VERSION_INFO = f'V1.1.0\nBuild: 260313'
@@ -689,6 +689,9 @@ class MainFrame(wx.Frame):
             log_level=logging.INFO, 
             loop_interval=0.1)
         self.TB = TextBrowser()
+        self.volume_controller = VolumeController(loop_interval=0.02)
+        self.volume_controller.set_config(self._volume_limit, self._volume_target)
+        self.volume_controller.start_worker()
 
         # 初始化翻译器
         self.init_translator()
@@ -2167,6 +2170,8 @@ class MainFrame(wx.Frame):
             
             self._volume_limit = value
             self.save_config()
+            
+            self.volume_controller.set_config(self._volume_limit, self._volume_target)
         finally:
             self._processing_volume_limit = False
         event.Skip()
@@ -2204,6 +2209,8 @@ class MainFrame(wx.Frame):
             
             self._volume_target = value
             self.save_config()
+            
+            self.volume_controller.set_config(self._volume_limit, self._volume_target)
         finally:
             self._processing_volume_target = False
         event.Skip()
