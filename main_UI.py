@@ -2138,14 +2138,30 @@ class MainFrame(wx.Frame):
         event.Skip()
 
     def on_volume_limit_text_change(self, event):
-        """处理音量限制输入，只允许数字和小数点"""
+        """处理音量限制输入，只允许数字和小数点，最多两位小数，不超过100"""
         current_value = self.volume_limit_input.GetValue()
         new_value = ""
+        dot_count = 0
+        decimal_places = 0
         for char in current_value:
-            if char.isdigit() or char == '.':
+            if char.isdigit():
+                if dot_count > 0 and decimal_places >= 2:
+                    continue
                 new_value += char
+                if dot_count > 0:
+                    decimal_places += 1
+            elif char == '.' and dot_count == 0:
+                new_value += char
+                dot_count += 1
         if new_value != current_value:
             self.volume_limit_input.ChangeValue(new_value)
+        if new_value:
+            value = float(new_value)
+            if value > 100:
+                value = 100.0
+                self.volume_limit_input.SetValue("100")
+            self._volume_limit = value
+            self.volume_controller.set_config(self._volume_limit, self._volume_target)
         event.Skip()
 
     def on_volume_limit_focus_lost(self, event):
@@ -2161,12 +2177,12 @@ class MainFrame(wx.Frame):
                 value = 100.0
             else:
                 value = float(current_value)
+                value = round(value, 2)
                 if value > 100:
                     value = 100.0
-                    self.volume_limit_input.SetValue("100")
                 elif value < 0:
                     value = 0.0
-                    self.volume_limit_input.SetValue("0")
+                self.volume_limit_input.SetValue(str(value))
             
             self._volume_limit = value
             self.save_config()
@@ -2177,14 +2193,30 @@ class MainFrame(wx.Frame):
         event.Skip()
 
     def on_volume_target_text_change(self, event):
-        """处理目标音量输入，只允许数字和小数点"""
+        """处理目标音量输入，只允许数字和小数点，最多两位小数，不超过100"""
         current_value = self.volume_target_input.GetValue()
         new_value = ""
+        dot_count = 0
+        decimal_places = 0
         for char in current_value:
-            if char.isdigit() or char == '.':
+            if char.isdigit():
+                if dot_count > 0 and decimal_places >= 2:
+                    continue
                 new_value += char
+                if dot_count > 0:
+                    decimal_places += 1
+            elif char == '.' and dot_count == 0:
+                new_value += char
+                dot_count += 1
         if new_value != current_value:
             self.volume_target_input.ChangeValue(new_value)
+        if new_value:
+            value = float(new_value)
+            if value > 100:
+                value = 100.0
+                self.volume_target_input.SetValue("100")
+            self._volume_target = value
+            self.volume_controller.set_config(self._volume_limit, self._volume_target)
         event.Skip()
 
     def on_volume_target_focus_lost(self, event):
@@ -2200,12 +2232,12 @@ class MainFrame(wx.Frame):
                 value = 80.0
             else:
                 value = float(current_value)
+                value = round(value, 2)
                 if value > 100:
                     value = 100.0
-                    self.volume_target_input.SetValue("100")
                 elif value < 0:
                     value = 0.0
-                    self.volume_target_input.SetValue("0")
+                self.volume_target_input.SetValue(str(value))
             
             self._volume_target = value
             self.save_config()
