@@ -112,6 +112,10 @@ msgid "menu_help_shortcuts"
 msgstr "快捷键说明"
 
 #: main_UI.py
+msgid "menu_help_changelog"
+msgstr "更新日志"
+
+#: main_UI.py
 msgid "menu_help_donate"
 msgstr "打赏"
 
@@ -257,7 +261,7 @@ msgstr "英语"
 
 #: main_UI.py
 msgid "lang_Chinese"
-msgstr "中文"
+msgstr "简体中文"
 
 #: main_UI.py
 msgid "lang_French"

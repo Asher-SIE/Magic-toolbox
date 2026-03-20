@@ -112,6 +112,10 @@ msgid "menu_help_shortcuts"
 msgstr "Keyboard Shortcuts"
 
 #: main_UI.py
+msgid "menu_help_changelog"
+msgstr "Changelog"
+
+#: main_UI.py
 msgid "menu_help_donate"
 msgstr "Donate"
 
@@ -257,7 +261,7 @@ msgstr "English"
 
 #: main_UI.py
 msgid "lang_Chinese"
-msgstr "Chinese"
+msgstr "Simplified Chinese"
 
 #: main_UI.py
 msgid "lang_French"

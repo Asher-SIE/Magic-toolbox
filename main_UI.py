@@ -759,10 +759,12 @@ class MainFrame(wx.Frame):
         help_menu = wx.Menu()
         program_help = help_menu.Append(wx.NewId(), setting._('menu_help_program'))
         shortcuts_help = help_menu.Append(wx.NewId(), setting._('menu_help_shortcuts'))
+        changelog_help = help_menu.Append(wx.NewId(), setting._('menu_help_changelog'))
         donate_help = help_menu.Append(wx.NewId(), setting._('menu_help_donate'))
 
         self.Bind(wx.EVT_MENU, self.on_help_program, program_help)
         self.Bind(wx.EVT_MENU, self.on_help_shortcuts, shortcuts_help)
+        self.Bind(wx.EVT_MENU, self.on_help_changelog, changelog_help)
         self.Bind(wx.EVT_MENU, self.on_help_donate, donate_help)
 
         menubar.Append(help_menu, setting._('menubar_help'))
@@ -1122,6 +1124,39 @@ class MainFrame(wx.Frame):
         sizer.Add(title_text, 0, wx.ALIGN_CENTER | wx.TOP, 20)
         sizer.Add(content_text, 0, wx.ALIGN_CENTER | wx.ALL, 20)
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM, 20)
+
+        panel.SetSizer(sizer)
+        dialog.ShowModal()
+        dialog.Destroy()
+
+
+    def on_help_changelog(self, event):
+        import os as os_module
+        current_dir = os_module.path.dirname(os_module.path.abspath(__file__))
+        changelog_path = os_module.path.join(current_dir, "resources", "更新日志.txt")
+        
+        try:
+            with open(changelog_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except Exception as e:
+            content = setting._('help_load_failed')
+        
+        dialog = wx.Dialog(self, title=setting._("menu_help_changelog"), size=(500, 450))
+        panel = wx.Panel(dialog)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        text_ctrl = wx.TextCtrl(
+            panel, 
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL | wx.VSCROLL
+        )
+        text_ctrl.SetValue(content)
+        text_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+
+        btn = wx.Button(panel, label=setting._("got_it_btn"))
+        btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
+
+        sizer.Add(text_ctrl, 1, wx.EXPAND | wx.ALL, 10)
+        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
 
         panel.SetSizer(sizer)
         dialog.ShowModal()

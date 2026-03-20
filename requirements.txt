@@ -1,4 +1,6 @@
 appscript==1.4.0
-wxPython==4.2.4
+cryptography
+llama-cpp-python
 pyobjc==12.1
 typing_extensions==4.15.0
+wxPython==4.2.4
