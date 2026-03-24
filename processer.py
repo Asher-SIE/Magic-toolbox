@@ -429,12 +429,12 @@ class VoiceOverHandler(BaseThreadedWorker):
             self._last_timestamp = current_timestamp
             self.logger.info(f"新朗读内容（时间戳：{current_timestamp:.2f}）：{current_content}")
             return (current_content, current_timestamp)
-            
+             
         except Exception as e:
             self.logger.error(f"VoiceOver错误：{str(e)}")
             self._vo_err_count += 1
             if self._vo_err_count == 6:
-                reboot_VoiceOver()
+                reboot_VoiceOver(None)
                 self._vo_err_count = 0
             return None
 
@@ -746,8 +746,73 @@ class TextBrowser:
         return setting.chars_dict[setting.current_lang].get(char, char)
 
 
+def is_voiceover_running():
+    """Check if VoiceOver is currently running"""
+    import subprocess
+    try:
+        # Use pgrep to check if VoiceOver process is running
+        result = subprocess.run(['pgrep', 'VoiceOver'], capture_output=True, text=True)
+        return result.returncode == 0
+    except Exception:
+        return False
+
 def reboot_VoiceOver(event):
-    os.system('killall -9 VoiceOver')
+    """Gracefully restart VoiceOver by stopping then starting it with verification"""
+    import subprocess
+    import time
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # First check if VoiceOver is running
+    if is_voiceover_running():
+        # Stop VoiceOver using AppleScript
+        try:
+            logger.info("Stopping VoiceOver...")
+            subprocess.run(['osascript', '-e', 'tell application "VoiceOver" to quit'], 
+                         check=True, capture_output=True)
+            # Wait for VoiceOver to stop with verification
+            max_wait = 5  # Maximum wait time in seconds
+            wait_interval = 0.5  # Check interval
+            waited = 0
+            while waited < max_wait:
+                if not is_voiceover_running():
+                    logger.info("VoiceOver stopped successfully")
+                    break
+                time.sleep(wait_interval)
+                waited += wait_interval
+            else:
+                logger.warning(f"VoiceOver may not have stopped completely after {max_wait} seconds")
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"Failed to stop VoiceOver: {e}")
+        except Exception as e:
+            logger.warning(f"Error stopping VoiceOver: {e}")
+    
+    # Additional delay to ensure clean state
+    time.sleep(1)
+    
+    # Start VoiceOver using keyboard shortcut (Command+F5)
+    try:
+        logger.info("Starting VoiceOver...")
+        # Key code 96 is F5
+        subprocess.run(['osascript', '-e', 'tell application "System Events" to key code 96 using command down'],
+                      check=True, capture_output=True)
+        # Wait for VoiceOver to start with verification
+        max_wait = 10  # Maximum wait time in seconds for startup
+        wait_interval = 0.5  # Check interval
+        waited = 0
+        while waited < max_wait:
+            if is_voiceover_running():
+                logger.info("VoiceOver started successfully")
+                break
+            time.sleep(wait_interval)
+            waited += wait_interval
+        else:
+            logger.error(f"VoiceOver failed to start after {max_wait} seconds")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to start VoiceOver: {e}")
+    except Exception as e:
+        logger.error(f"Error starting VoiceOver: {e}")
 
 
 class TextProcessor:
