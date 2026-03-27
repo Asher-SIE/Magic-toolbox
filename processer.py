@@ -1,6 +1,8 @@
 import appscript
+import collections
 import ctypes
 import gzip
+import hashlib
 import logging
 import llama_cpp
 import os
@@ -149,7 +151,8 @@ class Translator(BaseThreadedWorker):
         "fr": "法语", "de": "德语", "es": "西班牙语", "ru": "俄语"
     }
     DEFAULT_TARGET_LANG = "en"
-    MAX_INPUT_TOKENS = 800
+    MAX_INPUT_TOKENS = int(2048 * 0.85)
+    _CACHE_MAX_SIZE = 200
 
     def __init__(self, log_level: int = logging.WARNING, loop_interval: float = 1):
         """初始化翻译器：加载模型、本地词典"""
@@ -168,6 +171,98 @@ class Translator(BaseThreadedWorker):
 
         # 加载词典
         self._load_dictionary()
+
+        # 翻译缓存 (FIFO, 最多100条)
+        self._translation_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
+
+    def _clean_text(self, text: str) -> str:
+        """清洗文本：去除emoji、控制字符等非文字元素"""
+        if not text:
+            return text
+        # 去除emoji (emoji symbols, pictographs, transport, flags等)
+        emoji_pattern = re.compile("["
+            u"\U0001F600-\U0001F64F"  # emoticons
+            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+            u"\U0001F680-\U0001F6FF"  # transport & map symbols
+            u"\U0001F1E0-\U0001F1FF"  # flags
+            u"\U0001F900-\U0001F9FF"  # supplemental symbols
+            u"\U0001FA00-\U0001FA6F"  # chess symbols, dice
+            u"\U00002702-\U000027B0"  # dingbats
+            u"\U000024C2-\U000025FF"  # enclosed characters
+            "]+", flags=re.UNICODE)
+        text = emoji_pattern.sub('', text)
+        # 去除控制字符
+        text = re.sub(r"[\x00-\x1F\x7F-\x9F]", '', text)
+        return text.strip()
+
+    def _split_text_by_punctuation(self, text: str, max_chars: int) -> List[str]:
+        """按标点分割文本，确保每段不超过max_chars
+        
+        策略：先按空行分大段，单段超限时往前找最后一个标点截断
+        """
+        if not text or max_chars <= 0:
+            return [text] if text else []
+        
+        result = []
+        # 先按空行分割成大段落
+        paragraphs = re.split(r'\n\n+', text)
+        
+        for para in paragraphs:
+            if len(para) <= max_chars:
+                result.append(para)
+                continue
+            
+            # 段落超长，需要进一步拆分
+            start = 0
+            para_len = len(para)
+            while start < para_len:
+                remaining = para[start:]
+                if len(remaining) <= max_chars:
+                    result.append(remaining)
+                    break
+                
+                # 从max_chars位置往前找标点
+                chunk = remaining[:max_chars]
+                punctuation = re.compile(r'[^a-zA-Z0-9\s\d\u4e00-\u9fff]')
+                match = punctuation.search(chunk[::-1])
+                
+                if match:
+                    # 找到标点，截断位置
+                    cut_pos = max_chars - match.start()
+                    if cut_pos > 0:
+                        result.append(remaining[:cut_pos].strip())
+                        start += cut_pos
+                    else:
+                        # 标点在开头，强制截断
+                        result.append(remaining[:max_chars].strip())
+                        start += max_chars
+                else:
+                    # 没找到标点，直接截断
+                    result.append(remaining[:max_chars].strip())
+                    start += max_chars
+        
+        return [s for s in result if s.strip()]
+
+    def _get_cache_key(self, text: str, source_lang: str, target_lang: str) -> str:
+        """生成缓存key (md5哈希，包含语言方向)"""
+        lang_key = f"{source_lang}->{target_lang}"
+        return hashlib.md5(f"{lang_key}:{text}".encode('utf-8')).hexdigest()
+
+    def _get_from_cache(self, text: str, source_lang: str, target_lang: str) -> Optional[str]:
+        """从缓存获取翻译结果"""
+        cache_key = self._get_cache_key(text, source_lang, target_lang)
+        if cache_key in self._translation_cache:
+            self._translation_cache.move_to_end(cache_key)
+            return self._translation_cache[cache_key]
+        return None
+
+    def _save_to_cache(self, original_text: str, translated_text: str, 
+                       source_lang: str, target_lang: str):
+        """保存到缓存 (FIFO滚动更新)"""
+        cache_key = self._get_cache_key(original_text, source_lang, target_lang)
+        self._translation_cache[cache_key] = translated_text
+        if len(self._translation_cache) > self._CACHE_MAX_SIZE:
+            self._translation_cache.popitem(last=False)
 
     def load_model(self, model_path: str) -> bool:
         """加载翻译模型
@@ -283,9 +378,18 @@ class Translator(BaseThreadedWorker):
         if not text:
             raise ValueError("请输入要翻译的内容")
 
+        # 先清洗文本（去除emoji等）
+        cleaned_text = self._clean_text(text)
+        
+        # 检查缓存
+        cached_result = self._get_from_cache(cleaned_text, source_lang, target_lang)
+        if cached_result is not None:
+            self.logger.debug(f"翻译缓存命中: {cleaned_text[:30]}...")
+            return cached_result
+
         if target_lang:
             prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
-Text: {text}"""
+Text: {cleaned_text}"""
 
         try:
             output = self._model.create_completion(
@@ -298,7 +402,11 @@ Text: {text}"""
                 repeat_penalty=1.1
             )
             translated_text = output["choices"][0]["text"].strip()
-            translated_text = self._post_process_translation(translated_text, original_text)
+            translated_text = self._post_process_translation(translated_text, cleaned_text)
+            
+            # 保存到缓存
+            self._save_to_cache(cleaned_text, translated_text, source_lang, target_lang)
+            
             return translated_text or ""
         except Exception as e:
             raise RuntimeError(f"翻译失败：{str(e)}") from e
@@ -343,13 +451,28 @@ Text: {text}"""
         if not text:
             raise ValueError("请输入要翻译的内容")
 
-        segments = re.split(r'\n\n+', text)
+        # 清洗文本
+        cleaned_text = self._clean_text(text)
+        
+        # 检查缓存（整体）
+        cached_result = self._get_from_cache(cleaned_text, source_lang, target_lang)
+        if cached_result is not None:
+            self.logger.debug(f"翻译缓存命中(长文本): {cleaned_text[:30]}...")
+            if callback:
+                callback(cleaned_text, cached_result)
+            return cached_result
+
+        # 计算单段最大字符数 (85% * 4字符/Token * 1.2缓冲 = 约4000字符)
+        max_chars = int(self.MAX_INPUT_TOKENS * 4 * 1.2)
+        
+        # 使用新的分段逻辑
+        segments = self._split_text_by_punctuation(cleaned_text, max_chars)
         all_translated = []
         
         for i, segment in enumerate(segments):
             if not segment.strip():
                 continue
-                
+            
             segment = segment.strip()
             prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
 Text: {segment}"""
@@ -383,7 +506,12 @@ Text: {segment}"""
                     self._model.reset()
                 time.sleep(0.05)
         
-        return '\n\n'.join(all_translated)
+        result = '\n\n'.join(all_translated)
+        
+        # 缓存完整翻译结果
+        self._save_to_cache(cleaned_text, result, source_lang, target_lang)
+        
+        return result
 
     # 仅实现：父类抽象方法（空逻辑，满足继承要求，无任何新增功能）
     def _run_task(self) -> Optional[any]:
