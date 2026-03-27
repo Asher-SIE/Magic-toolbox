@@ -4,15 +4,21 @@ import gzip
 import logging
 import llama_cpp
 import os
-import re 
+import re
 import setting
 import sys
 import threading
 import time
-import wx
 
 from ctypes import POINTER, c_uint32, c_float, c_bool, Structure, byref, c_void_p
 from typing import Callable, Dict, List, Optional, Tuple
+
+if sys.platform == 'darwin':
+    try:
+        from AppKit import NSPasteboard, NSPasteboardTypeString
+    except ImportError:
+        NSPasteboard = None
+        NSPasteboardTypeString = None
 
 
 # 多线程管理基类
@@ -469,6 +475,7 @@ class VoiceOverHandler(BaseThreadedWorker):
 class ClipboardMonitor(BaseThreadedWorker):
     """
     监测剪贴板内容变化，并返回 (新内容, 时间戳) 元组。
+    使用 macOS NSPasteboard 实现，无需 wxPython。
     """
     def __init__(self, log_level: int = logging.INFO, loop_interval: float = 0.2):
         """
@@ -479,46 +486,42 @@ class ClipboardMonitor(BaseThreadedWorker):
         """
         super().__init__(log_level=log_level, loop_interval=loop_interval)
         self._last_content: Optional[str] = None
-        # 使用线程局部存储来保存wx.App实例
-        self._thread_local = threading.local()
-
-    def _get_wx_app(self) -> wx.App:
-        """确保每个线程都有一个wx.App实例"""
-        if not hasattr(self._thread_local, 'app'):
-            # 非GUI线程，必须创建一个wx.App实例
-            self._thread_local.app = wx.App(False)
-        return self._thread_local.app
+        self._last_change_count: int = 0
 
     def _run_task(self) -> Optional[Tuple[str, float]]:
         """
         检查剪贴板内容是否变化。
         如果变化，则返回 (新内容, 时间戳) 元组，否则返回 None。
         """
-        self._get_wx_app()
-        
-        clipboard = wx.Clipboard.Get()
-        if not clipboard.Open():
-            self.logger.error("无法打开剪贴板。")
-            return None
-            
         try:
-            # 获取文本数据
-            text_data = wx.TextDataObject()
-            if clipboard.GetData(text_data):
-                current_content = text_data.GetText()
-                
-                # 检查内容是否有效且与上次不同
-                if current_content and current_content != self._last_content:
-                    self._last_content = current_content
-                    timestamp = time.time()
-                    self.logger.debug(f"检测到剪贴板变化: {current_content[:50]}...")
-                    return (current_content, timestamp)
-                    
+            if NSPasteboard is None:
+                self.logger.error("NSPasteboard 不可用（pyobjc 未安装或非 macOS 系统）")
+                return None
+
+            pasteboard = NSPasteboard.generalPasteboard()
+            change_count = pasteboard.changeCount()
+
+            if change_count == self._last_change_count:
+                return None
+
+            self._last_change_count = change_count
+
+            current_content = pasteboard.stringForType_(NSPasteboardTypeString)
+
+            if current_content is None:
+                return None
+
+            current_str = str(current_content)
+
+            if current_str and current_str != self._last_content:
+                self._last_content = current_str
+                timestamp = time.time()
+                self.logger.debug(f"检测到剪贴板变化: {current_str[:50]}...")
+                return (current_str, timestamp)
+
         except Exception as e:
             self.logger.error(f"读取剪贴板时出错: {e}", exc_info=True)
-        finally:
-            clipboard.Close()
-            
+
         return None
 
 
@@ -651,7 +654,17 @@ class TextBrowser:
         self.focus_pos = 0  # 重置焦点位置
 
 
-    def browse(self, direction: str) -> Tuple[str]:
+    @property
+    def row_column(self) -> Tuple[int, int]:
+        """返回行列坐标 (row, col)，从1开始"""
+        return self._row_column
+
+    @property
+    def current_line(self) -> str:
+        """返回当前行内容"""
+        return self._current_line
+
+    def browse(self, direction: str) -> str:
         """
         浏览文本方法
             direction: 浏览方向
@@ -660,11 +673,11 @@ class TextBrowser:
                 - "explain_char": 返回焦点位置内容
         
         返回:
-            Tuple[朗读的文本, 行坐标(从0开始), 列坐标(从0开始), 总字数]
+            朗读的文本
         """
         # 处理当前文本内的字符浏览
         if not self.current_text:
-            return
+            return ""
         
         # 前一个字
         if direction == "prev_char":
