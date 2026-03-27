@@ -462,8 +462,9 @@ Text: {cleaned_text}"""
                 callback(cleaned_text, cached_result)
             return cached_result
 
-        # 计算单段最大字符数 (85% * 4字符/Token * 1.2缓冲 = 约4000字符)
-        max_chars = int(self.MAX_INPUT_TOKENS * 4 * 1.2)
+        ctx_window = self.DEFAULT_CONFIG["n_ctx"]
+        safe_margin = 158
+        max_chars = (ctx_window - safe_margin) // 2 * 4
         
         # 使用新的分段逻辑
         segments = self._split_text_by_punctuation(cleaned_text, max_chars)
