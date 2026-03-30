@@ -191,8 +191,8 @@ class Translator(BaseThreadedWorker):
             u"\U000024C2-\U000025FF"  # enclosed characters
             "]+", flags=re.UNICODE)
         text = emoji_pattern.sub('', text)
-        # 去除控制字符
-        text = re.sub(r"[\x00-\x1F\x7F-\x9F]", '', text)
+        # 去除控制字符（保留 \n \r 等换行相关字符）
+        text = re.sub(r"[\x00-\x09\x0B\x0C\x0E-\x1F\x7F-\x9F]", '', text)
         return text.strip()
 
     def _split_text_by_punctuation(self, text: str, max_chars: int) -> List[str]:
@@ -463,8 +463,8 @@ Text: {cleaned_text}"""
             return cached_result
 
         ctx_window = self.DEFAULT_CONFIG["n_ctx"]
-        safe_margin = 158
-        max_chars = (ctx_window - safe_margin) // 2 * 4
+        safe_margin = 200
+        max_chars = int((ctx_window - safe_margin) * 0.4)
         
         # 使用新的分段逻辑
         segments = self._split_text_by_punctuation(cleaned_text, max_chars)
@@ -475,8 +475,11 @@ Text: {cleaned_text}"""
                 continue
             
             segment = segment.strip()
+            
+            segment_normalized = segment.replace('\n', ' ')
+            
             prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
-Text: {segment}"""
+Text: {segment_normalized}"""
             
             try:
                 output = self._model.create_completion(
@@ -484,12 +487,11 @@ Text: {segment}"""
                     max_tokens=768,
                     temperature=0.33,
                     top_p=0.9,
-                    stop=["\n"],
                     echo=False,
                     repeat_penalty=1.1
                 )
                 translated_segment = output["choices"][0]["text"].strip()
-                translated_segment = self._post_process_translation(translated_segment, segment)
+                translated_segment = self._post_process_translation(translated_segment, segment_normalized)
                 
                 all_translated.append(translated_segment)
                 
