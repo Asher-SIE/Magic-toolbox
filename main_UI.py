@@ -650,6 +650,9 @@ class MainFrame(wx.Frame):
         self._clipboard_filter_keyword = ""  # 搜索关键词
         self._clipboard_filtered_data = None  # 筛选后的数据
         
+        self._is_translating = False
+        self._translation_lock = threading.Lock()
+        
         self.edit_dialog = None
         
         self.lang_codes = [
@@ -1626,8 +1629,34 @@ class MainFrame(wx.Frame):
                 if result_text:
                     self.vo_handler.speak_text(result_text)
                     return
-                result_text = self.translator.translate(vo_text, self._source_lang, self._target_lang)
-                self.vo_handler.speak_text(result_text)
+                
+                if not self._translation_lock.acquire(blocking=False):
+                    self.vo_handler.speak_text(setting._('translation_in_progress'))
+                    return
+                
+                def translate_worker():
+                    try:
+                        accumulated = []
+                        def callback(seg, trans):
+                            accumulated.append(trans)
+                            wx.CallAfter(self._update_translation_result, '\n\n'.join(accumulated))
+                        
+                        result = self.translator.translate_with_streaming(
+                            vo_text, self._source_lang, self._target_lang, callback=callback
+                        )
+                        if result:
+                            wx.CallAfter(self.vo_handler.speak_text, result)
+                        else:
+                            wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+                    except Exception as e:
+                        logging.warning(f"翻译失败: {e}")
+                        wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+                    finally:
+                        self._is_translating = False
+                        self._translation_lock.release()
+                
+                self._is_translating = True
+                threading.Thread(target=translate_worker, daemon=True).start()
         else:
             self.text_ctrl.SetValue(setting._('vo_warning'))
 
@@ -1653,8 +1682,34 @@ class MainFrame(wx.Frame):
                 if result_text:
                     self.vo_handler.speak_text(result_text)
                     return
-                result_text = self.translator.translate(vo_text, self._target_lang, self._source_lang)
-                self.vo_handler.speak_text(result_text)
+                
+                if not self._translation_lock.acquire(blocking=False):
+                    self.vo_handler.speak_text(setting._('translation_in_progress'))
+                    return
+                
+                def translate_worker():
+                    try:
+                        accumulated = []
+                        def callback(seg, trans):
+                            accumulated.append(trans)
+                            wx.CallAfter(self._update_translation_result, '\n\n'.join(accumulated))
+                        
+                        result = self.translator.translate_with_streaming(
+                            vo_text, self._target_lang, self._source_lang, callback=callback
+                        )
+                        if result:
+                            wx.CallAfter(self.vo_handler.speak_text, result)
+                        else:
+                            wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+                    except Exception as e:
+                        logging.warning(f"翻译失败: {e}")
+                        wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+                    finally:
+                        self._is_translating = False
+                        self._translation_lock.release()
+                
+                self._is_translating = True
+                threading.Thread(target=translate_worker, daemon=True).start()
         else:
             self.text_ctrl.SetValue(setting._('vo_warning'))
 
@@ -1972,10 +2027,14 @@ class MainFrame(wx.Frame):
         result_text = self.translator.lookup_dictionary(text)
         if result_text:
             self.text_ctrl.SetValue(result_text)
-            #self.vo_handler.speak_text(result_text)
+            return
+        
+        if not self._translation_lock.acquire(blocking=False):
+            wx.MessageBox(setting._('translation_in_progress'), setting._('warning'), wx.OK | wx.ICON_WARNING)
             return
         
         if not self.translator.model_available:
+            self._translation_lock.release()
             self.vo_handler.speak_text(setting._("model_unavailable"))
             return
         
@@ -1994,12 +2053,14 @@ class MainFrame(wx.Frame):
                 result_text = self.translator.translate(text, source_lang, target_lang)
                 if result_text:
                     wx.CallAfter(self.text_ctrl.SetValue, result_text)
-                    #wx.CallAfter(self.vo_handler.speak_text, result_text)
                 else:
                     wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             except Exception as e:
                 logging.warning(f"翻译失败: {e}")
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+            finally:
+                self._is_translating = False
+                self._translation_lock.release()
         
         thread = threading.Thread(target=translate_worker, daemon=True)
         thread.start()
@@ -2026,6 +2087,9 @@ class MainFrame(wx.Frame):
             except Exception as e:
                 logging.warning(f"翻译失败: {e}")
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+            finally:
+                self._is_translating = False
+                self._translation_lock.release()
         
         thread = threading.Thread(target=translate_worker, daemon=True)
         thread.start()

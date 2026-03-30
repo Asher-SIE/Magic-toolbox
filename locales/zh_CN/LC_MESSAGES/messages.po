@@ -416,6 +416,14 @@ msgid "translation_failed"
 msgstr "翻译失败"
 
 #: main_UI.py
+msgid "translation_in_progress"
+msgstr "正在进行翻译，请稍候"
+
+#: main_UI.py
+msgid "warning"
+msgstr "提示"
+
+#: main_UI.py
 msgid "exit_app"
 msgstr "退出 Magic Toolbox"
 
