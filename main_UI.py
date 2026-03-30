@@ -1634,6 +1634,11 @@ class MainFrame(wx.Frame):
                     self.vo_handler.speak_text(setting._('translation_in_progress'))
                     return
                 
+                if not self.translator.model_available:
+                    self._translation_lock.release()
+                    self.vo_handler.speak_text(setting._("model_unavailable"))
+                    return
+                
                 def translate_worker():
                     try:
                         accumulated = []
@@ -1685,6 +1690,11 @@ class MainFrame(wx.Frame):
                 
                 if not self._translation_lock.acquire(blocking=False):
                     self.vo_handler.speak_text(setting._('translation_in_progress'))
+                    return
+                
+                if not self.translator.model_available:
+                    self._translation_lock.release()
+                    self.vo_handler.speak_text(setting._("model_unavailable"))
                     return
                 
                 def translate_worker():
