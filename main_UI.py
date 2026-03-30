@@ -182,9 +182,27 @@ class FindReplaceDialog(wx.Dialog):
         if self._find('prev'):
             self.EndModal(wx.ID_OK)
     
+    def _unescape_replace_text(self, text: str) -> str:
+        """解析替换文本中的转义字符 \\t, \\n 等"""
+        if not text:
+            return text
+        
+        escape_map = {
+            '\\t': '\t',
+            '\\n': '\n',
+            '\\r': '\r',
+            '\\\\': '\\'
+        }
+        
+        result = text
+        for esc, char in escape_map.items():
+            result = result.replace(esc, char)
+        
+        return result
+    
     def on_replace_one(self, event):
         search_text = self.find_input.GetValue()
-        replace_text = self.replace_input.GetValue()
+        replace_text = self._unescape_replace_text(self.replace_input.GetValue())
         
         if not search_text:
             return
@@ -214,7 +232,7 @@ class FindReplaceDialog(wx.Dialog):
     
     def on_replace_all(self, event):
         search_text = self.find_input.GetValue()
-        replace_text = self.replace_input.GetValue()
+        replace_text = self._unescape_replace_text(self.replace_input.GetValue())
         
         if not search_text:
             return
@@ -1641,8 +1659,13 @@ class MainFrame(wx.Frame):
                 
                 def translate_worker():
                     try:
+                        accumulated = []
+                        def callback(seg, trans):
+                            accumulated.append(trans)
+                            wx.CallAfter(self._update_translation_result, '\n\n'.join(accumulated))
+                        
                         result = self.translator.translate_with_streaming(
-                            vo_text, self._source_lang, self._target_lang
+                            vo_text, self._source_lang, self._target_lang, callback=callback
                         )
                         if result:
                             wx.CallAfter(self.vo_handler.speak_text, result)
@@ -1694,8 +1717,13 @@ class MainFrame(wx.Frame):
                 
                 def translate_worker():
                     try:
+                        accumulated = []
+                        def callback(seg, trans):
+                            accumulated.append(trans)
+                            wx.CallAfter(self._update_translation_result, '\n\n'.join(accumulated))
+                        
                         result = self.translator.translate_with_streaming(
-                            vo_text, self._target_lang, self._source_lang
+                            vo_text, self._target_lang, self._source_lang, callback=callback
                         )
                         if result:
                             wx.CallAfter(self.vo_handler.speak_text, result)
