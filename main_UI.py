@@ -1641,13 +1641,8 @@ class MainFrame(wx.Frame):
                 
                 def translate_worker():
                     try:
-                        accumulated = []
-                        def callback(seg, trans):
-                            accumulated.append(trans)
-                            wx.CallAfter(self._update_translation_result, '\n\n'.join(accumulated))
-                        
                         result = self.translator.translate_with_streaming(
-                            vo_text, self._source_lang, self._target_lang, callback=callback
+                            vo_text, self._source_lang, self._target_lang
                         )
                         if result:
                             wx.CallAfter(self.vo_handler.speak_text, result)
@@ -1699,13 +1694,8 @@ class MainFrame(wx.Frame):
                 
                 def translate_worker():
                     try:
-                        accumulated = []
-                        def callback(seg, trans):
-                            accumulated.append(trans)
-                            wx.CallAfter(self._update_translation_result, '\n\n'.join(accumulated))
-                        
                         result = self.translator.translate_with_streaming(
-                            vo_text, self._target_lang, self._source_lang, callback=callback
+                            vo_text, self._target_lang, self._source_lang
                         )
                         if result:
                             wx.CallAfter(self.vo_handler.speak_text, result)
