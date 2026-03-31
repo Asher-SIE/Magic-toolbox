@@ -387,9 +387,11 @@ class Translator(BaseThreadedWorker):
             self.logger.debug(f"翻译缓存命中: {cleaned_text[:30]}...")
             return cached_result
 
+        cleaned_text_for_translation = cleaned_text.replace('\n', ' ').replace('\r', ' ')
+        
         if target_lang:
             prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
-Text: {cleaned_text}"""
+Text: {cleaned_text_for_translation}"""
 
         try:
             output = self._model.create_completion(
@@ -397,7 +399,7 @@ Text: {cleaned_text}"""
                 max_tokens=768,
                 temperature=0.33,
                 top_p=0.9,
-                stop=["\n"],
+                stop=[],
                 echo=False,
                 repeat_penalty=1.1
             )
