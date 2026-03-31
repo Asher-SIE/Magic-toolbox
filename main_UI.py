@@ -712,6 +712,37 @@ class MainFrame(wx.Frame):
         self.TB = TextBrowser()
         self.volume_controller = VolumeController(loop_interval=0.02)
         self.volume_controller.set_config(self._volume_limit, self._volume_target)
+        
+        # 应用启动时检查VoiceOver状态，如果未运行则后台启动
+        if not self.vo_handler.is_voiceover_running():
+            logging.info("VoiceOver未运行，后台启动VoiceOver")
+            # 使用后台线程启动VoiceOver，避免阻塞UI
+            def start_vo_background():
+                import subprocess
+                import time
+                try:
+                    # 使用同样的启动方法作为reboot_VoiceOver函数
+                    subprocess.run(['osascript', '-e', 'tell application "System Events" to key code 96 using command down'],
+                                check=True, capture_output=True)
+                    # 验证启动成功
+                    max_wait = 10
+                    wait_interval = 0.5
+                    waited = 0
+                    while waited < max_wait:
+                        if self.vo_handler.is_voiceover_running():
+                            logging.info("VoiceOver后台启动成功")
+                            break
+                        time.sleep(wait_interval)
+                        waited += wait_interval
+                    else:
+                        logging.error("VoiceOver后台启动失败")
+                except Exception as e:
+                    logging.error(f"后台启动VoiceOver时出错: {e}")
+            
+            # 在后台线程中启动VoiceOver
+            vo_thread = threading.Thread(target=start_vo_background, daemon=True)
+            vo_thread.start()
+        
         self.volume_controller.start_worker()
 
         # 初始化翻译器

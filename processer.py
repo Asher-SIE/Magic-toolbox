@@ -538,6 +538,16 @@ class VoiceOverHandler(BaseThreadedWorker):
         self._last_content: Optional[str] = None
         self._last_timestamp: float = 0.0  # 时间戳（秒）
         self.repeat_threshold = repeat_threshold  # 阈值
+        
+    def is_voiceover_running(self) -> bool:
+        """Check if VoiceOver is currently running"""
+        import subprocess
+        try:
+            # Use pgrep to check if VoiceOver process is running
+            result = subprocess.run(['pgrep', 'VoiceOver'], capture_output=True, text=True)
+            return result.returncode == 0
+        except Exception:
+            return False
 
     def get_last_phrase(self) -> Optional[Tuple[str, float]]:
         """
