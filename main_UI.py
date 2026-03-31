@@ -812,13 +812,13 @@ class MainFrame(wx.Frame):
         program_help = help_menu.Append(wx.NewId(), setting._('menu_help_program'))
         shortcuts_help = help_menu.Append(wx.NewId(), setting._('menu_help_shortcuts'))
         changelog_help = help_menu.Append(wx.NewId(), setting._('menu_help_changelog'))
-        donate_help = help_menu.Append(wx.NewId(), setting._('menu_help_donate'))
+        # donate_help = help_menu.Append(wx.NewId(), setting._('menu_help_donate'))
         download_model = help_menu.Append(wx.NewId(), setting._('menu_help_download_model'))
 
         self.Bind(wx.EVT_MENU, self.on_help_program, program_help)
         self.Bind(wx.EVT_MENU, self.on_help_shortcuts, shortcuts_help)
         self.Bind(wx.EVT_MENU, self.on_help_changelog, changelog_help)
-        self.Bind(wx.EVT_MENU, self.on_help_donate, donate_help)
+        # self.Bind(wx.EVT_MENU, self.on_help_donate, donate_help)
         self.Bind(wx.EVT_MENU, self.on_download_model, download_model)
 
         menubar.Append(help_menu, setting._('menubar_help'))
