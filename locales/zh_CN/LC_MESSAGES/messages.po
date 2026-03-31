@@ -120,8 +120,20 @@ msgid "menu_help_donate"
 msgstr "打赏"
 
 #: main_UI.py
+msgid "menu_help_download_model"
+msgstr "下载翻译模型"
+
+#: main_UI.py
 msgid "help_load_failed"
 msgstr "帮助文档加载失败"
+
+#: main_UI.py
+msgid "download_model_title"
+msgstr "下载翻译模型"
+
+#: main_UI.py
+msgid "download_model_prompt"
+msgstr "是否自动下载翻译模型？\n\n选择\"是\"将直接下载推荐模型（HY-MT1.5-1.8B-Q4_K_M.gguf），选择\"否\"可前往 Hugging Face 手动选择其他模型。"
 
 #: main_UI.py
 msgid "donate_title"

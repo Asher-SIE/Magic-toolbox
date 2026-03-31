@@ -120,8 +120,20 @@ msgid "menu_help_donate"
 msgstr "Donate"
 
 #: main_UI.py
+msgid "menu_help_download_model"
+msgstr "Download Translation Model"
+
+#: main_UI.py
 msgid "help_load_failed"
 msgstr "Failed to load help content"
+
+#: main_UI.py
+msgid "download_model_title"
+msgstr "Download Translation Model"
+
+#: main_UI.py
+msgid "download_model_prompt"
+msgstr "Would you like to automatically download the translation model?\n\nSelect \"Yes\" to directly download the recommended model (HY-MT1.5-1.8B-Q4_K_M.gguf), or select \"No\" to go to Hugging Face and manually select another model."
 
 #: main_UI.py
 msgid "donate_title"
