@@ -16,6 +16,8 @@ from AppKit import NSApplication, NSApp, NSWindow
 from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController
 from typing import Optional, Tuple
 
+import update
+
 VERSION_INFO = f'V1.1.0\nBuild: 260313'
 
 
@@ -660,6 +662,21 @@ class EditDialog(wx.Dialog):
 class MainFrame(wx.Frame):
     def __init__(self, parent, title):
         super(MainFrame, self).__init__(parent, title=title, size=(1024, 768))
+        
+        if update.is_expired():
+            wx.MessageBox(
+                setting._('version_expired_msg') % update.get_expiry_date().strftime('%Y-%m-%d'),
+                setting._('version_expired_title'),
+                wx.OK | wx.ICON_ERROR
+            )
+            os._exit(0)
+        
+        if update.is_expiring_soon():
+            wx.MessageBox(
+                setting._('version_expiring_msg') % (update.get_expiry_date().strftime('%Y-%m-%d'), update.days_until_expiry()),
+                setting._('version_expiring_title'),
+                wx.OK | wx.ICON_WARNING
+            )
         
         # 状态变量
         self.clipboard_list_data = []  # 剪贴板列表

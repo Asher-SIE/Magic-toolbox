@@ -558,3 +558,19 @@ msgstr "限制最大音量"
 #: main_UI.py
 msgid "volume_target_label"
 msgstr "音量修改为"
+
+#: update.py
+msgid "version_expired_title"
+msgstr "版本已停用"
+
+#: update.py
+msgid "version_expired_msg"
+msgstr "当前版本已于 %s 到期，请更新到新版本"
+
+#: update.py
+msgid "version_expiring_title"
+msgstr "版本即将过期"
+
+#: update.py
+msgid "version_expiring_msg"
+msgstr "当前版本将于 %s 到期，剩余 %d 天"

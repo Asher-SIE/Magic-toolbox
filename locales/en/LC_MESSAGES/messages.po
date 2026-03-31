@@ -558,3 +558,19 @@ msgstr "Volume Limit"
 #: main_UI.py
 msgid "volume_target_label"
 msgstr "Set Volume To"
+
+#: update.py
+msgid "version_expired_title"
+msgstr "Version Expired"
+
+#: update.py
+msgid "version_expired_msg"
+msgstr "This version expired on %s. Please update to a new version."
+
+#: update.py
+msgid "version_expiring_title"
+msgstr "Version Expiring Soon"
+
+#: update.py
+msgid "version_expiring_msg"
+msgstr "This version will expire on %s. %d days remaining."
