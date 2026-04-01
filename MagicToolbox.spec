@@ -45,6 +45,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='MagicToolbox.app',
-    icon=None,
+    icon='MagicToolbox.icns',
     bundle_identifier=None,
 )
