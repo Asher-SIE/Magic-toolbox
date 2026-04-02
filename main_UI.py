@@ -829,13 +829,15 @@ class MainFrame(wx.Frame):
         program_help = help_menu.Append(wx.NewId(), setting._('menu_help_program'))
         shortcuts_help = help_menu.Append(wx.NewId(), setting._('menu_help_shortcuts'))
         changelog_help = help_menu.Append(wx.NewId(), setting._('menu_help_changelog'))
-        # donate_help = help_menu.Append(wx.NewId(), setting._('menu_help_donate'))
+        donate_help = help_menu.Append(wx.NewId(), setting._('menu_help_donate'))
+        feedback_help = help_menu.Append(wx.NewId(), setting._('menu_help_feedback'))
         download_model = help_menu.Append(wx.NewId(), setting._('menu_help_download_model'))
 
         self.Bind(wx.EVT_MENU, self.on_help_program, program_help)
         self.Bind(wx.EVT_MENU, self.on_help_shortcuts, shortcuts_help)
         self.Bind(wx.EVT_MENU, self.on_help_changelog, changelog_help)
-        # self.Bind(wx.EVT_MENU, self.on_help_donate, donate_help)
+        self.Bind(wx.EVT_MENU, self.on_help_donate, donate_help)
+        self.Bind(wx.EVT_MENU, self.on_help_feedback, feedback_help)
         self.Bind(wx.EVT_MENU, self.on_download_model, download_model)
 
         menubar.Append(help_menu, setting._('menubar_help'))
@@ -1179,21 +1181,86 @@ class MainFrame(wx.Frame):
 
 
     def on_help_donate(self, event):
-        dialog = wx.Dialog(self, title=setting._("menu_help_donate"), size=(400, 300))
+        import base64
+        import hashlib
+        import io
+        import subprocess
+        from cryptography.fernet import Fernet
+        
+        import os as os_module
+        current_dir = os_module.path.dirname(os_module.path.abspath(__file__))
+        
+        result = subprocess.run(
+            ['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
+            capture_output=True, text=True
+        )
+        for line in result.stdout.split('\n'):
+            if 'IOPlatformUUID' in line:
+                machine_id = line.split('"')[-2] + '@Asher'
+                key = hashlib.sha256(machine_id.encode()).digest()
+                key_b64 = base64.urlsafe_b64encode(key)
+                fernet = Fernet(key_b64)
+                break
+        
+        qrc_path = os_module.path.join(current_dir, "resources", "qrc_encrypted.bin")
+        with open(qrc_path, 'rb') as f:
+            encrypted_data = f.read()
+        decrypted_data = fernet.decrypt(encrypted_data)
+        
+        image = wx.Image(io.BytesIO(decrypted_data))
+        bitmap = wx.Bitmap(image)
+        
+        dialog = wx.Dialog(self, title=setting._("menu_help_donate"), size=(500, 750))
         panel = wx.Panel(dialog)
         sizer = wx.BoxSizer(wx.VERTICAL)
 
         title_text = wx.StaticText(panel, label=setting._('donate_title'))
         title_text.SetFont(wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         
+        qr_bitmap = wx.StaticBitmap(panel, bitmap=bitmap)
+        
         content_text = wx.StaticText(panel, label=setting._('donate_content'))
         content_text.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        content_text.Wrap(380)
+
+        contact_btn = wx.Button(panel, label=setting._('donate_contact_btn'))
+        contact_btn.Bind(wx.EVT_BUTTON, lambda e: subprocess.run(['open', 'mailto:asher.sie@gmail.com']))
 
         btn = wx.Button(panel, label=setting._("got_it_btn"))
         btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
 
         sizer.Add(title_text, 0, wx.ALIGN_CENTER | wx.TOP, 20)
-        sizer.Add(content_text, 0, wx.ALIGN_CENTER | wx.ALL, 20)
+        sizer.Add(qr_bitmap, 0, wx.ALIGN_CENTER | wx.ALL, 10)
+        sizer.Add(content_text, 0, wx.ALIGN_CENTER | wx.LEFT | wx.RIGHT, 20)
+        sizer.Add(contact_btn, 0, wx.ALIGN_CENTER | wx.TOP, 15)
+        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM, 20)
+
+        panel.SetSizer(sizer)
+        dialog.ShowModal()
+        dialog.Destroy()
+
+
+    def on_help_feedback(self, event):
+        dialog = wx.Dialog(self, title=setting._("menu_help_feedback"), size=(400, 300))
+        panel = wx.Panel(dialog)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        title_text = wx.StaticText(panel, label=setting._('feedback_title'))
+        title_text.SetFont(wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        
+        content_text = wx.StaticText(panel, label=setting._('feedback_content'))
+        content_text.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        content_text.Wrap(350)
+
+        contact_btn = wx.Button(panel, label=setting._('feedback_contact_btn'))
+        contact_btn.Bind(wx.EVT_BUTTON, lambda e: subprocess.run(['open', 'mailto:songting_xie@apple.com']))
+
+        btn = wx.Button(panel, label=setting._("got_it_btn"))
+        btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
+
+        sizer.Add(title_text, 0, wx.ALIGN_CENTER | wx.TOP, 30)
+        sizer.Add(content_text, 0, wx.ALIGN_CENTER | wx.LEFT | wx.RIGHT, 30)
+        sizer.Add(contact_btn, 0, wx.ALIGN_CENTER | wx.TOP, 25)
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM, 20)
 
         panel.SetSizer(sizer)

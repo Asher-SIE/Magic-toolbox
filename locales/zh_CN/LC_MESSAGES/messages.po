@@ -137,11 +137,31 @@ msgstr "是否自动下载翻译模型？\n\n选择\"是\"将直接下载推荐�
 
 #: main_UI.py
 msgid "donate_title"
-msgstr "感谢支持"
+msgstr "鼓励一下开发者"
 
 #: main_UI.py
 msgid "donate_content"
-msgstr "您的支持是我继续开发的最大动力！\n\n暂未设置打赏方式，敬请期待。"
+msgstr "本应用为个人独立开发，完全免费。如果对你有所帮助，可扫描屏幕上的二维码给予支持。\n\n如有任何意见或建议，欢迎来信：\nasher.sie@gmail.com"
+
+#: main_UI.py
+msgid "donate_contact_btn"
+msgstr "联系开发者"
+
+#: main_UI.py
+msgid "menu_help_feedback"
+msgstr "反馈"
+
+#: main_UI.py
+msgid "feedback_title"
+msgstr "意见与反馈"
+
+#: main_UI.py
+msgid "feedback_content"
+msgstr "如有任何意见或建议，欢迎来信："
+
+#: main_UI.py
+msgid "feedback_contact_btn"
+msgstr "联系开发者"
 
 #: main_UI.py
 msgid "now"

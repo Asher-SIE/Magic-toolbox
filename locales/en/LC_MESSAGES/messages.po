@@ -137,11 +137,31 @@ msgstr "Would you like to automatically download the translation model?\n\nSelec
 
 #: main_UI.py
 msgid "donate_title"
-msgstr "Thank You for Your Support"
+msgstr "Support the Developer"
 
 #: main_UI.py
 msgid "donate_content"
-msgstr "Your support is my biggest motivation!\n\nDonation methods coming soon."
+msgstr "This is an independently developed personal app, completely free. If it's been helpful to you, please scan the QR code to show your support.\n\nFor any suggestions or feedback, feel free to contact:\nasher.sie@gmail.com"
+
+#: main_UI.py
+msgid "donate_contact_btn"
+msgstr "Contact Developer"
+
+#: main_UI.py
+msgid "menu_help_feedback"
+msgstr "Feedback"
+
+#: main_UI.py
+msgid "feedback_title"
+msgstr "Suggestions & Feedback"
+
+#: main_UI.py
+msgid "feedback_content"
+msgstr "For any suggestions or feedback, feel free to contact:"
+
+#: main_UI.py
+msgid "feedback_contact_btn"
+msgstr "Contact Developer"
 
 #: main_UI.py
 msgid "now"
