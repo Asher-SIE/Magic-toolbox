@@ -1210,60 +1210,82 @@ class MainFrame(wx.Frame):
         image = wx.Image(io.BytesIO(decrypted_data))
         bitmap = wx.Bitmap(image)
         
-        dialog = wx.Dialog(self, title=setting._("menu_help_donate"), size=(500, 750))
-        panel = wx.Panel(dialog)
-        sizer = wx.BoxSizer(wx.VERTICAL)
+        dialog = wx.Dialog(self, title=setting._("menu_help_donate"), size=(400, 520))
+        
+        content_panel = wx.Panel(dialog)
+        content_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        title_text = wx.StaticText(panel, label=setting._('donate_title'))
+        title_text = wx.StaticText(content_panel, label=setting._('donate_title'))
         title_text.SetFont(wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         
-        qr_bitmap = wx.StaticBitmap(panel, bitmap=bitmap)
+        qr_bitmap = wx.StaticBitmap(content_panel, bitmap=wx.Bitmap(bitmap.ConvertToImage().Scale(280, 280)))
         
-        content_text = wx.StaticText(panel, label=setting._('donate_content'))
+        content_text = wx.StaticText(content_panel, label=setting._('donate_content'))
         content_text.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-        content_text.Wrap(380)
+        content_text.Wrap(320)
 
-        contact_btn = wx.Button(panel, label=setting._('donate_contact_btn'))
-        contact_btn.Bind(wx.EVT_BUTTON, lambda e: subprocess.run(['open', 'mailto:asher.sie@gmail.com']))
-
-        btn = wx.Button(panel, label=setting._("got_it_btn"))
+        content_sizer.Add(title_text, 0, wx.ALIGN_CENTER | wx.TOP, 15)
+        content_sizer.Add(qr_bitmap, 0, wx.ALIGN_CENTER | wx.ALL, 15)
+        content_sizer.Add(content_text, 0, wx.ALIGN_CENTER | wx.LEFT | wx.RIGHT, 15)
+        content_panel.SetSizer(content_sizer)
+        
+        button_panel = wx.Panel(dialog)
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        contact_btn = wx.Button(button_panel, label=setting._('donate_contact_btn'))
+        contact_btn.Bind(wx.EVT_BUTTON, lambda e: (subprocess.run(['open', 'mailto:asher.sie@gmail.com']), dialog.Close()))
+        
+        btn = wx.Button(button_panel, label=setting._("got_it_btn"))
         btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
-
-        sizer.Add(title_text, 0, wx.ALIGN_CENTER | wx.TOP, 20)
-        sizer.Add(qr_bitmap, 0, wx.ALIGN_CENTER | wx.ALL, 10)
-        sizer.Add(content_text, 0, wx.ALIGN_CENTER | wx.LEFT | wx.RIGHT, 20)
-        sizer.Add(contact_btn, 0, wx.ALIGN_CENTER | wx.TOP, 15)
-        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM, 20)
-
-        panel.SetSizer(sizer)
+        
+        button_sizer.Add(contact_btn, 0, wx.RIGHT, 15)
+        button_sizer.Add(btn, 0)
+        button_panel.SetSizer(button_sizer)
+        
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        main_sizer.Add(content_panel, 1, wx.EXPAND)
+        main_sizer.Add(button_panel, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.TOP, 15)
+        
+        dialog.SetSizer(main_sizer)
         dialog.ShowModal()
         dialog.Destroy()
 
 
     def on_help_feedback(self, event):
-        dialog = wx.Dialog(self, title=setting._("menu_help_feedback"), size=(400, 300))
-        panel = wx.Panel(dialog)
-        sizer = wx.BoxSizer(wx.VERTICAL)
+        dialog = wx.Dialog(self, title=setting._("menu_help_feedback"), size=(400, 250))
+        
+        content_panel = wx.Panel(dialog)
+        content_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        title_text = wx.StaticText(panel, label=setting._('feedback_title'))
+        title_text = wx.StaticText(content_panel, label=setting._('feedback_title'))
         title_text.SetFont(wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         
-        content_text = wx.StaticText(panel, label=setting._('feedback_content'))
+        content_text = wx.StaticText(content_panel, label=setting._('feedback_content'))
         content_text.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-        content_text.Wrap(350)
+        content_text.Wrap(320)
 
-        contact_btn = wx.Button(panel, label=setting._('feedback_contact_btn'))
-        contact_btn.Bind(wx.EVT_BUTTON, lambda e: subprocess.run(['open', 'mailto:songting_xie@apple.com']))
-
-        btn = wx.Button(panel, label=setting._("got_it_btn"))
+        content_sizer.Add(title_text, 0, wx.ALIGN_CENTER | wx.TOP, 20)
+        content_sizer.Add(content_text, 0, wx.ALIGN_CENTER | wx.LEFT | wx.RIGHT | wx.TOP, 15)
+        content_panel.SetSizer(content_sizer)
+        
+        button_panel = wx.Panel(dialog)
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        contact_btn = wx.Button(button_panel, label=setting._('feedback_contact_btn'))
+        contact_btn.Bind(wx.EVT_BUTTON, lambda e: (subprocess.run(['open', 'mailto:songting_xie@apple.com']), dialog.Close()))
+        
+        btn = wx.Button(button_panel, label=setting._("got_it_btn"))
         btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
-
-        sizer.Add(title_text, 0, wx.ALIGN_CENTER | wx.TOP, 30)
-        sizer.Add(content_text, 0, wx.ALIGN_CENTER | wx.LEFT | wx.RIGHT, 30)
-        sizer.Add(contact_btn, 0, wx.ALIGN_CENTER | wx.TOP, 25)
-        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM, 20)
-
-        panel.SetSizer(sizer)
+        
+        button_sizer.Add(contact_btn, 0, wx.RIGHT, 15)
+        button_sizer.Add(btn, 0)
+        button_panel.SetSizer(button_sizer)
+        
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        main_sizer.Add(content_panel, 1, wx.EXPAND)
+        main_sizer.Add(button_panel, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.TOP, 15)
+        
+        dialog.SetSizer(main_sizer)
         dialog.ShowModal()
         dialog.Destroy()
 

@@ -157,7 +157,7 @@ msgstr "Suggestions & Feedback"
 
 #: main_UI.py
 msgid "feedback_content"
-msgstr "For any suggestions or feedback, feel free to contact:"
+msgstr "For any suggestions or feedback, feel free to contact:\n\n  songting_xie@apple.com"
 
 #: main_UI.py
 msgid "feedback_contact_btn"
@@ -165,7 +165,7 @@ msgstr "Contact Developer"
 
 #: main_UI.py
 msgid "now"
-msgstr "Is"
+msgstr "Current"
 
 #: main_UI.py
 msgid "row"

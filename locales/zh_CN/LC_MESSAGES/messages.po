@@ -141,7 +141,7 @@ msgstr "鼓励一下开发者"
 
 #: main_UI.py
 msgid "donate_content"
-msgstr "本应用为个人独立开发，完全免费。如果对你有所帮助，可扫描屏幕上的二维码给予支持。\n\n如有任何意见或建议，欢迎来信：\nasher.sie@gmail.com"
+msgstr "本应用为个人独立开发，完全免费。如果对你有所帮助，可扫描屏幕上的二维码给予支持。\n\n如有任何意见或建议，欢迎来信与我交流：\n  asher.sie@gmail.com"
 
 #: main_UI.py
 msgid "donate_contact_btn"
@@ -153,11 +153,11 @@ msgstr "反馈"
 
 #: main_UI.py
 msgid "feedback_title"
-msgstr "意见与反馈"
+msgstr "提供反馈"
 
 #: main_UI.py
 msgid "feedback_content"
-msgstr "如有任何意见或建议，欢迎来信："
+msgstr "如有任何意见或建议，欢迎来信与我交流：\n\n  songting_xie@apple.com"
 
 #: main_UI.py
 msgid "feedback_contact_btn"
@@ -505,7 +505,7 @@ msgstr "关于 Magic Toolbox"
 
 #: main_UI.py
 msgid "got_it_btn"
-msgstr "Got it"
+msgstr "好的"
 
 #: main_UI.py
 msgid "edit_single_item_tips"
