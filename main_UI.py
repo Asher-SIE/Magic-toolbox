@@ -1242,27 +1242,14 @@ class MainFrame(wx.Frame):
 
 
     def on_help_donate(self, event):
-        import base64
-        import hashlib
         import io
-        import subprocess
         from cryptography.fernet import Fernet
+        
+        DECRYPT_KEY = b'PN19ejPlfyN7s8f0TPpPl2dSALceTI9LWF8i0-chSYc='
+        fernet = Fernet(DECRYPT_KEY)
         
         import os as os_module
         current_dir = os_module.path.dirname(os_module.path.abspath(__file__))
-        
-        result = subprocess.run(
-            ['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
-            capture_output=True, text=True
-        )
-        for line in result.stdout.split('\n'):
-            if 'IOPlatformUUID' in line:
-                machine_id = line.split('"')[-2] + '@Asher'
-                key = hashlib.sha256(machine_id.encode()).digest()
-                key_b64 = base64.urlsafe_b64encode(key)
-                fernet = Fernet(key_b64)
-                break
-        
         qrc_path = os_module.path.join(current_dir, "resources", "qrc_encrypted.bin")
         with open(qrc_path, 'rb') as f:
             encrypted_data = f.read()
