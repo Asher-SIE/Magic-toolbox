@@ -594,3 +594,55 @@ msgstr "版本即将过期"
 #: update.py
 msgid "version_expiring_msg"
 msgstr "当前版本将于 %s 到期，剩余 %d 天"
+
+#: update.py
+msgid "menu_help_check_update"
+msgstr "检查更新"
+
+#: update.py
+msgid "update_available_title"
+msgstr "发现新版本"
+
+#: update.py
+msgid "update_available_msg"
+msgstr "发现新版本 %s，是否立即下载？"
+
+#: update.py
+msgid "update_latest_title"
+msgstr "已是最新版本"
+
+#: update.py
+msgid "update_latest_msg"
+msgstr "当前已是最新版本 %s"
+
+#: update.py
+msgid "update_check_failed_title"
+msgstr "检查更新失败"
+
+#: update.py
+msgid "update_check_failed_msg"
+msgstr "无法获取最新版本信息"
+
+#: update.py
+msgid "update_downloading_title"
+msgstr "正在下载"
+
+#: update.py
+msgid "update_downloading_msg"
+msgstr "正在下载更新，请稍候..."
+
+#: update.py
+msgid "update_download_success_title"
+msgstr "下载完成"
+
+#: update.py
+msgid "update_download_success_msg"
+msgstr "更新已下载到：\n%s\n请手动替换 /Applications 中的应用"
+
+#: update.py
+msgid "update_download_failed_title"
+msgstr "下载失败"
+
+#: update.py
+msgid "update_download_failed_msg"
+msgstr "下载更新失败，请稍后重试"

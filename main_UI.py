@@ -18,8 +18,6 @@ from typing import Optional, Tuple
 
 import update
 
-VERSION_INFO = f'V1.1.0\nBuild: 260313'
-
 
 class FindReplaceDialog(wx.Dialog):
     def __init__(self, parent, text_ctrl, show_replace=False, last_find_pos=0,
@@ -836,14 +834,19 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_help_changelog, changelog_help)
         self.Bind(wx.EVT_MENU, self.on_download_model, download_model)
 
+        # 检查更新菜单
+        check_update = help_menu.Append(wx.NewId(), setting._('menu_help_check_update'))
+        self.Bind(wx.EVT_MENU, self.on_check_update, check_update)
+
+        # 分隔线
+        help_menu.AppendSeparator()
+
         # 根据设备类型条件性地添加打赏和反馈菜单
         is_internal = setting.is_internal_device()
         if is_internal:
-            # 内部电脑：不显示打赏菜单，显示反馈菜单
             feedback_help = help_menu.Append(wx.NewId(), setting._('menu_help_feedback'))
             self.Bind(wx.EVT_MENU, self.on_help_feedback, feedback_help)
         else:
-            # 外部电脑：不显示反馈菜单，显示打赏菜单
             donate_help = help_menu.Append(wx.NewId(), setting._('menu_help_donate'))
             self.Bind(wx.EVT_MENU, self.on_help_donate, donate_help)
 
@@ -1118,7 +1121,7 @@ class MainFrame(wx.Frame):
             panel, 
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL | wx.VSCROLL
         )
-        text_ctrl.SetValue(VERSION_INFO)
+        text_ctrl.SetValue(update.get_current_version())
         text_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
 
         # 关闭按钮
@@ -1131,6 +1134,57 @@ class MainFrame(wx.Frame):
         panel.SetSizer(sizer)
         dialog.ShowModal()
         dialog.Destroy()
+
+
+    def on_check_update(self, event):
+        """检查更新"""
+        has_update, latest_version, download_url = update.check_for_updates()
+        if has_update:
+            result = wx.MessageBox(
+                setting._('update_available_msg') % latest_version,
+                setting._('update_available_title'),
+                wx.YES_NO | wx.ICON_INFORMATION
+            )
+            if result == wx.YES:
+                wx.MessageBox(
+                    setting._('update_downloading_msg'),
+                    setting._('update_downloading_title'),
+                    wx.OK | wx.ICON_INFORMATION
+                )
+
+                def _background_download():
+                    app_path = update.start_download(latest_version, download_url)
+                    wx.CallAfter(lambda: self._show_download_result(app_path))
+
+                threading.Thread(target=_background_download, daemon=True).start()
+        elif latest_version:
+            wx.MessageBox(
+                setting._('update_latest_msg') % latest_version,
+                setting._('update_latest_title'),
+                wx.OK | wx.ICON_INFORMATION
+            )
+        else:
+            wx.MessageBox(
+                setting._('update_check_failed_msg'),
+                setting._('update_check_failed_title'),
+                wx.OK | wx.ICON_WARNING
+            )
+
+
+    def _show_download_result(self, app_path):
+        """显示下载结果"""
+        if app_path:
+            wx.MessageBox(
+                setting._('update_download_success_msg') % app_path,
+                setting._('update_download_success_title'),
+                wx.OK | wx.ICON_INFORMATION
+            )
+        else:
+            wx.MessageBox(
+                setting._('update_download_failed_msg'),
+                setting._('update_download_failed_title'),
+                wx.OK | wx.ICON_WARNING
+            )
 
 
     def on_help_program(self, event):

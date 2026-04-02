@@ -594,3 +594,55 @@ msgstr "Version Expiring Soon"
 #: update.py
 msgid "version_expiring_msg"
 msgstr "This version will expire on %s. %d days remaining."
+
+#: update.py
+msgid "menu_help_check_update"
+msgstr "Check for Updates"
+
+#: update.py
+msgid "update_available_title"
+msgstr "Update Available"
+
+#: update.py
+msgid "update_available_msg"
+msgstr "New version %s found. Download now?"
+
+#: update.py
+msgid "update_latest_title"
+msgstr "Up to Date"
+
+#: update.py
+msgid "update_latest_msg"
+msgstr "You are running the latest version %s"
+
+#: update.py
+msgid "update_check_failed_title"
+msgstr "Update Check Failed"
+
+#: update.py
+msgid "update_check_failed_msg"
+msgstr "Unable to fetch latest version info"
+
+#: update.py
+msgid "update_downloading_title"
+msgstr "Downloading"
+
+#: update.py
+msgid "update_downloading_msg"
+msgstr "Downloading update, please wait..."
+
+#: update.py
+msgid "update_download_success_title"
+msgstr "Download Complete"
+
+#: update.py
+msgid "update_download_success_msg"
+msgstr "Update downloaded to:\n%s\nPlease manually replace the app in /Applications"
+
+#: update.py
+msgid "update_download_failed_title"
+msgstr "Download Failed"
+
+#: update.py
+msgid "update_download_failed_msg"
+msgstr "Failed to download update, please try again later"
