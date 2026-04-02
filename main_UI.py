@@ -829,16 +829,23 @@ class MainFrame(wx.Frame):
         program_help = help_menu.Append(wx.NewId(), setting._('menu_help_program'))
         shortcuts_help = help_menu.Append(wx.NewId(), setting._('menu_help_shortcuts'))
         changelog_help = help_menu.Append(wx.NewId(), setting._('menu_help_changelog'))
-        donate_help = help_menu.Append(wx.NewId(), setting._('menu_help_donate'))
-        feedback_help = help_menu.Append(wx.NewId(), setting._('menu_help_feedback'))
         download_model = help_menu.Append(wx.NewId(), setting._('menu_help_download_model'))
 
         self.Bind(wx.EVT_MENU, self.on_help_program, program_help)
         self.Bind(wx.EVT_MENU, self.on_help_shortcuts, shortcuts_help)
         self.Bind(wx.EVT_MENU, self.on_help_changelog, changelog_help)
-        self.Bind(wx.EVT_MENU, self.on_help_donate, donate_help)
-        self.Bind(wx.EVT_MENU, self.on_help_feedback, feedback_help)
         self.Bind(wx.EVT_MENU, self.on_download_model, download_model)
+
+        # 根据设备类型条件性地添加打赏和反馈菜单
+        is_internal = setting.is_internal_device()
+        if is_internal:
+            # 内部电脑：不显示打赏菜单，显示反馈菜单
+            feedback_help = help_menu.Append(wx.NewId(), setting._('menu_help_feedback'))
+            self.Bind(wx.EVT_MENU, self.on_help_feedback, feedback_help)
+        else:
+            # 外部电脑：不显示反馈菜单，显示打赏菜单
+            donate_help = help_menu.Append(wx.NewId(), setting._('menu_help_donate'))
+            self.Bind(wx.EVT_MENU, self.on_help_donate, donate_help)
 
         menubar.Append(help_menu, setting._('menubar_help'))
 

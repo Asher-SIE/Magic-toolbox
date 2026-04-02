@@ -512,6 +512,19 @@ def get_locale_dir():
     return os.path.join(current_dir, "locales")
 
 
+def is_internal_device() -> bool:
+    """检测是否为内部电脑（通过检测 Self Service.app 是否存在）
+    
+    Returns:
+        True: 内部电脑（存在 Self Service.app）
+        False: 外部电脑（不存在 Self Service.app）
+    """
+    try:
+        return os.path.exists("/Applications/Self Service.app")
+    except Exception:
+        return True
+
+
 def get_current_locale():
     """获取当前语言环境"""
     return _locale
@@ -537,9 +550,13 @@ _('menu_help_shortcuts')
 _('menu_help_changelog')
 _('menu_help_donate')
 _('menu_help_download_model')
+_('menu_help_feedback')
 _('help_load_failed')
 _('donate_title')
 _('donate_content')
+_('feedback_title')
+_('feedback_content')
+_('feedback_contact_btn')
 _('download_model_title')
 _('download_model_prompt')
 _('version_expired_title')
