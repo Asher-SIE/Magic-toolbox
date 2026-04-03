@@ -248,10 +248,6 @@ msgid "edd_case_sensitive"
 msgstr "Case Sensitive"
 
 #: main_UI.py
-msgid "edd_escape"
-msgstr "Escape"
-
-#: main_UI.py
 msgid "edd_replaced_count"
 msgstr "Replaced %d occurrences"
 

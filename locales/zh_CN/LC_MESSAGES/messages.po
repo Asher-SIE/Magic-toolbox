@@ -248,10 +248,6 @@ msgid "edd_case_sensitive"
 msgstr "区分大小写"
 
 #: main_UI.py
-msgid "edd_escape"
-msgstr "转义符"
-
-#: main_UI.py
 msgid "edd_replaced_count"
 msgstr "已替换 %d 处"
 

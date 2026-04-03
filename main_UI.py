@@ -21,7 +21,7 @@ import update
 
 class FindReplaceDialog(wx.Dialog):
     def __init__(self, parent, text_ctrl, show_replace=False, last_find_pos=0,
-                 find_text="", replace_text="", use_regex=False, case_sensitive=False, use_escape=False):
+                 find_text="", replace_text="", use_regex=False, case_sensitive=False):
         super().__init__(parent, title=setting._('edd_find_replace_title'), size=(420, 180))
         self.text_ctrl = text_ctrl
         self.parent = parent
@@ -67,11 +67,8 @@ class FindReplaceDialog(wx.Dialog):
         self.regex_check.SetValue(use_regex)
         self.case_check = wx.CheckBox(panel, label=setting._('edd_case_sensitive'))
         self.case_check.SetValue(case_sensitive)
-        self.escape_check = wx.CheckBox(panel, label=setting._('edd_escape'))
-        self.escape_check.SetValue(use_escape)
         option_sizer.Add(self.regex_check, 0, wx.RIGHT, 10)
-        option_sizer.Add(self.case_check, 0, wx.RIGHT, 10)
-        option_sizer.Add(self.escape_check)
+        option_sizer.Add(self.case_check)
         
         sizer.Add(option_sizer, 0, wx.LEFT | wx.BOTTOM, 10)
         
@@ -110,7 +107,6 @@ class FindReplaceDialog(wx.Dialog):
     def _get_pattern(self, search_text):
         use_regex = self.regex_check.GetValue()
         case_sensitive = self.case_check.GetValue()
-        use_escape = self.escape_check.GetValue()
         
         if not search_text:
             return None, 0
@@ -123,11 +119,7 @@ class FindReplaceDialog(wx.Dialog):
             except re.error:
                 return None, 0
         else:
-            if use_escape:
-                escaped = re.escape(search_text)
-                pattern = re.compile(escaped, flags)
-            else:
-                pattern = re.compile(search_text, flags)
+            pattern = re.compile(search_text, flags)
         
         return pattern, 1 if use_regex else 0
     
@@ -182,27 +174,9 @@ class FindReplaceDialog(wx.Dialog):
         if self._find('prev'):
             self.EndModal(wx.ID_OK)
     
-    def _unescape_replace_text(self, text: str) -> str:
-        """解析替换文本中的转义字符 \\t, \\n 等"""
-        if not text:
-            return text
-        
-        escape_map = {
-            '\\t': '\t',
-            '\\n': '\n',
-            '\\r': '\r',
-            '\\\\': '\\'
-        }
-        
-        result = text
-        for esc, char in escape_map.items():
-            result = result.replace(esc, char)
-        
-        return result
-    
     def on_replace_one(self, event):
         search_text = self.find_input.GetValue()
-        replace_text = self._unescape_replace_text(self.replace_input.GetValue())
+        replace_text = self.replace_input.GetValue()
         
         if not search_text:
             return
@@ -232,7 +206,7 @@ class FindReplaceDialog(wx.Dialog):
     
     def on_replace_all(self, event):
         search_text = self.find_input.GetValue()
-        replace_text = self._unescape_replace_text(self.replace_input.GetValue())
+        replace_text = self.replace_input.GetValue()
         
         if not search_text:
             return
@@ -261,7 +235,6 @@ class EditDialog(wx.Dialog):
         self.last_replace_text = ""
         self.last_regex = False
         self.last_case = False
-        self.last_escape = False
 
         #  撤销/重做
         self.undo_stack = []  # 撤销栈：存储 (文本内容
@@ -539,8 +512,7 @@ class EditDialog(wx.Dialog):
                 find_text=self.last_find_text,
                 replace_text=self.last_replace_text,
                 use_regex=self.last_regex,
-                case_sensitive=self.last_case,
-                use_escape=self.last_escape
+                case_sensitive=self.last_case
             )
             self.Enable(False)
             result = self.find_replace_dialog.ShowModal()
@@ -549,7 +521,6 @@ class EditDialog(wx.Dialog):
             self.last_replace_text = self.find_replace_dialog.replace_input.GetValue()
             self.last_regex = self.find_replace_dialog.regex_check.GetValue()
             self.last_case = self.find_replace_dialog.case_check.GetValue()
-            self.last_escape = self.find_replace_dialog.escape_check.GetValue()
             self.Enable(True)
             self.app.Bind(wx.EVT_KEY_DOWN, self.on_app_key_down)
             self.find_replace_dialog = None
@@ -612,11 +583,7 @@ class EditDialog(wx.Dialog):
             except re.error:
                 return None, 0
         else:
-            if self.last_escape:
-                escaped = re.escape(search_text)
-                pattern = re.compile(escaped, flags)
-            else:
-                pattern = re.compile(search_text, flags)
+            pattern = re.compile(search_text, flags)
         
         return pattern, 1 if self.last_regex else 0
 
