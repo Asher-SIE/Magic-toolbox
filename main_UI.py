@@ -676,6 +676,9 @@ class MainFrame(wx.Frame):
                 wx.OK | wx.ICON_WARNING
             )
         
+        # 启动时后台检查更新
+        self._check_update_on_startup()
+        
         # 状态变量
         self.clipboard_list_data = []  # 剪贴板列表
         self.current_clipboard_idx = -1
@@ -1138,8 +1141,25 @@ class MainFrame(wx.Frame):
 
     def on_check_update(self, event):
         """检查更新"""
+        self._do_check_update()
+
+
+    def _check_update_on_startup(self):
+        """启动时后台检查更新"""
+        def _background_check():
+            import time
+            time.sleep(2)  # 等待UI加载完成
+            wx.CallAfter(lambda: self._do_check_update(silent=True, speak=True))
+
+        threading.Thread(target=_background_check, daemon=True).start()
+
+
+    def _do_check_update(self, silent=False, speak=False):
+        """执行更新检查"""
         has_update, latest_version, download_url = update.check_for_updates()
         if has_update:
+            if speak:
+                self.vo_handler.speak_text(setting._('update_available_msg') % latest_version)
             result = wx.MessageBox(
                 setting._('update_available_msg') % latest_version,
                 setting._('update_available_title'),
@@ -1153,29 +1173,30 @@ class MainFrame(wx.Frame):
                 )
 
                 def _background_download():
-                    app_path = update.start_download(latest_version, download_url)
-                    wx.CallAfter(lambda: self._show_download_result(app_path))
+                    download_result = update.start_download(latest_version, download_url)
+                    wx.CallAfter(lambda: self._show_download_result(download_result[0], download_result[1], latest_version))
 
                 threading.Thread(target=_background_download, daemon=True).start()
-        elif latest_version:
+        elif latest_version and not silent:
             wx.MessageBox(
                 setting._('update_latest_msg') % latest_version,
                 setting._('update_latest_title'),
                 wx.OK | wx.ICON_INFORMATION
             )
-        else:
-            wx.MessageBox(
-                setting._('update_check_failed_msg'),
-                setting._('update_check_failed_title'),
-                wx.OK | wx.ICON_WARNING
-            )
 
 
-    def _show_download_result(self, app_path):
+    def _show_download_result(self, app_path, need_manual_process, latest_version):
         """显示下载结果"""
         if app_path:
+            if need_manual_process:
+                msg = setting._('update_download_conflict_msg').format(
+                    app_path=app_path,
+                    version=latest_version
+                )
+            else:
+                msg = setting._('update_download_success_msg') % app_path
             wx.MessageBox(
-                setting._('update_download_success_msg') % app_path,
+                msg,
                 setting._('update_download_success_title'),
                 wx.OK | wx.ICON_INFORMATION
             )

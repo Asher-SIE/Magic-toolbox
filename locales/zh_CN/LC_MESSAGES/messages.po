@@ -141,7 +141,7 @@ msgstr "鼓励一下开发者"
 
 #: main_UI.py
 msgid "donate_content"
-msgstr "本应用为个人独立开发，完全免费。如果对你有所帮助，可扫描屏幕上的二维码给予支持。\n\n如有任何意见或建议，欢迎来信与我交流：\n  asher.sie@gmail.com"
+msgstr "本应用全程免费无广告，希望对你能有所帮助，如果愿意的话，可微信扫描屏幕上的二维码小小支持一下哦，不胜感激。\n\n任何建议与想法，欢迎来信：\nasher.sie@gmail.com"
 
 #: main_UI.py
 msgid "donate_contact_btn"
@@ -268,7 +268,7 @@ msgid "edd_not_found"
 msgstr "未找到"
 
 #: main_UI.py
-msgid "msg_motice"
+msgid "msg_notice"
 msgstr "提示"
 
 #: main_UI.py
@@ -629,7 +629,7 @@ msgstr "正在下载"
 
 #: update.py
 msgid "update_downloading_msg"
-msgstr "正在下载更新，请稍候..."
+msgstr "正在下载更新到桌面，请稍候..."
 
 #: update.py
 msgid "update_download_success_title"
@@ -646,3 +646,8 @@ msgstr "下载失败"
 #: update.py
 msgid "update_download_failed_msg"
 msgstr "下载更新失败，请稍后重试"
+
+#: update.py
+msgid "update_download_conflict_msg"
+msgstr "更新已下载到桌面：\n{app_path}\n\n检测到桌面已有旧版应用，请将旧版拖到废纸篓后使用新版"
+

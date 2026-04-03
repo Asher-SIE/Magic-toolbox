@@ -93,7 +93,7 @@ msgstr "Reboot VoiceOver"
 
 #: main_UI.py
 msgid "menu_opt_reboot_proc"
-msgstr "Reboot Processer"
+msgstr "Reboot Processor"
 
 #: main_UI.py
 msgid "menu_opt_clean_list"
@@ -268,7 +268,7 @@ msgid "edd_not_found"
 msgstr "Not found"
 
 #: main_UI.py
-msgid "msg_motice"
+msgid "msg_notice"
 msgstr "Notice"
 
 #: main_UI.py
@@ -646,3 +646,8 @@ msgstr "Download Failed"
 #: update.py
 msgid "update_download_failed_msg"
 msgstr "Failed to download update, please try again later"
+
+#: update.py
+msgid "update_download_conflict_msg"
+msgstr "Update downloaded to desktop:\n{app_path}\n\nOld version detected on desktop. Please move the old version to Trash before using the new version."
+

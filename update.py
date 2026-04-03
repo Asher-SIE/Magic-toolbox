@@ -5,11 +5,11 @@ import subprocess
 import zipfile
 
 
-ACTIVATION_DATE = datetime.date(2026, 3, 31)
+ACTIVATION_DATE = datetime.date(2026, 4, 3)
 EXPIRY_DAYS = 180
 EXPIRY_WARNING_DAYS = 30
 
-CURRENT_VERSION = "0.1.0"
+CURRENT_VERSION = "1.1.0"
 GITHUB_REPO_OWNER = "Asher-SIE"
 GITHUB_REPO_NAME = "Magic-toolbox"
 
@@ -133,16 +133,26 @@ def start_download(latest_version, download_url):
     zip_path = os.path.join(desktop, filename)
 
     if not _download_file(download_url, zip_path):
-        return None
+        return None, False
 
     try:
         app_path = _unzip_and_remove_extattr(zip_path)
     except Exception:
         if os.path.exists(zip_path):
             os.remove(zip_path)
-        return None
+        return None, False
 
     if os.path.exists(zip_path):
         os.remove(zip_path)
 
-    return app_path
+    # 检查桌面是否已有同名 app，如有则重命名新版
+    existing_app = os.path.join(desktop, "MagicToolbox.app")
+    if os.path.exists(existing_app):
+        rename_path = os.path.join(desktop, f"MagicToolbox-{latest_version}.app")
+        os.rename(app_path, rename_path)
+        app_path = rename_path
+        need_manual_process = True
+    else:
+        need_manual_process = False
+
+    return app_path, need_manual_process
