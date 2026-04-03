@@ -1,0 +1,36 @@
+MagicToolbox
+MagicToolbox is an assistive tool designed exclusively for macOS VoiceOver visually impaired users, integrating core features including real-time translation, clipboard management, and one-click text processing.
+
+Features
+Translation Features
+- Real-time Translation: Supports instant translation of content read aloud by VoiceOver
+- Multi-language Support: Supports over 38 languages, including English, Chinese, French, Japanese, Korean, Spanish, etc.
+- Offline Translation: Powered by the Tencent Hunyuan Large Language Model (model file must be downloaded separately), works without an internet connection
+- Long Text Translation: Intelligently splits long articles, auto-translates in segments and combines complete results
+- Translation Cache: Records translation history, quickly returns results for identical texts
+
+Clipboard Management
+- History Records: Automatically saves clipboard content and supports browsing history
+- Multi-selection Operations: Supports checking multiple records for batch copy and delete operations
+- Editing Function: Built-in text editor with undo and redo functionality
+- Quick Processing: Provides handy features including removing blank spaces, merging spaces, converting numbers to Chinese characters, and text splitting
+
+Voice Enhancement
+- VoiceOver Integration: Optimized for VoiceOver, works seamlessly with the screen reader
+- Volume Limit: Built-in hearing protection mechanism, automatically limits volume to a safe range
+- Auto VoiceOver: Automatically starts VoiceOver in the background if it is not running when the app launches
+- Character Explanation: Supports viewing detailed explanations of individual characters
+- Content Appending: Supports appending and copying text read aloud by VoiceOver
+
+Permission Requirements
+On first use, please grant the following permissions:
+
+1. Open VoiceOver Utility -> General -> Check "Allow AppleScript to control VoiceOver"
+2. Open System Settings -> Privacy & Security -> Accessibility -> "Allow the apps below to control your computer" -> Add MagicToolbox to the list
+
+Usage
+Interface Navigation
+The app uses a layout with a left navigation bar and a right content panel:
+- Translation Panel: Enter text to perform translation
+- Clipboard Panel: Browse and manage clipboard history
+- Settings Panel: Configure the translation model path and the maximum number of saved clipboard records

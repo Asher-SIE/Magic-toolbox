@@ -1,0 +1,649 @@
+# Chinese translations for Magic Toolbox.
+# Copyright (C) 2024 Magic Toolbox
+# This file is distributed under the same license as the Magic Toolbox package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Magic Toolbox 1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-01 00:00+0000\n"
+"PO-Revision-Date: 2024-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Chinese\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: main_UI.py
+msgid "app_name"
+msgstr "Magic Toolbox"
+
+#: main_UI.py
+msgid "editor_title"
+msgstr "编辑剪贴板内容"
+
+#: main_UI.py
+msgid "tbr_mode"
+msgstr "模式"
+
+#: main_UI.py
+msgid "trans_radio"
+msgstr "翻译"
+
+#: main_UI.py
+msgid "clipboard_radio"
+msgstr "剪贴板"
+
+#: main_UI.py
+msgid "copy_btn"
+msgstr "拷贝"
+
+#: main_UI.py
+msgid "copy_btn_tips"
+msgstr "复制到剪贴板"
+
+#: main_UI.py
+msgid "delete_btn"
+msgstr "删除"
+
+#: main_UI.py
+msgid "delete_btn_tips"
+msgstr "删除选中项"
+
+#: main_UI.py
+msgid "edit_btn"
+msgstr "编辑"
+
+#: main_UI.py
+msgid "edit_btn_tips"
+msgstr "编辑选中项"
+
+#: main_UI.py
+msgid "confirm_btn"
+msgstr "确定"
+
+#: main_UI.py
+msgid "cancel_btn"
+msgstr "取消"
+
+#: main_UI.py
+msgid "close_btn"
+msgstr "关闭"
+
+#: main_UI.py
+msgid "vo_warning"
+msgstr "获取VoiceOver朗读内容失败"
+
+#: main_UI.py
+msgid "model_warning"
+msgstr "翻译模型加载失败,仅保留本地词典功能"
+
+#: main_UI.py
+msgid "menu_about"
+msgstr "关于 Magic Toolbox"
+
+#: main_UI.py
+msgid "menubar_opt"
+msgstr "操作"
+
+#: main_UI.py
+msgid "menu_opt_rebootVO"
+msgstr "重启旁白"
+
+#: main_UI.py
+msgid "menu_opt_reboot_proc"
+msgstr "重启处理器"
+
+#: main_UI.py
+msgid "menu_opt_clean_list"
+msgstr "清空剪贴板列表"
+
+#: main_UI.py
+msgid "menubar_help"
+msgstr "帮助"
+
+#: main_UI.py
+msgid "menu_help_program"
+msgstr "Magictoolbox帮助"
+
+#: main_UI.py
+msgid "menu_help_shortcuts"
+msgstr "快捷键说明"
+
+#: main_UI.py
+msgid "menu_help_changelog"
+msgstr "更新日志"
+
+#: main_UI.py
+msgid "menu_help_donate"
+msgstr "打赏"
+
+#: main_UI.py
+msgid "menu_help_download_model"
+msgstr "下载翻译模型"
+
+#: main_UI.py
+msgid "help_load_failed"
+msgstr "帮助文档加载失败"
+
+#: main_UI.py
+msgid "download_model_title"
+msgstr "下载翻译模型"
+
+#: main_UI.py
+msgid "download_model_prompt"
+msgstr "是否自动下载翻译模型？\n\n选择\"是\"将直接下载推荐模型（HY-MT1.5-1.8B-Q4_K_M.gguf），选择\"否\"可前往 Hugging Face 手动选择其他模型。"
+
+#: main_UI.py
+msgid "donate_title"
+msgstr "鼓励一下开发者"
+
+#: main_UI.py
+msgid "donate_content"
+msgstr "本应用全程免费无广告，希望对你能有所帮助，如果愿意的话，可微信扫描屏幕上的二维码小小支持一下哦，不胜感激。\n\n任何建议与想法，欢迎来信：\nasher.sie@gmail.com"
+
+#: main_UI.py
+msgid "donate_contact_btn"
+msgstr "联系开发者"
+
+#: main_UI.py
+msgid "menu_help_feedback"
+msgstr "反馈"
+
+#: main_UI.py
+msgid "feedback_title"
+msgstr "提供反馈"
+
+#: main_UI.py
+msgid "feedback_content"
+msgstr "如有任何意见或建议，欢迎来信与我交流：\n\n  songting_xie@apple.com"
+
+#: main_UI.py
+msgid "feedback_contact_btn"
+msgstr "联系开发者"
+
+#: main_UI.py
+msgid "now"
+msgstr "当前"
+
+#: main_UI.py
+msgid "row"
+msgstr "行"
+
+#: main_UI.py
+msgid "column"
+msgstr "列"
+
+#: main_UI.py
+msgid "total_lines"
+msgstr "共"
+
+#: main_UI.py
+msgid "total_chars"
+msgstr "个字"
+
+#: main_UI.py
+msgid "edd_more_btn"
+msgstr "更多"
+
+#: main_UI.py
+msgid "edd_remove_whitespace_btn"
+msgstr "删除所有空白符"
+
+#: main_UI.py
+msgid "edd_merge_spaces_btn"
+msgstr "合并连续空格"
+
+#: main_UI.py
+msgid "edd_num_to_chinese_btn"
+msgstr "数字转中文"
+
+#: main_UI.py
+msgid "edd_punc_to_newline_btn"
+msgstr "分句"
+
+#: main_UI.py
+msgid "edd_find_replace_btn"
+msgstr "查找/替换"
+
+#: main_UI.py
+msgid "edd_show_replace"
+msgstr "显示替换"
+
+#: main_UI.py
+msgid "edd_find_btn"
+msgstr "查找"
+
+#: main_UI.py
+msgid "edd_replace_btn"
+msgstr "替换"
+
+#: main_UI.py
+msgid "edd_find_replace_title"
+msgstr "查找/替换"
+
+#: main_UI.py
+msgid "edd_find_next"
+msgstr "查找下一个"
+
+#: main_UI.py
+msgid "edd_find_prev"
+msgstr "查找上一个"
+
+#: main_UI.py
+msgid "edd_replace_one"
+msgstr "替换"
+
+#: main_UI.py
+msgid "edd_replace_all"
+msgstr "替换全部"
+
+#: main_UI.py
+msgid "edd_use_regex"
+msgstr "正则表达式"
+
+#: main_UI.py
+msgid "edd_case_sensitive"
+msgstr "区分大小写"
+
+#: main_UI.py
+msgid "edd_replaced_count"
+msgstr "已替换 %d 处"
+
+#: main_UI.py
+msgid "edd_find_label"
+msgstr "查找:"
+
+#: main_UI.py
+msgid "edd_replace_label"
+msgstr "替换为:"
+
+#: main_UI.py
+msgid "edd_not_found"
+msgstr "未找到"
+
+#: main_UI.py
+msgid "msg_notice"
+msgstr "提示"
+
+#: main_UI.py
+msgid "msg_is_close"
+msgstr "确定要退出吗？"
+
+#: main_UI.py
+msgid "trans_lang_box"
+msgstr "翻译语言"
+
+#: main_UI.py
+msgid "source_lang"
+msgstr "源语言"
+
+#: main_UI.py
+msgid "target_lang"
+msgstr "目标语言"
+
+#: main_UI.py
+msgid "lang_English"
+msgstr "英语"
+
+#: main_UI.py
+msgid "lang_Chinese"
+msgstr "简体中文"
+
+#: main_UI.py
+msgid "lang_French"
+msgstr "法语"
+
+#: main_UI.py
+msgid "lang_Portuguese"
+msgstr "葡萄牙语"
+
+#: main_UI.py
+msgid "lang_Spanish"
+msgstr "西班牙语"
+
+#: main_UI.py
+msgid "lang_Japanese"
+msgstr "日语"
+
+#: main_UI.py
+msgid "lang_Turkish"
+msgstr "土耳其语"
+
+#: main_UI.py
+msgid "lang_Russian"
+msgstr "俄语"
+
+#: main_UI.py
+msgid "lang_Arabic"
+msgstr "阿拉伯语"
+
+#: main_UI.py
+msgid "lang_Korean"
+msgstr "韩语"
+
+#: main_UI.py
+msgid "lang_Thai"
+msgstr "泰语"
+
+#: main_UI.py
+msgid "lang_Italian"
+msgstr "意大利语"
+
+#: main_UI.py
+msgid "lang_German"
+msgstr "德语"
+
+#: main_UI.py
+msgid "lang_Vietnamese"
+msgstr "越南语"
+
+#: main_UI.py
+msgid "lang_Malay"
+msgstr "马来语"
+
+#: main_UI.py
+msgid "lang_Indonesian"
+msgstr "印尼语"
+
+#: main_UI.py
+msgid "lang_Filipino"
+msgstr "菲律宾语"
+
+#: main_UI.py
+msgid "lang_Hindi"
+msgstr "印地语"
+
+#: main_UI.py
+msgid "lang_Traditional Chinese"
+msgstr "繁体中文"
+
+#: main_UI.py
+msgid "lang_Polish"
+msgstr "波兰语"
+
+#: main_UI.py
+msgid "lang_Czech"
+msgstr "捷克语"
+
+#: main_UI.py
+msgid "lang_Dutch"
+msgstr "荷兰语"
+
+#: main_UI.py
+msgid "lang_Khmer"
+msgstr "高棉语"
+
+#: main_UI.py
+msgid "lang_Burmese"
+msgstr "缅甸语"
+
+#: main_UI.py
+msgid "lang_Persian"
+msgstr "波斯语"
+
+#: main_UI.py
+msgid "lang_Gujarati"
+msgstr "古吉拉特语"
+
+#: main_UI.py
+msgid "lang_Urdu"
+msgstr "乌尔都语"
+
+#: main_UI.py
+msgid "lang_Telugu"
+msgstr "泰卢固语"
+
+#: main_UI.py
+msgid "lang_Marathi"
+msgstr "马拉地语"
+
+#: main_UI.py
+msgid "lang_Hebrew"
+msgstr "希伯来语"
+
+#: main_UI.py
+msgid "lang_Bengali"
+msgstr "孟加拉语"
+
+#: main_UI.py
+msgid "lang_Tamil"
+msgstr "泰米尔语"
+
+#: main_UI.py
+msgid "lang_Ukrainian"
+msgstr "乌克兰语"
+
+#: main_UI.py
+msgid "lang_Tibetan"
+msgstr "藏语"
+
+#: main_UI.py
+msgid "lang_Kazakh"
+msgstr "哈萨克语"
+
+#: main_UI.py
+msgid "lang_Mongolian"
+msgstr "蒙古语"
+
+#: main_UI.py
+msgid "lang_Uyghur"
+msgstr "维吾尔语"
+
+#: main_UI.py
+msgid "lang_Cantonese"
+msgstr "粤语"
+
+#: main_UI.py
+msgid "model_unavailable"
+msgstr "翻译模型不可用，请通过设置面板选择翻译模型"
+
+#: main_UI.py
+msgid "translation_failed"
+msgstr "翻译失败"
+
+#: main_UI.py
+msgid "translation_in_progress"
+msgstr "正在进行翻译，请稍候"
+
+#: main_UI.py
+msgid "warning"
+msgstr "提示"
+
+#: main_UI.py
+msgid "exit_app"
+msgstr "退出 Magic Toolbox"
+
+#: main_UI.py
+msgid "exit_app_tips"
+msgstr "退出应用（快捷键：⌘Q）"
+
+#: main_UI.py
+msgid "nav_select_func"
+msgstr "选择功能："
+
+#: main_UI.py
+msgid "trans_input_placeholder"
+msgstr "请输入待翻译文本："
+
+#: main_UI.py
+msgid "clipboard_history"
+msgstr "剪贴板历史记录："
+
+#: main_UI.py
+msgid "browse_model"
+msgstr "选择翻译模型路径"
+
+#: main_UI.py
+msgid "browse_btn"
+msgstr "打开..."
+
+#: main_UI.py
+msgid "clipboard_max_count"
+msgstr "剪贴板最大条数"
+
+#: main_UI.py
+msgid "select_model_file"
+msgstr "选择翻译模型文件"
+
+#: main_UI.py
+msgid "model_load_success"
+msgstr "翻译模型加载成功"
+
+#: main_UI.py
+msgid "model_load_failed"
+msgstr "翻译模型加载失败"
+
+#: main_UI.py
+msgid "about_title"
+msgstr "关于 Magic Toolbox"
+
+#: main_UI.py
+msgid "got_it_btn"
+msgstr "好的"
+
+#: main_UI.py
+msgid "edit_single_item_tips"
+msgstr "编辑功能仅支持单个项，请取消其他勾选后重试"
+
+#: main_UI.py
+msgid "init_failed"
+msgstr "初始化失败"
+
+#: main_UI.py
+msgid "model_unavailable_alt"
+msgstr "翻译模型不可用，请通过设置面板选择翻译模型"
+
+#: main_UI.py
+msgid "translation_failed_alt"
+msgstr "翻译失败"
+
+#: main_UI.py
+msgid "set_clipboard_failed"
+msgstr "设置剪贴板失败"
+
+#: main_UI.py
+msgid "success"
+msgstr "成功"
+
+#: main_UI.py
+msgid "error"
+msgstr "错误"
+
+#: main_UI.py
+msgid "notice"
+msgstr "提示"
+
+#: main_UI.py
+msgid "nav_translation"
+msgstr "翻译"
+
+#: main_UI.py
+msgid "nav_clipboard"
+msgstr "剪贴板"
+
+#: main_UI.py
+msgid "nav_settings"
+msgstr "设置"
+
+#: main_UI.py
+msgid "clipboard_max_count_warning_title"
+msgstr "剪贴板记录警告"
+
+#: main_UI.py
+msgid "clipboard_max_count_warning"
+msgstr "当前剪贴板有 {current} 条记录，已超过新设定的最大值 {max}。是否截断超出部分的记录？"
+
+#: main_UI.py
+msgid "clipboard_max_count_confirm"
+msgstr "确认"
+
+#: main_UI.py
+msgid "clipboard_search_placeholder"
+msgstr "搜索..."
+
+#: main_UI.py
+msgid "volume_control"
+msgstr "音量控制"
+
+#: main_UI.py
+msgid "volume_limit_label"
+msgstr "限制最大音量"
+
+#: main_UI.py
+msgid "volume_target_label"
+msgstr "音量修改为"
+
+#: update.py
+msgid "version_expired_title"
+msgstr "版本已停用"
+
+#: update.py
+msgid "version_expired_msg"
+msgstr "当前版本已于 %s 到期，请更新到新版本"
+
+#: update.py
+msgid "version_expiring_title"
+msgstr "版本即将过期"
+
+#: update.py
+msgid "version_expiring_msg"
+msgstr "当前版本将于 %s 到期，剩余 %d 天"
+
+#: update.py
+msgid "menu_help_check_update"
+msgstr "检查更新"
+
+#: update.py
+msgid "update_available_title"
+msgstr "发现新版本"
+
+#: update.py
+msgid "update_available_msg"
+msgstr "发现新版本 %s，是否立即下载？"
+
+#: update.py
+msgid "update_latest_title"
+msgstr "已是最新版本"
+
+#: update.py
+msgid "update_latest_msg"
+msgstr "当前已是最新版本 %s"
+
+#: update.py
+msgid "update_check_failed_title"
+msgstr "检查更新失败"
+
+#: update.py
+msgid "update_check_failed_msg"
+msgstr "无法获取最新版本信息"
+
+#: update.py
+msgid "update_downloading_title"
+msgstr "正在下载"
+
+#: update.py
+msgid "update_downloading_msg"
+msgstr "正在下载更新到桌面，请稍候..."
+
+#: update.py
+msgid "update_download_success_title"
+msgstr "下载完成"
+
+#: update.py
+msgid "update_download_success_msg"
+msgstr "更新已下载到：\n%s\n请手动替换 /Applications 中的应用"
+
+#: update.py
+msgid "update_download_failed_title"
+msgstr "下载失败"
+
+#: update.py
+msgid "update_download_failed_msg"
+msgstr "下载更新失败，请稍后重试"
+
+#: update.py
+msgid "update_download_conflict_msg"
+msgstr "更新已下载到桌面：\n{app_path}\n\n检测到桌面已有旧版应用，请将旧版拖到废纸篓后使用新版"
+

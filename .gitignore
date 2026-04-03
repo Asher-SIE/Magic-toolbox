@@ -15,6 +15,8 @@ Thumbs.db
 *.tmp
 build/
 dist/
+MagicToolboxAvalonia/
 
 # 忽略 macOS 系统的 .DS_Store 文件
 **/.DS_Store
+Thumbs.db
