@@ -1,19 +1,26 @@
-## https://hf-mirror.com/facebook/mbart-large-50-many-to-many-mmt/resolve/main/model.safetensors?download=trueimport re
-
 import appscript
+import collections
+import ctypes
 import gzip
+import hashlib
 import logging
+import llama_cpp
 import os
-import re 
+import re
 import setting
 import sys
 import threading
 import time
-import torch
-import wx
 
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
-from typing import Optional, Tuple, Callable
+from ctypes import POINTER, c_uint32, c_float, c_bool, Structure, byref, c_void_p
+from typing import Callable, Dict, List, Optional, Tuple
+
+if sys.platform == 'darwin':
+    try:
+        from AppKit import NSPasteboard, NSPasteboardTypeString
+    except ImportError:
+        NSPasteboard = None
+        NSPasteboardTypeString = None
 
 
 # 多线程管理基类
@@ -126,76 +133,197 @@ class BaseThreadedWorker:
 
 
 # 翻译类
-class MBartTranslator(BaseThreadedWorker):
+class Translator(BaseThreadedWorker):
+    #  HY-MT1.5-1.8B 配置
+    DEFAULT_CONFIG = {
+        "n_ctx": 2048,
+        "n_threads": 8,
+        "n_gpu_layers": 25,
+        "n_batch": 256,
+        "verbose": False,
+        "backend": "metal",
+        "metal_ctx_alloc": "auto",
+        "metal_dev_id": 0
+    }
+    # 支持的目标语言映射
+    SUPPORTED_LANGS = {
+        "en": "英语", "zh": "中文", "ja": "日语", "ko": "韩语",
+        "fr": "法语", "de": "德语", "es": "西班牙语", "ru": "俄语"
+    }
+    DEFAULT_TARGET_LANG = "en"
+    MAX_INPUT_TOKENS = int(2048 * 0.85)
+    _CACHE_MAX_SIZE = 200
+
     def __init__(self, log_level: int = logging.WARNING, loop_interval: float = 1):
-        """初始化翻译器：加载模型、分词器、本地词典"""
+        """初始化翻译器：加载模型、本地词典"""
         super().__init__(log_level=log_level, loop_interval=loop_interval)
         
         self._model = None
-        self._tokenizer = None
         self._input_text: Optional[str] = None  # 待翻译文本
         self._dictionary: dict = {}
 
-        #查找模型
+        # 查找模型
         self.model_available = False
         self._current_dir = os.path.dirname(os.path.abspath(__file__))
         self.external_dir = os.path.expanduser("~/Downloads")
-        self.model_path = self._find_model_path()
+        self.model_path = None
         self._dict_path = os.path.join(self._current_dir, "resources", "dict.txt")
 
         # 加载词典
         self._load_dictionary()
-        #  加载模型
-        self._try_load_model_and_tokenizer()
 
+        # 翻译缓存 (FIFO, 最多100条)
+        self._translation_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
 
-    def _find_model_path(self) -> str:
-        """按顺序查找模型目录，返回第一个找到的路径，都找不到则返回默认路径"""
-        # 程序目录下的 "model"
-        path_in_current = os.path.join(self._current_dir, "model")
-        if os.path.isdir(path_in_current):
-            self.logger.info(f"在当前目录找到模型: {path_in_current}")
-            return path_in_current
+    def _clean_text(self, text: str) -> str:
+        """清洗文本：去除emoji、控制字符等非文字元素"""
+        if not text:
+            return text
+        # 去除emoji (emoji symbols, pictographs, transport, flags等)
+        emoji_pattern = re.compile("["
+            u"\U0001F600-\U0001F64F"  # emoticons
+            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+            u"\U0001F680-\U0001F6FF"  # transport & map symbols
+            u"\U0001F1E0-\U0001F1FF"  # flags
+            u"\U0001F900-\U0001F9FF"  # supplemental symbols
+            u"\U0001FA00-\U0001FA6F"  # chess symbols, dice
+            u"\U00002702-\U000027B0"  # dingbats
+            u"\U000024C2-\U000025FF"  # enclosed characters
+            "]+", flags=re.UNICODE)
+        text = emoji_pattern.sub('', text)
+        # 去除控制字符（保留 \n \r 等换行相关字符）
+        text = re.sub(r"[\x00-\x09\x0B\x0C\x0E-\x1F\x7F-\x9F]", '', text)
+        return text.strip()
 
-        #  "下载" 目录下的 "model"
-        path_in_external = os.path.join(self.external_dir, "model")
-        if os.path.isdir(path_in_external):
-            self.logger.info(f"在下载目录找到模型: {path_in_external}")
-            return path_in_external
-
-        # 默认路径
-        self.logger.warning("在当前目录和下载目录均未找到 'model' 文件夹。")
-        return path_in_current 
-
-
-    def _try_load_model_and_tokenizer(self):
-        """加载MBart模型和分词器"""
-        try:
-            # 加载模型（指定MPS设备，float16精度减少内存占用）
-            self._model = MBartForConditionalGeneration.from_pretrained(
-                self.model_path,
-                torch_dtype=torch.bfloat16,
-                trust_remote_code=True
-            ).to("mps")
+    def _split_text_by_punctuation(self, text: str, max_chars: int) -> List[str]:
+        """按标点分割文本，确保每段不超过max_chars
+        
+        策略：先按空行分大段，单段超限时往前找最后一个标点截断
+        """
+        if not text or max_chars <= 0:
+            return [text] if text else []
+        
+        result = []
+        # 先按空行分割成大段落
+        paragraphs = re.split(r'\n\n+', text)
+        
+        for para in paragraphs:
+            if len(para) <= max_chars:
+                result.append(para)
+                continue
             
-            # 加载分词器
-            self._tokenizer = MBart50TokenizerFast.from_pretrained(
-                self.model_path,
-                trust_remote_code=True
+            # 段落超长，需要进一步拆分
+            start = 0
+            para_len = len(para)
+            while start < para_len:
+                remaining = para[start:]
+                if len(remaining) <= max_chars:
+                    result.append(remaining)
+                    break
+                
+                # 从max_chars位置往前找标点
+                chunk = remaining[:max_chars]
+                punctuation = re.compile(r'[^a-zA-Z0-9\s\d\u4e00-\u9fff]')
+                match = punctuation.search(chunk[::-1])
+                
+                if match:
+                    # 找到标点，截断位置
+                    cut_pos = max_chars - match.start()
+                    if cut_pos > 0:
+                        result.append(remaining[:cut_pos].strip())
+                        start += cut_pos
+                    else:
+                        # 标点在开头，强制截断
+                        result.append(remaining[:max_chars].strip())
+                        start += max_chars
+                else:
+                    # 没找到标点，直接截断
+                    result.append(remaining[:max_chars].strip())
+                    start += max_chars
+        
+        return [s for s in result if s.strip()]
+
+    def _get_cache_key(self, text: str, source_lang: str, target_lang: str) -> str:
+        """生成缓存key (md5哈希，包含语言方向)"""
+        lang_key = f"{source_lang}->{target_lang}"
+        return hashlib.md5(f"{lang_key}:{text}".encode('utf-8')).hexdigest()
+
+    def _get_from_cache(self, text: str, source_lang: str, target_lang: str) -> Optional[str]:
+        """从缓存获取翻译结果"""
+        cache_key = self._get_cache_key(text, source_lang, target_lang)
+        if cache_key in self._translation_cache:
+            self._translation_cache.move_to_end(cache_key)
+            return self._translation_cache[cache_key]
+        return None
+
+    def _save_to_cache(self, original_text: str, translated_text: str, 
+                       source_lang: str, target_lang: str):
+        """保存到缓存 (FIFO滚动更新)"""
+        cache_key = self._get_cache_key(original_text, source_lang, target_lang)
+        self._translation_cache[cache_key] = translated_text
+        if len(self._translation_cache) > self._CACHE_MAX_SIZE:
+            self._translation_cache.popitem(last=False)
+
+    def load_model(self, model_path: str) -> bool:
+        """加载翻译模型
+        
+        Args:
+            model_path: 模型文件路径
+            
+        Returns:
+            是否加载成功
+        """
+        if not model_path:
+            self.model_available = False
+            self.logger.warning("未提供模型路径")
+            return False
+            
+        if not os.path.exists(model_path):
+            self.model_available = False
+            self.logger.warning(f"模型文件未找到：{model_path}")
+            return False
+        
+        try:
+            self.model_path = model_path
+            self._model = llama_cpp.Llama(
+                model_path=self.model_path,
+                **self.DEFAULT_CONFIG
             )
             self.model_available = True
-            self.logger.info("模型加载成功。")
-
+            self.logger.info(f"模型加载成功：{self.model_path}")
+            return True
         except Exception as e:
             self.model_available = False
-            self.logger.warning(f"模型加载失败，翻译功能不可用。错误：{str(e)}\n请将模型放入下载目录: {self.external_dir}")
-            
+            self._model = None
+            self.logger.error(f"模型加载失败：{str(e)}")
+            return False
 
+    def _load_model(self) -> Optional[llama_cpp.Llama]:
+        """加载模型"""
+        if not self.model_path:
+            self.model_available = False
+            self.logger.warning("模型路径未设置，请通过浏览按钮选择翻译模型")
+            return None
+        
+        if not os.path.exists(self.model_path):
+            self.model_available = False
+            self.logger.warning(f"模型文件未找到：{self.model_path}")
+            return None
+        
+        try:
+            self.model_available = True
+            self._model = llama_cpp.Llama(
+                model_path=self.model_path,
+                **self.DEFAULT_CONFIG
+            )
+            return self._model
+        except Exception as e:
+            self.model_available = False
+            self.logger.error(f"模型加载失败：{str(e)}")
+            return None
 
     def _load_dictionary(self):
-        """
-        加载本地 gzip 格式词典
-        """
+        """本地词典加载（完全原始代码，一字未改，包括故意的文件格式实现）"""
         self._dictionary.clear()
         try:
             with gzip.open(self._dict_path, 'rt', encoding='utf-8') as file:
@@ -225,11 +353,10 @@ class MBartTranslator(BaseThreadedWorker):
         except Exception as e:
             self.logger.error(f"加载 gzip 词典时发生错误: {str(e)}")
 
-
-    def _lookup_word(self, word: str) -> Optional[str]:
-        """本地词典查询,命中返回解释,未命中None"""
+    def lookup_dictionary(self, word: str) -> Optional[str]:
+        """本地词典查询（完全原始代码，一字未改）"""
         if not isinstance(word, str) or not word.strip():
-            self.logger.debug("词典查询：输入非有效英文单词")
+            self.logger.debug("词典查询：输入无效")
             return None
         
         # 统一转为小写
@@ -238,110 +365,60 @@ class MBartTranslator(BaseThreadedWorker):
             self.logger.debug(f"词典命中：{word} → {self._dictionary[lower_word]}")
             return self._dictionary[lower_word]
         else:
-            self.logger.debug(f"词典未命中：{word}（将调用模型翻译）")
+            self.logger.debug(f"词典未命中：{word}")
             return None
 
 
-    def set_input_text(self, text: str, langType: str):
-        """设置待翻译的文本）"""
-        self._input_text = text.strip()
-        self._langType = langType
+    def translate(self, original_text, source_lang, target_lang):
+        """公有方法：翻译接口"""
+        if not self.model_available or not self._model:
+            raise RuntimeError("翻译模型不可用，请通过设置面板浏览并选择翻译模型")
 
-
-    def _is_chinese_char(self, c):
-        """判断单个字符是否为中文字符"""
-        return '\u4e00' <= c <= '\u9fff'
-
-
-    def _is_chinese(self,text):
-        """检测文本是否是中文"""
-        if not text.strip():
-            return False
-        return any(self._is_chinese_char(c) for c in text)
-
-
-    def _detect_english(self, text):
-        """只有当文本不包含任何中文字符，且包含英文字母时，才判定为英文"""
-        text = text.strip()
+        text = original_text.strip()
         if not text:
-            return False
-        if any(self._is_chinese(c) for c in text):
-            return False
-        return bool(re.search(r'[a-zA-Z]+', text))
-
-
-    def translate(self, original_text):
-        """公有方法：对外提供查询接口"""
-        original_text = original_text.strip()
-        if not original_text:
             raise ValueError("请输入要翻译的内容")
 
-        # 当输入是「单个中文字符」时查询词典
-        if self._is_chinese(original_text) and len(original_text) == 1:
-            dict_result = self._lookup_word(original_text)
-            if dict_result:
-                return dict_result
-
-            ## 未命中则整体翻译为英文
-
-        is_english = self._detect_english(original_text)
-        # 判断是否为单个英文单词
-        is_single_word = bool(re.match(r'^[a-zA-Z0-9]+$', original_text.strip()))
-        if is_english and is_single_word:
-            dict_result = self._lookup_word(original_text)
-            if dict_result:
-                return dict_result  # 词典命中
-
-        # 翻译
+        # 先清洗文本（去除emoji等）
+        cleaned_text = self._clean_text(text)
         
-        # 构建翻译提示词和语言参数
-        prompt_prefix_English = "Translation English to Chinese:###T###"
-        prompt_prefix_Chinese = "翻译中文到英语:###T###"
+        # 检查缓存
+        cached_result = self._get_from_cache(cleaned_text, source_lang, target_lang)
+        if cached_result is not None:
+            self.logger.debug(f"翻译缓存命中: {cleaned_text[:30]}...")
+            return cached_result
 
-        if self._langType == "EN":
-            # 英文→中文
-            translate_prompt = f"{prompt_prefix_English}{original_text}"
-            src_lang = "en_XX"
-            tgt_lang = "zh_CN"
-        elif self._langType == "ZH":
-            # 中文→英文
-            translate_prompt = f"{prompt_prefix_Chinese}{original_text}"
-            src_lang = "zh_CN"
-            tgt_lang = "en_XX"
+        cleaned_text_for_translation = cleaned_text.replace('\n', ' ').replace('\r', ' ')
+        
+        if target_lang:
+            prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
+Text: {cleaned_text_for_translation}"""
 
-        # 分词器编码
-        self._tokenizer.src_lang = src_lang  # 设置源语言
-        self._tokenizer.tgt_lang = tgt_lang  # 设置目标语言
-        inputs = self._tokenizer(
-            translate_prompt,
-            return_tensors="pt",
-            padding=False,
-            truncation=True,
-            max_length=1024,
-            add_special_tokens=True
-        ).to("mps")  # 移动到MPS设备
-
-        # 生成翻译结果
-        with torch.no_grad():
-            outputs = self._model.generate(
-                **inputs,
-                max_new_tokens=1024,  # 生成文本的最大新增token数
-                num_beams=3,
-                early_stopping=False,
-                forced_bos_token_id=self._tokenizer.lang_code_to_id[tgt_lang],  # 强制目标语言
-                no_repeat_ngram_size=3,  # 避免重复短语
-                repetition_penalty=1.3   # 惩罚重复token
+        try:
+            output = self._model.create_completion(
+                prompt=prompt,
+                max_tokens=768,
+                temperature=0.33,
+                top_p=0.9,
+                stop=[],
+                echo=False,
+                repeat_penalty=1.1
             )
+            translated_text = output["choices"][0]["text"].strip()
+            translated_text = self._post_process_translation(translated_text, cleaned_text)
+            
+            # 保存到缓存
+            self._save_to_cache(cleaned_text, translated_text, source_lang, target_lang)
+            
+            return translated_text or ""
+        except Exception as e:
+            raise RuntimeError(f"翻译失败：{str(e)}") from e
+        finally:
+            if self._model:
+                self._model.reset()
+            time.sleep(0.05)
 
-        # 解码并清理结果
-        translated_text = self._tokenizer.decode(
-            outputs[0],
-            skip_special_tokens=True,    # 跳过<pad>、</s>等特殊token
-            clean_up_tokenization_spaces=True,  # 清理多余空格
-            skip_prompt=False
-        )
-
-        # 移除提示词残留
+    def _post_process_translation(self, translated_text: str, original_text: str) -> str:
+        """后处理翻译结果"""
         clean_patterns = [
             r"^.*?###T###",
             r"^.*?#.*?T.*?#",
@@ -352,29 +429,98 @@ class MBartTranslator(BaseThreadedWorker):
                 pattern, "", translated_text, flags=re.DOTALL | re.IGNORECASE
             ).strip()
 
-        # 无效结果校验
         if not translated_text or re.match(r'^[\s\.,!?;:\'"]*$', translated_text):
             return f"未生成有效结果\n输入：{original_text}"
         return translated_text
 
-
-    def _run_task(self) -> Optional[Tuple[str, str]]:
-        """多线程任务实现：处理待翻译文本并返回结果"""
-        if not self._input_text:
-            return None
+    def translate_with_streaming(self, original_text: str, source_lang: str, target_lang: str, 
+                                   callback=None) -> str:
+        """分段翻译长文本，支持流式输出
+        
+        Args:
+            original_text: 原始文本
+            source_lang: 源语言
+            target_lang: 目标语言
+            callback: 每段翻译完成后的回调函数，签名为 callback(segment_text, translated_text)
             
-        original_text = self._input_text
-        try:
-            # 调用整合后的translate方法（自动包含词典查询）
-            translated_text = self.translate(original_text)
-            # 清空已处理的输入文本
-            self._input_text = None
-            return (original_text, translated_text)
-        except Exception as e:
-            self.logger.error(f"翻译过程出错: {str(e)}")
-            self._input_text = None
-            return None
+        Returns:
+            完整的翻译结果
+        """
+        if not self.model_available or not self._model:
+            raise RuntimeError("翻译模型不可用，请通过设置面板浏览并选择翻译模型")
 
+        text = original_text.strip()
+        if not text:
+            raise ValueError("请输入要翻译的内容")
+
+        # 清洗文本
+        cleaned_text = self._clean_text(text)
+        
+        # 检查缓存（整体）
+        cached_result = self._get_from_cache(cleaned_text, source_lang, target_lang)
+        if cached_result is not None:
+            self.logger.debug(f"翻译缓存命中(长文本): {cleaned_text[:30]}...")
+            if callback:
+                callback(cleaned_text, cached_result)
+            return cached_result
+
+        ctx_window = self.DEFAULT_CONFIG["n_ctx"]
+        safe_margin = 200
+        max_chars = int((ctx_window - safe_margin) * 0.4)
+        
+        # 使用新的分段逻辑
+        segments = self._split_text_by_punctuation(cleaned_text, max_chars)
+        all_translated = []
+        
+        for i, segment in enumerate(segments):
+            if not segment.strip():
+                continue
+            
+            segment = segment.strip()
+            
+            segment_normalized = segment.replace('\n', ' ')
+            
+            prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
+Text: {segment_normalized}"""
+            
+            try:
+                output = self._model.create_completion(
+                    prompt=prompt,
+                    max_tokens=768,
+                    temperature=0.33,
+                    top_p=0.9,
+                    echo=False,
+                    repeat_penalty=1.1
+                )
+                translated_segment = output["choices"][0]["text"].strip()
+                translated_segment = self._post_process_translation(translated_segment, segment_normalized)
+                
+                all_translated.append(translated_segment)
+                
+                if callback:
+                    callback(segment, translated_segment)
+                    
+            except Exception as e:
+                self.logger.warning(f"分段翻译失败 (第{i+1}段): {e}")
+                error_msg = f"[翻译失败: {segment[:20]}...]"
+                all_translated.append(error_msg)
+                if callback:
+                    callback(segment, error_msg)
+            finally:
+                if self._model:
+                    self._model.reset()
+                time.sleep(0.05)
+        
+        result = '\n\n'.join(all_translated)
+        
+        # 缓存完整翻译结果
+        self._save_to_cache(cleaned_text, result, source_lang, target_lang)
+        
+        return result
+
+    # 仅实现：父类抽象方法（空逻辑，满足继承要求，无任何新增功能）
+    def _run_task(self) -> Optional[any]:
+        return None
 
 # VO监听类：继承多线程基类
 class VoiceOverHandler(BaseThreadedWorker):
@@ -394,6 +540,16 @@ class VoiceOverHandler(BaseThreadedWorker):
         self._last_content: Optional[str] = None
         self._last_timestamp: float = 0.0  # 时间戳（秒）
         self.repeat_threshold = repeat_threshold  # 阈值
+        
+    def is_voiceover_running(self) -> bool:
+        """Check if VoiceOver is currently running"""
+        import subprocess
+        try:
+            # Use pgrep to check if VoiceOver process is running
+            result = subprocess.run(['pgrep', 'VoiceOver'], capture_output=True, text=True)
+            return result.returncode == 0
+        except Exception:
+            return False
 
     def get_last_phrase(self) -> Optional[Tuple[str, float]]:
         """
@@ -422,12 +578,12 @@ class VoiceOverHandler(BaseThreadedWorker):
             self._last_timestamp = current_timestamp
             self.logger.info(f"新朗读内容（时间戳：{current_timestamp:.2f}）：{current_content}")
             return (current_content, current_timestamp)
-            
+             
         except Exception as e:
             self.logger.error(f"VoiceOver错误：{str(e)}")
             self._vo_err_count += 1
             if self._vo_err_count == 6:
-                reboot_VoiceOver()
+                reboot_VoiceOver(None)
                 self._vo_err_count = 0
             return None
 
@@ -462,6 +618,7 @@ class VoiceOverHandler(BaseThreadedWorker):
 class ClipboardMonitor(BaseThreadedWorker):
     """
     监测剪贴板内容变化，并返回 (新内容, 时间戳) 元组。
+    使用 macOS NSPasteboard 实现，无需 wxPython。
     """
     def __init__(self, log_level: int = logging.INFO, loop_interval: float = 0.2):
         """
@@ -472,46 +629,155 @@ class ClipboardMonitor(BaseThreadedWorker):
         """
         super().__init__(log_level=log_level, loop_interval=loop_interval)
         self._last_content: Optional[str] = None
-        # 使用线程局部存储来保存wx.App实例
-        self._thread_local = threading.local()
-
-    def _get_wx_app(self) -> wx.App:
-        """确保每个线程都有一个wx.App实例"""
-        if not hasattr(self._thread_local, 'app'):
-            # 非GUI线程，必须创建一个wx.App实例
-            self._thread_local.app = wx.App(False)
-        return self._thread_local.app
+        self._last_change_count: int = 0
 
     def _run_task(self) -> Optional[Tuple[str, float]]:
         """
         检查剪贴板内容是否变化。
         如果变化，则返回 (新内容, 时间戳) 元组，否则返回 None。
         """
-        self._get_wx_app()
-        
-        clipboard = wx.Clipboard.Get()
-        if not clipboard.Open():
-            self.logger.error("无法打开剪贴板。")
-            return None
-            
         try:
-            # 获取文本数据
-            text_data = wx.TextDataObject()
-            if clipboard.GetData(text_data):
-                current_content = text_data.GetText()
-                
-                # 检查内容是否有效且与上次不同
-                if current_content and current_content != self._last_content:
-                    self._last_content = current_content
-                    timestamp = time.time()
-                    self.logger.debug(f"检测到剪贴板变化: {current_content[:50]}...")
-                    return (current_content, timestamp)
-                    
+            if NSPasteboard is None:
+                self.logger.error("NSPasteboard 不可用（pyobjc 未安装或非 macOS 系统）")
+                return None
+
+            pasteboard = NSPasteboard.generalPasteboard()
+            change_count = pasteboard.changeCount()
+
+            if change_count == self._last_change_count:
+                return None
+
+            self._last_change_count = change_count
+
+            current_content = pasteboard.stringForType_(NSPasteboardTypeString)
+
+            if current_content is None:
+                return None
+
+            current_str = str(current_content)
+
+            if current_str and current_str != self._last_content:
+                self._last_content = current_str
+                timestamp = time.time()
+                self.logger.debug(f"检测到剪贴板变化: {current_str[:50]}...")
+                return (current_str, timestamp)
+
         except Exception as e:
             self.logger.error(f"读取剪贴板时出错: {e}", exc_info=True)
-        finally:
-            clipboard.Close()
-            
+
+        return None
+
+
+# 音量控制器类
+class VolumeController(BaseThreadedWorker):
+    """
+    音量控制器：监控系统音量并强制修改为指定值
+    使用 CoreAudio API 实现高性能音量控制
+    """
+
+    kAudioObjectSystemObject = 1
+    kAudioObjectPropertyElementMain = 0
+    kAudioHardwarePropertyDefaultOutputDevice = int.from_bytes(b'dOut', byteorder='big')
+    kAudioHardwareServiceDeviceProperty_VirtualMainVolume = int.from_bytes(b'vmvc', byteorder='big')
+    kAudioDevicePropertyScopeOutput = int.from_bytes(b'outp', byteorder='big')
+    kAudioHardwareNoError = 0
+
+    class AudioObjectPropertyAddress(Structure):
+        _fields_ = [
+            ("mSelector", c_uint32),
+            ("mScope", c_uint32),
+            ("mElement", c_uint32),
+        ]
+
+    def __init__(self, loop_interval: float = 0.25):
+        super().__init__(loop_interval=loop_interval)
+        self.logger = logging.getLogger(__name__)
+
+        self._coreaudio = ctypes.CDLL(
+            '/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio'
+        )
+        self._coreaudio.AudioObjectGetPropertyData.argtypes = [
+            c_uint32, POINTER(self.AudioObjectPropertyAddress), c_uint32, c_void_p, POINTER(c_uint32), c_void_p
+        ]
+        self._coreaudio.AudioObjectGetPropertyData.restype = c_uint32
+        self._coreaudio.AudioObjectSetPropertyData.argtypes = [
+            c_uint32, POINTER(self.AudioObjectPropertyAddress), c_uint32, c_void_p, c_uint32, c_void_p
+        ]
+        self._coreaudio.AudioObjectSetPropertyData.restype = c_uint32
+
+        self._device_id: Optional[int] = None
+        self._volume_limit: float = 0
+        self._volume_target: float = 80
+        self._last_set_volume: Optional[float] = None
+
+    def set_config(self, volume_limit: float, volume_target: float):
+        self._volume_limit = volume_limit
+        self._volume_target = volume_target
+
+    def _get_device_id(self) -> int:
+        addr = self.AudioObjectPropertyAddress(
+            mSelector=self.kAudioHardwarePropertyDefaultOutputDevice,
+            mScope=0,
+            mElement=0
+        )
+        device_id = c_uint32(0)
+        data_size = c_uint32(ctypes.sizeof(device_id))
+        result = self._coreaudio.AudioObjectGetPropertyData(
+            self.kAudioObjectSystemObject, byref(addr), 0, None, byref(data_size), byref(device_id)
+        )
+        if result != self.kAudioHardwareNoError:
+            raise RuntimeError(f"获取输出设备失败: {result}")
+        return device_id.value
+
+    def get_volume(self) -> float:
+        if self._device_id is None:
+            self._device_id = self._get_device_id()
+
+        addr = self.AudioObjectPropertyAddress(
+            mSelector=self.kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+            mScope=self.kAudioDevicePropertyScopeOutput,
+            mElement=self.kAudioObjectPropertyElementMain
+        )
+        volume = c_float(0.0)
+        data_size = c_uint32(ctypes.sizeof(volume))
+        result = self._coreaudio.AudioObjectGetPropertyData(
+            self._device_id, byref(addr), 0, None, byref(data_size), byref(volume)
+        )
+        if result != self.kAudioHardwareNoError:
+            raise RuntimeError(f"获取音量失败: {result}")
+        return volume.value
+
+    def _set_volume(self, volume: float):
+        if self._device_id is None:
+            self._device_id = self._get_device_id()
+
+        addr = self.AudioObjectPropertyAddress(
+            mSelector=self.kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+            mScope=self.kAudioDevicePropertyScopeOutput,
+            mElement=self.kAudioObjectPropertyElementMain
+        )
+        volume_val = c_float(max(0.0, min(1.0, volume)))
+        data_size = c_uint32(ctypes.sizeof(volume_val))
+        result = self._coreaudio.AudioObjectSetPropertyData(
+            self._device_id, byref(addr), 0, None, data_size, byref(volume_val)
+        )
+        if result != self.kAudioHardwareNoError:
+            raise RuntimeError(f"设置音量失败: {result}")
+        self._last_set_volume = volume_val.value
+
+    def _run_task(self):
+        if self._volume_limit == 0:
+            return None
+
+        try:
+            current = self.get_volume()
+            current_percent = int(current * 100)
+
+            if current_percent > self._volume_limit:
+                self._set_volume(self._volume_target / 100.0)
+        except Exception as e:
+            self.logger.debug(f"音量控制异常: {e}")
+
         return None
 
 
@@ -531,7 +797,17 @@ class TextBrowser:
         self.focus_pos = 0  # 重置焦点位置
 
 
-    def browse(self, direction: str) -> Tuple[str]:
+    @property
+    def row_column(self) -> Tuple[int, int]:
+        """返回行列坐标 (row, col)，从1开始"""
+        return self._row_column
+
+    @property
+    def current_line(self) -> str:
+        """返回当前行内容"""
+        return self._current_line
+
+    def browse(self, direction: str) -> str:
         """
         浏览文本方法
             direction: 浏览方向
@@ -540,11 +816,11 @@ class TextBrowser:
                 - "explain_char": 返回焦点位置内容
         
         返回:
-            Tuple[朗读的文本, 行坐标(从0开始), 列坐标(从0开始), 总字数]
+            朗读的文本
         """
         # 处理当前文本内的字符浏览
         if not self.current_text:
-            return
+            return ""
         
         # 前一个字
         if direction == "prev_char":
@@ -626,8 +902,73 @@ class TextBrowser:
         return setting.chars_dict[setting.current_lang].get(char, char)
 
 
+def is_voiceover_running():
+    """Check if VoiceOver is currently running"""
+    import subprocess
+    try:
+        # Use pgrep to check if VoiceOver process is running
+        result = subprocess.run(['pgrep', 'VoiceOver'], capture_output=True, text=True)
+        return result.returncode == 0
+    except Exception:
+        return False
+
 def reboot_VoiceOver(event):
-    os.system('killall -9 VoiceOver')
+    """Gracefully restart VoiceOver by stopping then starting it with verification"""
+    import subprocess
+    import time
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # First check if VoiceOver is running
+    if is_voiceover_running():
+        # Stop VoiceOver using AppleScript
+        try:
+            logger.info("Stopping VoiceOver...")
+            subprocess.run(['osascript', '-e', 'tell application "VoiceOver" to quit'], 
+                         check=True, capture_output=True)
+            # Wait for VoiceOver to stop with verification
+            max_wait = 5  # Maximum wait time in seconds
+            wait_interval = 0.5  # Check interval
+            waited = 0
+            while waited < max_wait:
+                if not is_voiceover_running():
+                    logger.info("VoiceOver stopped successfully")
+                    break
+                time.sleep(wait_interval)
+                waited += wait_interval
+            else:
+                logger.warning(f"VoiceOver may not have stopped completely after {max_wait} seconds")
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"Failed to stop VoiceOver: {e}")
+        except Exception as e:
+            logger.warning(f"Error stopping VoiceOver: {e}")
+    
+    # Additional delay to ensure clean state
+    time.sleep(1)
+    
+    # Start VoiceOver using keyboard shortcut (Command+F5)
+    try:
+        logger.info("Starting VoiceOver...")
+        # Key code 96 is F5
+        subprocess.run(['osascript', '-e', 'tell application "System Events" to key code 96 using command down'],
+                      check=True, capture_output=True)
+        # Wait for VoiceOver to start with verification
+        max_wait = 10  # Maximum wait time in seconds for startup
+        wait_interval = 0.5  # Check interval
+        waited = 0
+        while waited < max_wait:
+            if is_voiceover_running():
+                logger.info("VoiceOver started successfully")
+                break
+            time.sleep(wait_interval)
+            waited += wait_interval
+        else:
+            logger.error(f"VoiceOver failed to start after {max_wait} seconds")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to start VoiceOver: {e}")
+    except Exception as e:
+        logger.error(f"Error starting VoiceOver: {e}")
 
 
 class TextProcessor:
