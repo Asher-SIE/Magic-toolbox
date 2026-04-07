@@ -46,5 +46,10 @@ app = BUNDLE(
     coll,
     name='MagicToolbox.app',
     icon='MagicToolbox.icns',
-    bundle_identifier=None,
+    bundle_identifier='com.Asher.MagicToolbox',
+    info_plist={
+        'CFBundleDevelopmentRegion': 'zh_CN',
+        'CFBundleLocalizations': ['zh_CN', 'en'],
+        'CFBundleShortVersionString': '1.1.1',
+    },
 )

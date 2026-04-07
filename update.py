@@ -1,15 +1,17 @@
 import datetime
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 import zipfile
 
 
-ACTIVATION_DATE = datetime.date(2026, 4, 3)
+ACTIVATION_DATE = datetime.date(2026, 4, 7)
 EXPIRY_DAYS = 180
 EXPIRY_WARNING_DAYS = 30
 
-CURRENT_VERSION = "1.1.0"
+CURRENT_VERSION = "1.1.1"
 GITHUB_REPO_OWNER = "Asher-SIE"
 GITHUB_REPO_NAME = "Magic-toolbox"
 
@@ -117,42 +119,43 @@ def _download_file(url, dest_path):
         return False
 
 
-def _unzip_and_remove_extattr(zip_path):
-    extract_dir = _get_desktop_path()
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(extract_dir)
-        extracted_name = zip_ref.namelist()[0].split('/')[0]
-    extracted_path = os.path.join(extract_dir, extracted_name)
-    _remove_extended_attributes(extracted_path)
-    return extracted_path
-
-
 def start_download(latest_version, download_url):
-    desktop = _get_desktop_path()
-    filename = f"MagicToolbox-{latest_version}.zip"
-    zip_path = os.path.join(desktop, filename)
+    temp_dir = tempfile.gettempdir()
+    zip_path = os.path.join(temp_dir, f"MagicToolbox-{latest_version}.zip")
 
     if not _download_file(download_url, zip_path):
         return None, False
 
     try:
-        app_path = _unzip_and_remove_extattr(zip_path)
-    except Exception:
+        temp_extract = os.path.join(temp_dir, "MagicToolbox.app")
+        if os.path.exists(temp_extract):
+            shutil.rmtree(temp_extract)
+
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+
+        if not os.path.exists(temp_extract):
+            return None, False
+
+        desktop = _get_desktop_path()
+        existing_app = os.path.join(desktop, "MagicToolbox.app")
+
+        if os.path.exists(existing_app):
+            dest_app = os.path.join(desktop, f"MagicToolbox-{latest_version}.app")
+            need_manual_process = True
+        else:
+            dest_app = existing_app
+            need_manual_process = False
+
+        if os.path.exists(dest_app):
+            shutil.rmtree(dest_app)
+        shutil.copytree(temp_extract, dest_app)
+        _remove_extended_attributes(dest_app)
+
+        return dest_app, need_manual_process
+
+    finally:
         if os.path.exists(zip_path):
             os.remove(zip_path)
-        return None, False
-
-    if os.path.exists(zip_path):
-        os.remove(zip_path)
-
-    # 检查桌面是否已有同名 app，如有则重命名新版
-    existing_app = os.path.join(desktop, "MagicToolbox.app")
-    if os.path.exists(existing_app):
-        rename_path = os.path.join(desktop, f"MagicToolbox-{latest_version}.app")
-        os.rename(app_path, rename_path)
-        app_path = rename_path
-        need_manual_process = True
-    else:
-        need_manual_process = False
-
-    return app_path, need_manual_process
+        if os.path.exists(temp_extract):
+            shutil.rmtree(temp_extract)
