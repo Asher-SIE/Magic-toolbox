@@ -1,10 +1,8 @@
 import datetime
 import json
 import os
-import shutil
 import subprocess
 import tempfile
-import zipfile
 
 
 ACTIVATION_DATE = datetime.date(2026, 4, 7)
@@ -93,69 +91,42 @@ def _get_desktop_path():
     return os.path.join(os.path.expanduser("~"), "Desktop")
 
 
-def _remove_extended_attributes(path):
-    if path.endswith('.app') and os.path.isdir(path):
-        subprocess.run(['xattr', '-cr', path], check=False)
-    elif os.path.isdir(path):
-        for root, dirs, files in os.walk(path):
-            for name in files:
-                filepath = os.path.join(root, name)
-                subprocess.run(['xattr', '-c', filepath], check=False)
-            for name in dirs:
-                dirpath = os.path.join(root, name)
-                subprocess.run(['xattr', '-c', dirpath], check=False)
-    else:
-        subprocess.run(['xattr', '-c', path], check=False)
-
-
-def _download_file(url, dest_path):
-    try:
-        subprocess.run(
-            ['curl', '-L', '-o', dest_path, url],
-            check=True, timeout=300
-        )
-        return True
-    except Exception:
-        return False
-
-
 def start_download(latest_version, download_url):
     temp_dir = tempfile.gettempdir()
     zip_path = os.path.join(temp_dir, f"MagicToolbox-{latest_version}.zip")
+    temp_extract = os.path.join(temp_dir, "MagicToolbox.app")
+    desktop = _get_desktop_path()
+    existing_app = os.path.join(desktop, "MagicToolbox.app")
 
-    if not _download_file(download_url, zip_path):
-        return None, False
+    script = f'''
+        set -e
+        rm -rf "{temp_extract}"
+        curl -L -o "{zip_path}" "{download_url}"
+        unzip -q "{zip_path}" -d "{temp_dir}" -x "__MACOSX/*"
+        if [ ! -d "{temp_extract}" ]; then
+            echo "ERROR"
+            exit 1
+        fi
+        if [ -d "{existing_app}" ]; then
+            dest_app="{desktop}/MagicToolbox-{latest_version}.app"
+        else
+            dest_app="{existing_app}"
+        fi
+        rm -rf "$dest_app"
+        cp -R "{temp_extract}" "$dest_app"
+        rm -rf "{temp_extract}" "{zip_path}"
+        echo "$dest_app"
+    '''
 
     try:
-        temp_extract = os.path.join(temp_dir, "MagicToolbox.app")
-        if os.path.exists(temp_extract):
-            shutil.rmtree(temp_extract)
-
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
-
-        if not os.path.exists(temp_extract):
+        result = subprocess.run(
+            ['bash', '-c', script],
+            capture_output=True, text=True, timeout=300
+        )
+        if result.returncode != 0:
             return None, False
-
-        desktop = _get_desktop_path()
-        existing_app = os.path.join(desktop, "MagicToolbox.app")
-
-        if os.path.exists(existing_app):
-            dest_app = os.path.join(desktop, f"MagicToolbox-{latest_version}.app")
-            need_manual_process = True
-        else:
-            dest_app = existing_app
-            need_manual_process = False
-
-        if os.path.exists(dest_app):
-            shutil.rmtree(dest_app)
-        shutil.copytree(temp_extract, dest_app)
-        _remove_extended_attributes(dest_app)
-
+        dest_app = result.stdout.strip()
+        need_manual_process = os.path.exists(existing_app)
         return dest_app, need_manual_process
-
-    finally:
-        if os.path.exists(zip_path):
-            os.remove(zip_path)
-        if os.path.exists(temp_extract):
-            shutil.rmtree(temp_extract)
+    except Exception:
+        return None, False

@@ -1133,12 +1133,6 @@ class MainFrame(wx.Frame):
                 wx.YES_NO | wx.ICON_INFORMATION
             )
             if result == wx.YES:
-                wx.MessageBox(
-                    setting._('update_downloading_msg'),
-                    setting._('update_downloading_title'),
-                    wx.OK | wx.ICON_INFORMATION
-                )
-
                 def _background_download():
                     download_result = update.start_download(latest_version, download_url)
                     wx.CallAfter(lambda: self._show_download_result(download_result[0], download_result[1], latest_version))
