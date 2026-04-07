@@ -1,5 +1,67 @@
-import plistlib
+import base64
+import gettext
+import hashlib
+import json
+import logging
 import os
+import plistlib
+import subprocess
+
+from cryptography.fernet import Fernet
+
+
+def _get_fernet():
+    result = subprocess.run(
+        ['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
+        capture_output=True, text=True
+    )
+    for line in result.stdout.split('\n'):
+        if 'IOPlatformUUID' in line:
+            machine_id = line.split('"')[-2] + '@Asher'
+            key = hashlib.sha256(machine_id.encode()).digest()
+            key_b64 = base64.urlsafe_b64encode(key)
+            return Fernet(key_b64)
+    raise Exception("无法获取机器UUID")
+
+
+_fernet = _get_fernet()
+
+
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_locale_dir = os.path.join(_current_dir, "locales")
+
+
+def _get_system_locale():
+    """通过读取系统plist文件获取macOS语言设置"""
+    try:
+        plist_path = os.path.expanduser("~/Library/Preferences/.GlobalPreferences.plist")
+        with open(plist_path, 'rb') as f:
+            plist_data = plistlib.load(f)
+        apple_languages = plist_data.get('AppleLanguages', [])
+        if not apple_languages:
+            return 'en'
+        primary_lang = apple_languages[0]
+        if primary_lang.startswith('zh'):
+            return 'zh_CN'
+        else:
+            return 'en'
+    except Exception:
+        return 'en'
+
+
+_locale = _get_system_locale()
+try:
+    _trans = gettext.translation('messages', localedir=_locale_dir, languages=[_locale])
+except FileNotFoundError:
+    _trans = gettext.NullTranslations()
+
+
+def _(s):
+    """翻译函数"""
+    return _trans.gettext(s)
+
+
+current_lang = 'zh' if _locale.startswith('zh') else 'en'
 
 
 #  字符集合
@@ -21,16 +83,6 @@ chars_dict = {
         "'": '单引号',
         '‘': '左单引号',
         '’': '右单引号',
-        '0': '数字0',
-        '9': '数字9',
-        '8': '数字8',
-        '7': '数字7',
-        '6': '数字6',
-        '5': '数字5',
-        '4': '数字4',
-        '3': '数字3',
-        '2': '数字2',
-        '1': '数字1',
         '，': '全角逗号',
         '。': '句号',
         '？': '全角问号',
@@ -126,16 +178,6 @@ chars_dict = {
         "'": 'half-width single quote',
         '‘': 'full-width left single quote',
         '’': 'full-width right single quote',
-        '0': 'digit 0',
-        '9': 'digit 9',
-        '8': 'digit 8',
-        '7': 'digit 7',
-        '6': 'digit 6',
-        '5': 'digit 5',
-        '4': 'digit 4',
-        '3': 'digit 3',
-        '2': 'digit 2',
-        '1': 'digit 1',
         '，': 'full-width comma',
         '。': 'full-width period',
         '？': 'full-width question mark',
@@ -217,115 +259,53 @@ chars_dict = {
 }
 
 
-# 语言字典
-lang_dict = {
-    'zh': {
-        'app_name': 'Magic Toolbox',
-        'editor_title': '编辑剪贴板内容',
-        'tbr_mode': '模式',
-        'trans_radio': '翻译',
-        'clipboard_radio': '剪贴板',
-        'copy_btn': '拷贝',
-        'copy_btn_tips': '复制到剪贴板',
-        'delete_btn': '删除',
-        'delete_btn_tips': '删除选中项',
-        'edit_btn': '编辑',
-        'edit_btn_tips': '编辑选中项',
-        'confirm_btn': '确定',
-        'cancel_btn': '取消',
-        'vo_warning': '获取VoiceOver朗读内容失败',
-        'model_warning': '翻译模型加载失败,仅保留本地词典功能',
-        'menu_about': '关于 Magic Toolbox',
-        'menubar_opt': '操作',
-        'menu_opt_rebootVO': '重启旁白',
-        'menu_opt_reboot_proc': '重启处理器',
-        'menu_opt_clean_list': '清空剪贴板列表',
-        'about_dialog': ''' ''',
-        'now': '当前',
-        'row': '行',
-        'column': '列',
-        'total_chars': '个字',
-        'edd_more_btn': '更多',
-        'edd_remove_whitespace_btn': '删除所有空白符',
-        'edd_merge_spaces_btn': '合并连续空格',
-        'edd_num_to_chinese_btn': '数字转中文',
-        'edd_punc_to_newline_btn': '分句',
-        'msg_motice': '提示',
-        'msg_is_close': '确定要退出吗？',
-    },
-    'en': {
-'app_name': 'Magic Toolbox',
-        'editor_title': 'Edit clipboard contents',
-        'tbr_mode': 'Mode',
-        'trans_radio': 'Translation',
-        'clipboard_radio': 'Clipboard',
-        'copy_btn': 'Copy',
-        'copy_btn_tips': 'Copy to clipboard',
-        'delete_btn': 'Delete',
-        'delete_btn_tips': 'Delete current item',
-        'edit_btn': 'Edit',
-        'edit_btn_tips': 'Edit current item',
-        'confirm_btn': 'OK',
-        'cancel_btn': 'Cancel',
-        'vo_warning': 'Getting VoiceOver Reading Failed',
-        'model_warning': 'Translation model loading failed, retaining only local dictionary functions',
-        'menu_about': 'About Magic Toolbox',
-        'menubar_opt': 'Operation',
-        'menu_opt_rebootVO': 'Reboot VoiceOver',
-        'menu_opt_reboot_proc': 'Reboot Processer',
-        'menu_opt_clean_list': 'Empty Clipboard List',
-        'now': 'Is',
-        'row': 'Row',
-        'column': 'Column',
-        'total_chars': 'Characters',
-        'edd_more_btn': 'More',
-        'edd_remove_whitespace_btn': 'Remove All Whitespace',
-        'edd_merge_spaces_btn': 'Merge Consecutive Spaces',
-        'edd_num_to_chinese_btn': 'Convert Numbers to Chinese',
-        'edd_punc_to_newline_btn': 'Split into Sentences',
-        'msg_motice': 'Notice',
-        'msg_is_close': 'Are you sure you want to quit?'
-    }
+lang_code_to_trans = {
+    'English': 'lang_English',
+    'Chinese': 'lang_Chinese',
+    'French': 'lang_French',
+    'Portuguese': 'lang_Portuguese',
+    'Spanish': 'lang_Spanish',
+    'Japanese': 'lang_Japanese',
+    'Turkish': 'lang_Turkish',
+    'Russian': 'lang_Russian',
+    'Arabic': 'lang_Arabic',
+    'Korean': 'lang_Korean',
+    'Thai': 'lang_Thai',
+    'Italian': 'lang_Italian',
+    'German': 'lang_German',
+    'Vietnamese': 'lang_Vietnamese',
+    'Malay': 'lang_Malay',
+    'Indonesian': 'lang_Indonesian',
+    'Filipino': 'lang_Filipino',
+    'Hindi': 'lang_Hindi',
+    'Traditional Chinese': 'lang_Traditional Chinese',
+    'Polish': 'lang_Polish',
+    'Czech': 'lang_Czech',
+    'Dutch': 'lang_Dutch',
+    'Khmer': 'lang_Khmer',
+    'Burmese': 'lang_Burmese',
+    'Persian': 'lang_Persian',
+    'Gujarati': 'lang_Gujarati',
+    'Urdu': 'lang_Urdu',
+    'Telugu': 'lang_Telugu',
+    'Marathi': 'lang_Marathi',
+    'Hebrew': 'lang_Hebrew',
+    'Bengali': 'lang_Bengali',
+    'Tamil': 'lang_Tamil',
+    'Ukrainian': 'lang_Ukrainian',
+    'Tibetan': 'lang_Tibetan',
+    'Kazakh': 'lang_Kazakh',
+    'Mongolian': 'lang_Mongolian',
+    'Uyghur': 'lang_Uyghur',
+    'Cantonese': 'lang_Cantonese',
 }
 
 
-def get_system_language():
-    """通过读取系统plist文件获取macOS语言设置"""
-    try:
-        # macOS语言设置存储路径
-        plist_path = os.path.expanduser("~/Library/Preferences/.GlobalPreferences.plist")
-        
-        # 读取plist文件
-        with open(plist_path, 'rb') as f:
-            plist_data = plistlib.load(f)
-        
-        # 获取首选语言列表
-        apple_languages = plist_data.get('AppleLanguages', [])
-        print(f"首选语言列表: {apple_languages}")
-        
-        if not apple_languages:
-            print("未找到语言设置")
-            return 'en'
-            
-        # 取第一个语言作为首选语言
-        primary_lang = apple_languages[0]
-        print(f"首选语言: {primary_lang}")
-        
-        if primary_lang.startswith('zh'):
-            return 'zh'
-        else:
-            return 'en'
-            
-    except FileNotFoundError:
-        print("未找到语言设置文件")
-        return 'en'
-    except Exception as e:
-        print(f"获取语言失败: {str(e)}")
-        return 'en'
+def get_lang_display(code: str) -> str:
+    """获取语言代码对应的显示名称（通过gettext翻译）"""
+    key = lang_code_to_trans.get(code, code)
+    return _(key)
 
-
-# 全局语言变量
-current_lang = get_system_language()
 
 #快捷键定义
 hotKeys = [
@@ -436,3 +416,163 @@ hotKeys = [
     }
 ]
 
+
+app_support_dir = os.path.expanduser("~/Library/Application Support/")
+app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
+os.makedirs(app_data_dir, exist_ok=True)
+config_path = os.path.join(app_data_dir, "config.json")
+
+
+def load_config():
+    """加载配置"""
+    config = {
+        'source_lang': 'English',
+        'target_lang': 'Chinese',
+        'model_path': '',
+        'clipboard_max_count': 1000,
+        'volume_limit': 100,
+        'volume_target': 80
+    }
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                saved_config = json.load(f)
+                config.update(saved_config)
+    except Exception as e:
+        logging.warning(f"加载配置失败: {e}")
+    return config
+
+
+def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80):
+    """保存配置"""
+    try:
+        config = {
+            'source_lang': source_lang,
+            'target_lang': target_lang,
+            'model_path': model_path,
+            'clipboard_max_count': clipboard_max_count,
+            'volume_limit': volume_limit,
+            'volume_target': volume_target
+        }
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.warning(f"保存配置失败: {e}")
+
+
+def _get_clipboard_data_path():
+    """获取剪贴板数据文件路径"""
+    app_data_dir = os.path.expanduser("~/Library/Application Support/MagicToolbox")
+    os.makedirs(app_data_dir, exist_ok=True)
+    return os.path.join(app_data_dir, ".clipboard_data")
+
+
+def load_clipboard_data(max_count: int = 1000):
+    import pickle
+    data_path = _get_clipboard_data_path()
+    try:
+        if os.path.exists(data_path):
+            with open(data_path, "rb") as f:
+                encrypted_data = f.read()
+            decrypted_data = _fernet.decrypt(encrypted_data)
+            data = pickle.loads(decrypted_data)
+            if len(data) > max_count:
+                data = data[:max_count]
+            logging.info(f"加载剪贴板数据成功，共 {len(data)} 条")
+            return data
+    except Exception as e:
+        logging.warning(f"加载剪贴板数据失败: {e}")
+    return []
+
+
+def save_clipboard_data(data):
+    import pickle
+    data_path = _get_clipboard_data_path()
+    try:
+        pickled_data = pickle.dumps(data)
+        encrypted_data = _fernet.encrypt(pickled_data)
+        with open(data_path, "wb") as f:
+            f.write(encrypted_data)
+        logging.debug(f"保存剪贴板数据成功（{len(data)} 条）")
+    except Exception as e:
+        logging.error(f"保存剪贴板数据失败: {e}")
+
+
+def filter_clipboard_records(records: list, keyword: str) -> list:
+    """筛选剪贴板记录，返回包含关键词的记录"""
+    if not keyword:
+        return records
+    keyword_lower = keyword.lower()
+    return [r for r in records if keyword_lower in r.lower()]
+
+
+def get_locale_dir():
+    """获取 locales 目录路径"""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(current_dir, "locales")
+
+
+def is_internal_device() -> bool:
+    """检测是否为内部电脑（通过检测 Self Service.app 是否存在）
+    
+    Returns:
+        True: 内部电脑（存在 Self Service.app）
+        False: 外部电脑（不存在 Self Service.app）
+    """
+    try:
+        return os.path.exists("/Applications/Self Service.app")
+    except Exception:
+        return True
+
+
+def get_current_locale():
+    """获取当前语言环境"""
+    return _locale
+
+
+def load_help_content(filename: str) -> str:
+    """加载帮助文档内容"""
+    locale_dir = get_locale_dir()
+    locale = get_current_locale()
+    file_path = os.path.join(locale_dir, locale, filename)
+    try:
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+    except Exception as e:
+        logging.warning(f"加载帮助文档失败: {e}")
+    return ""
+
+
+_('menubar_help')
+_('menu_help_program')
+_('menu_help_shortcuts')
+_('menu_help_changelog')
+_('menu_help_donate')
+_('menu_help_download_model')
+_('menu_help_feedback')
+_('help_load_failed')
+_('donate_title')
+_('donate_content')
+_('feedback_title')
+_('feedback_content')
+_('feedback_contact_btn')
+_('download_model_title')
+_('download_model_prompt')
+_('version_expired_title')
+_('version_expired_msg')
+_('version_expiring_title')
+_('version_expiring_msg')
+_('menu_help_check_update')
+_('update_available_title')
+_('update_available_msg')
+_('update_latest_title')
+_('update_latest_msg')
+_('update_check_failed_title')
+_('update_check_failed_msg')
+_('update_downloading_title')
+_('update_downloading_msg')
+_('update_download_success_title')
+_('update_download_success_msg')
+_('update_download_failed_title')
+_('update_download_failed_msg')

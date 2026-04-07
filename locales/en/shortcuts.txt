@@ -1,0 +1,34 @@
+Keyboard Shortcuts
+
+1. Text Translation / Explanation Shortcuts
+Option+C    Explain current character
+Option+D    Translate the last text read aloud by VoiceOver
+Option+Shift+D    Reverse translation
+Option+Enter    Translate content in the edit box of the translation interface
+Option+Shift+Enter    Reverse translate content in the edit box of the translation interface
+
+2. Clipboard Editor Shortcuts
+Option+T    Open clipboard editor
+Option+1    Remove blank characters
+Option+2    Merge multiple spaces
+Option+3    Convert numbers to Chinese characters
+Option+4    Split text into lines
+Option+F    Find next
+Option+Shift+F    Find previous
+Option+H    Open replace dialog
+Command+Z    Undo
+Command+Shift+Z    Redo
+Escape    Exit editor
+Option+X    Save edits and exit editor
+
+3. Text Browsing Shortcuts
+Option+A    Append and copy content read aloud by VoiceOver
+Option+Shift+7    Previous item in clipboard list
+Option+Shift+8    Previous line of current clipboard content
+Option+Shift+9    Next item in clipboard list
+Option+Shift+U    Previous character of current clipboard content
+Option+Shift+I    Explain current character in clipboard browsing mode
+Option+Shift+O    Next character of current clipboard content
+Option+Shift+J    Sync clipboard content to system clipboard
+Option+Shift+K    Next line of current clipboard content
+Option+Shift+M    View clipboard summary (row and column information)

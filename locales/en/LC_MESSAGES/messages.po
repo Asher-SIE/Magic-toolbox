@@ -1,0 +1,649 @@
+# English translations for Magic Toolbox.
+# Copyright (C) 2024 Magic Toolbox
+# This file is distributed under the same license as the Magic Toolbox package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Magic Toolbox 1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-01 00:00+0000\n"
+"PO-Revision-Date: 2024-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: English\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: main_UI.py
+msgid "app_name"
+msgstr "Magic Toolbox"
+
+#: main_UI.py
+msgid "editor_title"
+msgstr "Edit clipboard contents"
+
+#: main_UI.py
+msgid "tbr_mode"
+msgstr "Mode"
+
+#: main_UI.py
+msgid "trans_radio"
+msgstr "Translation"
+
+#: main_UI.py
+msgid "clipboard_radio"
+msgstr "Clipboard"
+
+#: main_UI.py
+msgid "copy_btn"
+msgstr "Copy"
+
+#: main_UI.py
+msgid "copy_btn_tips"
+msgstr "Copy to clipboard"
+
+#: main_UI.py
+msgid "delete_btn"
+msgstr "Delete"
+
+#: main_UI.py
+msgid "delete_btn_tips"
+msgstr "Delete current item"
+
+#: main_UI.py
+msgid "edit_btn"
+msgstr "Edit"
+
+#: main_UI.py
+msgid "edit_btn_tips"
+msgstr "Edit current item"
+
+#: main_UI.py
+msgid "confirm_btn"
+msgstr "OK"
+
+#: main_UI.py
+msgid "cancel_btn"
+msgstr "Cancel"
+
+#: main_UI.py
+msgid "close_btn"
+msgstr "Close"
+
+#: main_UI.py
+msgid "vo_warning"
+msgstr "Getting VoiceOver Reading Failed"
+
+#: main_UI.py
+msgid "model_warning"
+msgstr "Translation model loading failed, retaining only local dictionary functions"
+
+#: main_UI.py
+msgid "menu_about"
+msgstr "About Magic Toolbox"
+
+#: main_UI.py
+msgid "menubar_opt"
+msgstr "Operation"
+
+#: main_UI.py
+msgid "menu_opt_rebootVO"
+msgstr "Reboot VoiceOver"
+
+#: main_UI.py
+msgid "menu_opt_reboot_proc"
+msgstr "Reboot Processor"
+
+#: main_UI.py
+msgid "menu_opt_clean_list"
+msgstr "Empty Clipboard List"
+
+#: main_UI.py
+msgid "menubar_help"
+msgstr "Help"
+
+#: main_UI.py
+msgid "menu_help_program"
+msgstr "Magictoolbox Help"
+
+#: main_UI.py
+msgid "menu_help_shortcuts"
+msgstr "Keyboard Shortcuts"
+
+#: main_UI.py
+msgid "menu_help_changelog"
+msgstr "Changelog"
+
+#: main_UI.py
+msgid "menu_help_donate"
+msgstr "Donate"
+
+#: main_UI.py
+msgid "menu_help_download_model"
+msgstr "Download Translation Model"
+
+#: main_UI.py
+msgid "help_load_failed"
+msgstr "Failed to load help content"
+
+#: main_UI.py
+msgid "download_model_title"
+msgstr "Download Translation Model"
+
+#: main_UI.py
+msgid "download_model_prompt"
+msgstr "Would you like to automatically download the translation model?\n\nSelect \"Yes\" to directly download the recommended model (HY-MT1.5-1.8B-Q4_K_M.gguf), or select \"No\" to go to Hugging Face and manually select another model."
+
+#: main_UI.py
+msgid "donate_title"
+msgstr "Support the Developer"
+
+#: main_UI.py
+msgid "donate_content"
+msgstr "This is an independently developed personal app, completely free. If it's been helpful to you, please scan the QR code to show your support.\n\nFor any suggestions or feedback, feel free to contact:\nasher.sie@gmail.com"
+
+#: main_UI.py
+msgid "donate_contact_btn"
+msgstr "Contact Developer"
+
+#: main_UI.py
+msgid "menu_help_feedback"
+msgstr "Feedback"
+
+#: main_UI.py
+msgid "feedback_title"
+msgstr "Suggestions & Feedback"
+
+#: main_UI.py
+msgid "feedback_content"
+msgstr "For any suggestions or feedback, feel free to contact:\n\n  songting_xie@apple.com"
+
+#: main_UI.py
+msgid "feedback_contact_btn"
+msgstr "Contact Developer"
+
+#: main_UI.py
+msgid "now"
+msgstr "Current"
+
+#: main_UI.py
+msgid "row"
+msgstr "Row"
+
+#: main_UI.py
+msgid "column"
+msgstr "Column"
+
+#: main_UI.py
+msgid "total_lines"
+msgstr "Total"
+
+#: main_UI.py
+msgid "total_chars"
+msgstr "Characters"
+
+#: main_UI.py
+msgid "edd_more_btn"
+msgstr "More"
+
+#: main_UI.py
+msgid "edd_remove_whitespace_btn"
+msgstr "Remove All Whitespace"
+
+#: main_UI.py
+msgid "edd_merge_spaces_btn"
+msgstr "Merge Consecutive Spaces"
+
+#: main_UI.py
+msgid "edd_num_to_chinese_btn"
+msgstr "Convert Numbers to Chinese"
+
+#: main_UI.py
+msgid "edd_punc_to_newline_btn"
+msgstr "Split into Sentences"
+
+#: main_UI.py
+msgid "edd_find_replace_btn"
+msgstr "Find/Replace"
+
+#: main_UI.py
+msgid "edd_show_replace"
+msgstr "Show Replace"
+
+#: main_UI.py
+msgid "edd_find_btn"
+msgstr "Find"
+
+#: main_UI.py
+msgid "edd_replace_btn"
+msgstr "Replace"
+
+#: main_UI.py
+msgid "edd_find_replace_title"
+msgstr "Find/Replace"
+
+#: main_UI.py
+msgid "edd_find_next"
+msgstr "Find Next"
+
+#: main_UI.py
+msgid "edd_find_prev"
+msgstr "Find Previous"
+
+#: main_UI.py
+msgid "edd_replace_one"
+msgstr "Replace"
+
+#: main_UI.py
+msgid "edd_replace_all"
+msgstr "Replace All"
+
+#: main_UI.py
+msgid "edd_use_regex"
+msgstr "Regex"
+
+#: main_UI.py
+msgid "edd_case_sensitive"
+msgstr "Case Sensitive"
+
+#: main_UI.py
+msgid "edd_replaced_count"
+msgstr "Replaced %d occurrences"
+
+#: main_UI.py
+msgid "edd_find_label"
+msgstr "Find:"
+
+#: main_UI.py
+msgid "edd_replace_label"
+msgstr "Replace with:"
+
+#: main_UI.py
+msgid "edd_not_found"
+msgstr "Not found"
+
+#: main_UI.py
+msgid "msg_notice"
+msgstr "Notice"
+
+#: main_UI.py
+msgid "msg_is_close"
+msgstr "Are you sure you want to quit?"
+
+#: main_UI.py
+msgid "trans_lang_box"
+msgstr "Translation Language"
+
+#: main_UI.py
+msgid "source_lang"
+msgstr "Source"
+
+#: main_UI.py
+msgid "target_lang"
+msgstr "Target"
+
+#: main_UI.py
+msgid "lang_English"
+msgstr "English"
+
+#: main_UI.py
+msgid "lang_Chinese"
+msgstr "Simplified Chinese"
+
+#: main_UI.py
+msgid "lang_French"
+msgstr "French"
+
+#: main_UI.py
+msgid "lang_Portuguese"
+msgstr "Portuguese"
+
+#: main_UI.py
+msgid "lang_Spanish"
+msgstr "Spanish"
+
+#: main_UI.py
+msgid "lang_Japanese"
+msgstr "Japanese"
+
+#: main_UI.py
+msgid "lang_Turkish"
+msgstr "Turkish"
+
+#: main_UI.py
+msgid "lang_Russian"
+msgstr "Russian"
+
+#: main_UI.py
+msgid "lang_Arabic"
+msgstr "Arabic"
+
+#: main_UI.py
+msgid "lang_Korean"
+msgstr "Korean"
+
+#: main_UI.py
+msgid "lang_Thai"
+msgstr "Thai"
+
+#: main_UI.py
+msgid "lang_Italian"
+msgstr "Italian"
+
+#: main_UI.py
+msgid "lang_German"
+msgstr "German"
+
+#: main_UI.py
+msgid "lang_Vietnamese"
+msgstr "Vietnamese"
+
+#: main_UI.py
+msgid "lang_Malay"
+msgstr "Malay"
+
+#: main_UI.py
+msgid "lang_Indonesian"
+msgstr "Indonesian"
+
+#: main_UI.py
+msgid "lang_Filipino"
+msgstr "Filipino"
+
+#: main_UI.py
+msgid "lang_Hindi"
+msgstr "Hindi"
+
+#: main_UI.py
+msgid "lang_Traditional Chinese"
+msgstr "Traditional Chinese"
+
+#: main_UI.py
+msgid "lang_Polish"
+msgstr "Polish"
+
+#: main_UI.py
+msgid "lang_Czech"
+msgstr "Czech"
+
+#: main_UI.py
+msgid "lang_Dutch"
+msgstr "Dutch"
+
+#: main_UI.py
+msgid "lang_Khmer"
+msgstr "Khmer"
+
+#: main_UI.py
+msgid "lang_Burmese"
+msgstr "Burmese"
+
+#: main_UI.py
+msgid "lang_Persian"
+msgstr "Persian"
+
+#: main_UI.py
+msgid "lang_Gujarati"
+msgstr "Gujarati"
+
+#: main_UI.py
+msgid "lang_Urdu"
+msgstr "Urdu"
+
+#: main_UI.py
+msgid "lang_Telugu"
+msgstr "Telugu"
+
+#: main_UI.py
+msgid "lang_Marathi"
+msgstr "Marathi"
+
+#: main_UI.py
+msgid "lang_Hebrew"
+msgstr "Hebrew"
+
+#: main_UI.py
+msgid "lang_Bengali"
+msgstr "Bengali"
+
+#: main_UI.py
+msgid "lang_Tamil"
+msgstr "Tamil"
+
+#: main_UI.py
+msgid "lang_Ukrainian"
+msgstr "Ukrainian"
+
+#: main_UI.py
+msgid "lang_Tibetan"
+msgstr "Tibetan"
+
+#: main_UI.py
+msgid "lang_Kazakh"
+msgstr "Kazakh"
+
+#: main_UI.py
+msgid "lang_Mongolian"
+msgstr "Mongolian"
+
+#: main_UI.py
+msgid "lang_Uyghur"
+msgstr "Uyghur"
+
+#: main_UI.py
+msgid "lang_Cantonese"
+msgstr "Cantonese"
+
+#: main_UI.py
+msgid "model_unavailable"
+msgstr "Translation model unavailable, please select a model in settings panel"
+
+#: main_UI.py
+msgid "translation_failed"
+msgstr "Translation failed"
+
+#: main_UI.py
+msgid "translation_in_progress"
+msgstr "Translation in progress, please wait"
+
+#: main_UI.py
+msgid "warning"
+msgstr "Warning"
+
+#: main_UI.py
+msgid "exit_app"
+msgstr "Exit Magic Toolbox"
+
+#: main_UI.py
+msgid "exit_app_tips"
+msgstr "Exit application (Shortcut: ⌘Q)"
+
+#: main_UI.py
+msgid "nav_select_func"
+msgstr "Select Function:"
+
+#: main_UI.py
+msgid "trans_input_placeholder"
+msgstr "Enter text to translate:"
+
+#: main_UI.py
+msgid "clipboard_history"
+msgstr "Clipboard History:"
+
+#: main_UI.py
+msgid "browse_model"
+msgstr "Browse Translation Model"
+
+#: main_UI.py
+msgid "browse_btn"
+msgstr "Browse..."
+
+#: main_UI.py
+msgid "clipboard_max_count"
+msgstr "Clipboard Max Records"
+
+#: main_UI.py
+msgid "select_model_file"
+msgstr "Select Translation Model File"
+
+#: main_UI.py
+msgid "model_load_success"
+msgstr "Translation model loaded successfully"
+
+#: main_UI.py
+msgid "model_load_failed"
+msgstr "Failed to load translation model"
+
+#: main_UI.py
+msgid "about_title"
+msgstr "About Magic Toolbox"
+
+#: main_UI.py
+msgid "got_it_btn"
+msgstr "Got it"
+
+#: main_UI.py
+msgid "edit_single_item_tips"
+msgstr "Edit function only supports single item, please uncheck other items and try again"
+
+#: main_UI.py
+msgid "init_failed"
+msgstr "Initialization failed"
+
+#: main_UI.py
+msgid "model_unavailable_alt"
+msgstr "Translation model unavailable, please select a model in settings panel"
+
+#: main_UI.py
+msgid "translation_failed_alt"
+msgstr "Translation failed"
+
+#: main_UI.py
+msgid "set_clipboard_failed"
+msgstr "Failed to set clipboard"
+
+#: main_UI.py
+msgid "success"
+msgstr "Success"
+
+#: main_UI.py
+msgid "error"
+msgstr "Error"
+
+#: main_UI.py
+msgid "notice"
+msgstr "Notice"
+
+#: main_UI.py
+msgid "nav_translation"
+msgstr "Translation"
+
+#: main_UI.py
+msgid "nav_clipboard"
+msgstr "Clipboard"
+
+#: main_UI.py
+msgid "nav_settings"
+msgstr "Settings"
+
+#: main_UI.py
+msgid "clipboard_max_count_warning_title"
+msgstr "Clipboard Records Warning"
+
+#: main_UI.py
+msgid "clipboard_max_count_warning"
+msgstr "Current clipboard has {current} records, which exceeds the new limit of {max}. Do you want to truncate the excess records?"
+
+#: main_UI.py
+msgid "clipboard_max_count_confirm"
+msgstr "Confirm"
+
+#: main_UI.py
+msgid "clipboard_search_placeholder"
+msgstr "Search..."
+
+#: main_UI.py
+msgid "volume_control"
+msgstr "Volume Control"
+
+#: main_UI.py
+msgid "volume_limit_label"
+msgstr "Volume Limit"
+
+#: main_UI.py
+msgid "volume_target_label"
+msgstr "Set Volume To"
+
+#: update.py
+msgid "version_expired_title"
+msgstr "Version Expired"
+
+#: update.py
+msgid "version_expired_msg"
+msgstr "This version expired on %s. Please update to a new version."
+
+#: update.py
+msgid "version_expiring_title"
+msgstr "Version Expiring Soon"
+
+#: update.py
+msgid "version_expiring_msg"
+msgstr "This version will expire on %s. %d days remaining."
+
+#: update.py
+msgid "menu_help_check_update"
+msgstr "Check for Updates"
+
+#: update.py
+msgid "update_available_title"
+msgstr "Update Available"
+
+#: update.py
+msgid "update_available_msg"
+msgstr "New version %s found. Download now?"
+
+#: update.py
+msgid "update_latest_title"
+msgstr "Up to Date"
+
+#: update.py
+msgid "update_latest_msg"
+msgstr "You are running the latest version %s"
+
+#: update.py
+msgid "update_check_failed_title"
+msgstr "Update Check Failed"
+
+#: update.py
+msgid "update_check_failed_msg"
+msgstr "Unable to fetch latest version info"
+
+#: update.py
+msgid "update_downloading_title"
+msgstr "Downloading"
+
+#: update.py
+msgid "update_downloading_msg"
+msgstr "Downloading update, please wait..."
+
+#: update.py
+msgid "update_download_success_title"
+msgstr "Download Complete"
+
+#: update.py
+msgid "update_download_success_msg"
+msgstr "Update downloaded to:\n%s\nPlease manually replace the app in /Applications"
+
+#: update.py
+msgid "update_download_failed_title"
+msgstr "Download Failed"
+
+#: update.py
+msgid "update_download_failed_msg"
+msgstr "Failed to download update, please try again later"
+
+#: update.py
+msgid "update_download_conflict_msg"
+msgstr "Update downloaded to desktop:\n{app_path}\n\nOld version detected on desktop. Please move the old version to Trash before using the new version."
+

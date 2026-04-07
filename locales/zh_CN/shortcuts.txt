@@ -1,0 +1,34 @@
+快捷键列表
+
+一、文本翻译/解释快捷键
+Option+C    当前字符解释
+Option+D    翻译 VoiceOver 最后朗读的文字
+Option+Shift+D    反向翻译
+Option+Enter    翻译翻译界面编辑框内的内容
+Option+Shift+Enter    反向翻译翻译界面编辑框内的内容
+
+二、剪贴板编辑器快捷键
+Option+T    打开剪贴板编辑器
+Option+1    移除空白字符
+Option+2    合并多个空格
+Option+3    数字转中文
+Option+4    文本分行
+Option+F    查找下一个
+Option+Shift+F    查找上一个
+Option+H    打开替换对话框
+Command+Z    撤销操作
+Command+Shift+Z    重做操作
+Escape    退出编辑器
+Option+X    保存编辑内容并退出编辑器
+
+三、文字浏览快捷键
+Option+A    追加拷贝 VoiceOver 朗读的内容
+Option+Shift+7    切换至剪贴板列表上一条
+Option+Shift+8    切换至当前剪贴板内容上一行
+Option+Shift+9    切换至剪贴板列表下一条
+Option+Shift+U    切换至当前剪贴板内容前一个字
+Option+Shift+I    剪贴板浏览模式下查看当前字符解释
+Option+Shift+O    切换至当前剪贴板内容后一个字
+Option+Shift+J    将剪贴板内容同步至系统剪贴板
+Option+Shift+K    切换至当前剪贴板内容下一行
+Option+Shift+M    查看剪贴板综述（行列信息）

@@ -1,0 +1,5 @@
+appscript==1.4.0
+cryptography
+llama-cpp-python
+pyobjc==12.1
+typing_extensions==4.15.0
