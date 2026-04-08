@@ -679,3 +679,11 @@ msgstr "下载更新失败，请稍后重试"
 msgid "update_download_conflict_msg"
 msgstr "更新已下载到桌面：\n{app_path}\n\n检测到桌面已有旧版应用，请将旧版拖到废纸篓后使用新版"
 
+#: update.py
+msgid "permission_denied_title"
+msgstr "需要文件访问权限"
+
+#: update.py
+msgid "permission_denied_msg"
+msgstr "无法访问桌面文件夹来保存更新文件。\n\n请在 系统设置 > 隐私与安全性 > 文件与文件夹 中允许 MagicToolbox 访问桌面。\n\n点击 是 打开系统设置。"
+

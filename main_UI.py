@@ -511,7 +511,7 @@ class MainFrame(wx.Frame):
             if result == wx.YES:
                 def _background_download():
                     download_result = update.start_download(latest_version, download_url)
-                    wx.CallAfter(lambda: self._show_download_result(download_result[0], download_result[1], latest_version))
+                    wx.CallAfter(lambda r=download_result, v=latest_version: self._show_download_result(r, v))
 
                 threading.Thread(target=_background_download, daemon=True).start()
         elif latest_version and not silent:
@@ -522,8 +522,21 @@ class MainFrame(wx.Frame):
             )
 
 
-    def _show_download_result(self, app_path, need_manual_process, latest_version):
+    def _show_download_result(self, result, latest_version):
         """显示下载结果"""
+        if result == 'permission_denied':
+            result_box = wx.MessageBox(
+                setting._('permission_denied_msg'),
+                setting._('permission_denied_title'),
+                wx.YES_NO | wx.ICON_WARNING
+            )
+            if result_box == wx.YES:
+                update.open_privacy_settings()
+            return
+
+        app_path = result[0] if isinstance(result, tuple) else result
+        need_manual_process = result[1] if isinstance(result, tuple) and len(result) > 1 else False
+
         if app_path:
             if need_manual_process:
                 msg = setting._('update_download_conflict_msg').format(

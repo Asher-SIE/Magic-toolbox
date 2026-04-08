@@ -679,3 +679,11 @@ msgstr "Failed to download update, please try again later"
 msgid "update_download_conflict_msg"
 msgstr "Update downloaded to desktop:\n{app_path}\n\nOld version detected on desktop. Please move the old version to Trash before using the new version."
 
+#: update.py
+msgid "permission_denied_title"
+msgstr "File Access Required"
+
+#: update.py
+msgid "permission_denied_msg"
+msgstr "Cannot access desktop folder to save update file.\n\nPlease allow MagicToolbox to access Desktop in System Settings > Privacy & Security > Files and Folders.\n\nClick Yes to open System Settings."
+

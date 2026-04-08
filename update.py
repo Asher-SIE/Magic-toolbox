@@ -91,7 +91,28 @@ def _get_desktop_path():
     return os.path.join(os.path.expanduser("~"), "Desktop")
 
 
+def check_desktop_permission():
+    desktop = _get_desktop_path()
+    try:
+        test_file = os.path.join(desktop, '.magic_toolbox_test_write')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        return True
+    except PermissionError:
+        return False
+    except Exception:
+        return False
+
+
+def open_privacy_settings():
+    subprocess.run(['open', 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'])
+
+
 def start_download(latest_version, download_url):
+    if not check_desktop_permission():
+        return 'permission_denied'
+
     temp_dir = tempfile.gettempdir()
     zip_path = os.path.join(temp_dir, f"MagicToolbox-{latest_version}.zip")
     temp_extract = os.path.join(temp_dir, "MagicToolbox.app")
