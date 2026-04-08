@@ -469,7 +469,7 @@ msgstr "选择功能："
 
 #: main_UI.py
 msgid "trans_input_placeholder"
-msgstr "请输入待翻译文本："
+msgstr "输入内容并按快捷键进行翻译"
 
 #: main_UI.py
 msgid "clipboard_history"

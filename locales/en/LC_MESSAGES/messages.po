@@ -469,7 +469,7 @@ msgstr "Select Function:"
 
 #: main_UI.py
 msgid "trans_input_placeholder"
-msgstr "Enter text to translate:"
+msgstr "Enter content and use shortcuts to translate"
 
 #: main_UI.py
 msgid "clipboard_history"

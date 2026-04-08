@@ -5,11 +5,11 @@ import subprocess
 import tempfile
 
 
-ACTIVATION_DATE = datetime.date(2026, 4, 7)
+ACTIVATION_DATE = datetime.date(2026, 4, 8)
 EXPIRY_DAYS = 180
 EXPIRY_WARNING_DAYS = 30
 
-CURRENT_VERSION = "1.1.1"
+CURRENT_VERSION = "1.1.2"
 GITHUB_REPO_OWNER = "Asher-SIE"
 GITHUB_REPO_NAME = "Magic-toolbox"
 
