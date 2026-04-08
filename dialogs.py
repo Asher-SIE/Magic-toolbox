@@ -1,9 +1,72 @@
 import logging
+import os
 import re
 import setting
 import wx
+import wx.adv
 
 from processer import TextProcessor
+import update
+
+
+def _open_url(url):
+    import webbrowser
+    webbrowser.open(url)
+
+
+class AboutDialog(wx.Dialog):
+    def __init__(self, parent):
+        super().__init__(parent, title=setting._('about_title'), size=(400, 380))
+        
+        panel = wx.Panel(self)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "icon.png")
+        if os.path.exists(icon_path):
+            icon = wx.Bitmap(icon_path, wx.BITMAP_TYPE_PNG)
+            static_icon = wx.StaticBitmap(panel, bitmap=icon)
+            sizer.Add(static_icon, 0, wx.ALIGN_CENTER | wx.TOP, 20)
+        
+        app_name = wx.StaticText(panel, label=setting._('app_name'))
+        app_name.SetFont(wx.Font(18, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        sizer.Add(app_name, 0, wx.ALIGN_CENTER | wx.TOP, 15)
+        
+        version = wx.StaticText(panel, label=setting._('about_version') % update.get_current_version())
+        version.SetFont(wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        sizer.Add(version, 0, wx.ALIGN_CENTER | wx.TOP, 8)
+        
+        developer = wx.StaticText(panel, label=setting._('about_developer'))
+        developer.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        sizer.Add(developer, 0, wx.ALIGN_CENTER | wx.TOP, 15)
+        
+        copyright_text = wx.StaticText(panel, label=setting._('about_copyright'))
+        copyright_text.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        sizer.Add(copyright_text, 0, wx.ALIGN_CENTER | wx.TOP, 5)
+        
+        license_text = wx.StaticText(panel, label=setting._('about_license'))
+        license_text.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        sizer.Add(license_text, 0, wx.ALIGN_CENTER | wx.TOP, 8)
+        
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        github_btn = wx.Button(panel, label=setting._('about_view_github'), size=(140, 32))
+        github_btn.Bind(wx.EVT_BUTTON, lambda e: _open_url("https://github.com/Asher-SIE/Magic-toolbox"))
+        btn_sizer.Add(github_btn, 0, wx.RIGHT, 10)
+        
+        license_btn = wx.Button(panel, label=setting._('about_view_license'), size=(140, 32))
+        license_btn.Bind(wx.EVT_BUTTON, lambda e: _open_url(
+            "https://raw.githubusercontent.com/Asher-SIE/Magic-toolbox/main/LICENSE"
+        ))
+        btn_sizer.Add(license_btn, 0)
+        
+        sizer.Add(btn_sizer, 0, wx.ALIGN_CENTER | wx.TOP, 20)
+        
+        btn = wx.Button(panel, label=setting._('got_it_btn'), size=(100, 32))
+        btn.Bind(wx.EVT_BUTTON, lambda e: self.Close())
+        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.TOP, 20)
+        
+        panel.SetSizer(sizer)
+        self.Centre()
 
 
 class FindReplaceDialog(wx.Dialog):

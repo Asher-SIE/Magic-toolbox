@@ -503,6 +503,34 @@ msgstr "翻译模型加载失败"
 msgid "about_title"
 msgstr "关于 Magic Toolbox"
 
+#: dialogs.py
+msgid "about_version"
+msgstr "版本 %s"
+
+#: dialogs.py
+msgid "about_developer"
+msgstr "开发者：Asher Sie"
+
+#: dialogs.py
+msgid "about_copyright"
+msgstr "© 2025-2026 Asher Sie"
+
+#: dialogs.py
+msgid "about_license"
+msgstr "开源软件 (MIT 许可证)"
+
+#: dialogs.py
+msgid "about_github"
+msgstr "GitHub 项目主页"
+
+#: dialogs.py
+msgid "about_view_github"
+msgstr "查看 GitHub"
+
+#: dialogs.py
+msgid "about_view_license"
+msgstr "查看许可证"
+
 #: main_UI.py
 msgid "got_it_btn"
 msgstr "好的"

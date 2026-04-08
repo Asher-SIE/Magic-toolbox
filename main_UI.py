@@ -13,7 +13,7 @@ import wx
 import wx.adv
 
 from AppKit import NSApplication, NSApp, NSWindow
-from dialogs import FindReplaceDialog, EditDialog
+from dialogs import FindReplaceDialog, EditDialog, AboutDialog
 from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController
 from typing import Optional, Tuple
 
@@ -477,27 +477,7 @@ class MainFrame(wx.Frame):
 
 
     def on_about(self, event):
-        
-        dialog = wx.Dialog(self, title=setting._("about_title"), size=(500, 400))
-        panel = wx.Panel(dialog)
-        sizer = wx.BoxSizer(wx.VERTICAL)
-
-        # 带滚动条的文本控件
-        text_ctrl = wx.TextCtrl(
-            panel, 
-            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL | wx.VSCROLL
-        )
-        text_ctrl.SetValue(update.get_current_version())
-        text_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-
-        # 关闭按钮
-        btn = wx.Button(panel, label=setting._("got_it_btn"))
-        btn.Bind(wx.EVT_BUTTON, lambda e: dialog.Close())
-
-        sizer.Add(text_ctrl, 1, wx.EXPAND | wx.ALL, 10)
-        sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
-
-        panel.SetSizer(sizer)
+        dialog = AboutDialog(self)
         dialog.ShowModal()
         dialog.Destroy()
 

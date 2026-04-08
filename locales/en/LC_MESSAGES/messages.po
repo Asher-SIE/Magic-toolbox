@@ -503,6 +503,34 @@ msgstr "Failed to load translation model"
 msgid "about_title"
 msgstr "About Magic Toolbox"
 
+#: dialogs.py
+msgid "about_version"
+msgstr "Version %s"
+
+#: dialogs.py
+msgid "about_developer"
+msgstr "Developer: Asher Sie"
+
+#: dialogs.py
+msgid "about_copyright"
+msgstr "© 2025-2026 Asher Sie"
+
+#: dialogs.py
+msgid "about_license"
+msgstr "Open Source Software (MIT License)"
+
+#: dialogs.py
+msgid "about_github"
+msgstr "GitHub Project Page"
+
+#: dialogs.py
+msgid "about_view_github"
+msgstr "View GitHub"
+
+#: dialogs.py
+msgid "about_view_license"
+msgstr "View License"
+
 #: main_UI.py
 msgid "got_it_btn"
 msgstr "Got it"
