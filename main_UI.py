@@ -119,7 +119,7 @@ class FindReplaceDialog(wx.Dialog):
             except re.error:
                 return None, 0
         else:
-            pattern = re.compile(search_text, flags)
+            pattern = re.compile(re.escape(search_text), flags)
         
         return pattern, 1 if use_regex else 0
     
