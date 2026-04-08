@@ -26,6 +26,8 @@ class FindReplaceDialog(wx.Dialog):
         self.text_ctrl = text_ctrl
         self.parent = parent
         self.last_find_pos = last_find_pos
+        self.vo_handler = parent.vo_handler if hasattr(parent, 'vo_handler') else None
+        self._is_speaking = False
         
         panel = wx.Panel(self)
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -88,6 +90,9 @@ class FindReplaceDialog(wx.Dialog):
         self._update_size()
         
         self.Centre()
+        self.find_input.SetFocus()
+        if find_text:
+            self.find_input.SelectAll()
     
     def on_key_down(self, event):
         key_code = event.GetKeyCode()
@@ -147,6 +152,8 @@ class FindReplaceDialog(wx.Dialog):
             matches = list(pattern.finditer(full_text))
             if not matches:
                 self.status_text.SetLabel(setting._('edd_not_found'))
+                if self.vo_handler:
+                    self.vo_handler.speak_text(setting._('edd_not_found'))
                 return False
             match = None
             for m in matches:
@@ -164,6 +171,8 @@ class FindReplaceDialog(wx.Dialog):
             return True
         else:
             self.status_text.SetLabel(setting._('edd_not_found'))
+            if self.vo_handler:
+                self.vo_handler.speak_text(setting._('edd_not_found'))
             return False
     
     def on_find_next(self, event):
@@ -235,6 +244,9 @@ class EditDialog(wx.Dialog):
         self.last_replace_text = ""
         self.last_regex = False
         self.last_case = False
+        self.find_count = 0
+        self.last_find_direction = None
+        self.find_dialog_opening = False
 
         #  撤销/重做
         self.undo_stack = []  # 撤销栈：存储 (文本内容
@@ -503,6 +515,10 @@ class EditDialog(wx.Dialog):
 
     def on_find_replace_click(self, event, show_replace=False, find_next=True):
         """点击查找/替换按钮"""
+        if self.find_dialog_opening:
+            return
+        self.find_dialog_opening = True
+        
         if not hasattr(self, 'find_replace_dialog') or self.find_replace_dialog is None:
             self.app.Unbind(wx.EVT_KEY_DOWN, handler=self.on_app_key_down)
             self.find_replace_dialog = FindReplaceDialog(
@@ -520,15 +536,19 @@ class EditDialog(wx.Dialog):
             self.last_find_text = self.find_replace_dialog.find_input.GetValue()
             self.last_replace_text = self.find_replace_dialog.replace_input.GetValue()
             self.last_regex = self.find_replace_dialog.regex_check.GetValue()
-            self.last_case = self.find_replace_dialog.case_check.GetValue()
+            self.last_case = self.find_replace_dialog.regex_check.GetValue()
             self.Enable(True)
-            self.app.Bind(wx.EVT_KEY_DOWN, self.on_app_key_down)
+            self.app.Bind(wx.EVT_KEY_DOWN, handler=self.on_app_key_down)
             self.find_replace_dialog = None
+            self.find_dialog_opening = False
         else:
-            self.find_replace_dialog.find_input.SetFocus()
-            self.find_replace_dialog.ShowModal()
-            self.last_find_pos = self.find_replace_dialog.last_find_pos
-            self.find_replace_dialog = None
+            self.find_dialog_opening = False
+            if self.find_replace_dialog and self.find_replace_dialog.IsShown():
+                self.find_replace_dialog.Raise()
+                self.find_replace_dialog.find_input.SetFocus()
+            else:
+                self.find_replace_dialog = None
+                self.on_find_replace_click(event, show_replace, find_next)
 
     def _quick_find(self, direction='next'):
         """快速查找，不打开对话框"""
@@ -548,11 +568,39 @@ class EditDialog(wx.Dialog):
             match = pattern.search(full_text, start_pos)
             if not match:
                 match = pattern.search(full_text, 0)
+                if not match:
+                    if self.last_find_direction == direction:
+                        self.find_count += 1
+                    else:
+                        self.find_count = 1
+                        self.last_find_direction = direction
+                    
+                    if self.find_count >= 6:
+                        self.find_count = 0
+                        self.last_find_direction = None
+                        self.on_find_replace_click(None, show_replace=False)
+                    else:
+                        if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
+                            self.Parent.vo_handler.speak_text(setting._('edd_search_not_found'))
+                    return False
         else:
             start_pos = self.text_ctrl.GetInsertionPoint() - 1
             start_pos = start_pos if start_pos >= 0 else text_len - 1
             matches = list(pattern.finditer(full_text))
             if not matches:
+                if self.last_find_direction == direction:
+                    self.find_count += 1
+                else:
+                    self.find_count = 1
+                    self.last_find_direction = direction
+                
+                if self.find_count >= 6:
+                    self.find_count = 0
+                    self.last_find_direction = None
+                    self.on_find_replace_click(None, show_replace=False)
+                else:
+                    if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
+                        self.Parent.vo_handler.speak_text(setting._('edd_search_not_found'))
                 return False
             match = None
             for m in matches:
@@ -566,6 +614,8 @@ class EditDialog(wx.Dialog):
             self.text_ctrl.SetSelection(start, end)
             self.text_ctrl.SetInsertionPoint(end)
             self.last_find_pos = end if direction == 'next' else start
+            self.find_count = 0
+            self.last_find_direction = None
             return True
         return False
     
@@ -583,7 +633,7 @@ class EditDialog(wx.Dialog):
             except re.error:
                 return None, 0
         else:
-            pattern = re.compile(search_text, flags)
+            pattern = re.compile(re.escape(search_text), flags)
         
         return pattern, 1 if self.last_regex else 0
 

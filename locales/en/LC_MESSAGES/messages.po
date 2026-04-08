@@ -264,6 +264,10 @@ msgid "edd_not_found"
 msgstr "Not found"
 
 #: main_UI.py
+msgid "edd_search_not_found"
+msgstr "Not found"
+
+#: main_UI.py
 msgid "msg_notice"
 msgstr "Notice"
 
