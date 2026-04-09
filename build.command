@@ -95,23 +95,24 @@ pyinstaller --clean --noconfirm "$SPEC_FILE"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 if [ -d "$APP_BUNDLE" ]; then
     echo "打包成功！应用已生成在：$APP_BUNDLE"
-    
-    # 复制资源
-    if [ $RESOURCE_EXIST -eq 1 ] && [ -d "$APP_BUNDLE/Contents/Resources" ]; then
-        echo "正在复制资源文件..."
-        cp -R "$RESOURCE_PATH"/* "$APP_BUNDLE/Contents/Resources/"
-        echo "资源复制完成！"
-    fi
-    
-    # 复制 locales
-    if [ $LOCALES_EXIST -eq 1 ] && [ -d "$APP_BUNDLE/Contents/Resources" ]; then
-        echo "正在复制 locales 文件..."
-        cp -R "$LOCALES_PATH" "$APP_BUNDLE/Contents/Resources/"
-        echo "locales 复制完成！"
-    fi
 else
     echo "打包失败，请检查终端错误信息"
     exit 1
 fi
+
+# 清理 .po 语言文件（打包后不需要）
+echo "正在清理 .po 文件..."
+find "$APP_BUNDLE" -name "*.po" -type f -delete 2>/dev/null
+echo "清理完成"
+
+# 清理 .DS_Store 文件
+echo "正在清理 .DS_Store 文件..."
+find "$APP_BUNDLE" -name ".DS_Store" -type f -delete 2>/dev/null
+echo "清理完成"
+
+# 清理 .dist-info 目录（仅包含许可证，不是运行时必需）
+echo "正在清理 .dist-info 目录..."
+find "$APP_BUNDLE" -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null
+echo "清理完成"
 
 echo "打包流程完成"
