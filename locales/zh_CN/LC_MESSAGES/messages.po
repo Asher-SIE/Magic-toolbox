@@ -687,3 +687,23 @@ msgstr "需要文件访问权限"
 msgid "permission_denied_msg"
 msgstr "无法访问桌面文件夹来保存更新文件。\n\n请在 系统设置 > 隐私与安全性 > 文件与文件夹 中允许 MagicToolbox 访问桌面。\n\n点击 是 打开系统设置。"
 
+#: main_UI.py
+msgid "trans_mode"
+msgstr "模式"
+
+#: main_UI.py
+msgid "mode_llm"
+msgstr "LLM翻译"
+
+#: main_UI.py
+msgid "mode_apple"
+msgstr "苹果翻译"
+
+#: main_UI.py
+msgid "apple_translation_ready"
+msgstr "苹果翻译已就绪"
+
+#: main_UI.py
+msgid "apple_translation_not_available"
+msgstr "苹果翻译不可用"
+

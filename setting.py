@@ -431,7 +431,8 @@ def load_config():
         'model_path': '',
         'clipboard_max_count': 1000,
         'volume_limit': 100,
-        'volume_target': 80
+        'volume_target': 80,
+        'translation_mode': 'llm'
     }
     try:
         if os.path.exists(config_path):
@@ -443,7 +444,7 @@ def load_config():
     return config
 
 
-def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80):
+def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm'):
     """保存配置"""
     try:
         config = {
@@ -452,7 +453,8 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
             'model_path': model_path,
             'clipboard_max_count': clipboard_max_count,
             'volume_limit': volume_limit,
-            'volume_target': volume_target
+            'volume_target': volume_target,
+            'translation_mode': translation_mode
         }
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
@@ -523,6 +525,75 @@ def is_internal_device() -> bool:
         return os.path.exists("/Applications/Self Service.app")
     except Exception:
         return True
+
+
+def get_system_version() -> tuple:
+    """获取系统版本，返回 (major, minor)
+    
+    Returns:
+        (major, minor): 系统版本号
+        (0, 0): 获取失败
+    """
+    try:
+        result = subprocess.run(['sw_vers', '-productVersion'], capture_output=True, text=True)
+        version_str = result.stdout.strip()
+        if '.' in version_str:
+            parts = version_str.split('.')
+            return (int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
+        return (int(version_str), 0)
+    except Exception:
+        return (0, 0)
+
+
+def supports_apple_translation() -> bool:
+    """检测是否支持 Apple Translation Framework
+    
+    Returns:
+        True: 支持 (macOS 14.4+)
+        False: 不支持
+    """
+    version = get_system_version()
+    if version[0] == 0:
+        return False
+    if version[0] > 14:
+        return True
+    if version[0] == 14 and version[1] >= 4:
+        return True
+    return False
+
+
+class TranslationMode:
+    """翻译模式常量"""
+    LLM = "llm"
+    APPLE = "apple"
+
+
+APPLE_TRANSLATION_LANG_MAP = {
+    "English": "en",
+    "Chinese": "zh-Hans",
+    "Traditional Chinese": "zh-Hant",
+    "French": "fr",
+    "German": "de",
+    "Spanish": "es",
+    "Japanese": "ja",
+    "Korean": "ko",
+    "Portuguese": "pt",
+    "Italian": "it",
+    "Russian": "ru",
+    "Arabic": "ar",
+    "Turkish": "tr",
+    "Thai": "th",
+    "Vietnamese": "vi",
+    "Malay": "ms",
+    "Indonesian": "id",
+    "Filipino": "tl",
+    "Hindi": "hi",
+    "Polish": "pl",
+    "Czech": "cs",
+    "Dutch": "nl",
+    "Hebrew": "he",
+    "Ukrainian": "uk"
+}
 
 
 def get_current_locale():

@@ -687,3 +687,23 @@ msgstr "File Access Required"
 msgid "permission_denied_msg"
 msgstr "Cannot access desktop folder to save update file.\n\nPlease allow MagicToolbox to access Desktop in System Settings > Privacy & Security > Files and Folders.\n\nClick Yes to open System Settings."
 
+#: main_UI.py
+msgid "trans_mode"
+msgstr "Mode"
+
+#: main_UI.py
+msgid "mode_llm"
+msgstr "LLM"
+
+#: main_UI.py
+msgid "mode_apple"
+msgstr "Apple"
+
+#: main_UI.py
+msgid "apple_translation_ready"
+msgstr "Apple Translation Ready"
+
+#: main_UI.py
+msgid "apple_translation_not_available"
+msgstr "Apple Translation not available"
+

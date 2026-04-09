@@ -318,6 +318,57 @@ class MainFrame(wx.Frame):
                     break
             self.save_config()
     
+    def on_translation_mode_changed(self, event):
+        if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+            display_text = self._translation_mode_choice.GetStringSelection()
+            if display_text == setting._('mode_apple'):
+                self._translation_mode = 'apple'
+            else:
+                self._translation_mode = 'llm'
+            self.save_config()
+            self._update_translator_for_mode()
+    
+    def _update_translator_for_mode(self):
+        """根据翻译模式更新翻译器"""
+        if self._translation_mode == 'apple':
+            if not hasattr(self, 'apple_translator'):
+                try:
+                    from apple_translator import AppleTranslator
+                    self.apple_translator = AppleTranslator()
+                except Exception as e:
+                    logging.warning(f"Apple翻译器初始化失败: {e}")
+                    self._translation_mode = 'llm'
+                    self.save_config()
+        else:
+            if hasattr(self, 'apple_translator'):
+                del self.apple_translator
+    
+    def _do_translate(self, text: str, source_lang: str, target_lang: str, callback=None) -> str:
+        """统一的翻译方法
+        
+        Args:
+            text: 待翻译文本
+            source_lang: 源语言
+            target_lang: 目标语言
+            callback: 回调函数
+            
+        Returns:
+            翻译结果
+        """
+        if self._translation_mode == 'apple':
+            if hasattr(self, 'apple_translator') and self.apple_translator.is_available():
+                return self.apple_translator.translate(text, source_lang, target_lang)
+            else:
+                raise RuntimeError(setting._('apple_translation_not_available'))
+        else:
+            return self.translator.translate_with_streaming(text, source_lang, target_lang, callback)
+    
+    def _lookup_dictionary(self, word: str) -> str:
+        """查词典"""
+        if self._translation_mode == 'llm' and self.translator:
+            return self.translator.lookup_dictionary(word)
+        return None
+    
     def on_source_lang_changed(self, event):
         pass
     
@@ -332,6 +383,15 @@ class MainFrame(wx.Frame):
         self._clipboard_max_count = config.get('clipboard_max_count', 1000)
         self._volume_limit = config.get('volume_limit', 100)
         self._volume_target = config.get('volume_target', 80)
+        self._translation_mode = config.get('translation_mode', 'llm')
+        
+        is_internal = setting.is_internal_device()
+        supports_apple = setting.supports_apple_translation()
+        
+        if is_internal:
+            self._translation_mode = 'apple'
+        elif not supports_apple:
+            self._translation_mode = 'llm'
         
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             source_display = setting.get_lang_display(self._source_lang)
@@ -345,13 +405,19 @@ class MainFrame(wx.Frame):
             self.volume_limit_input.SetValue(str(self._volume_limit))
         if hasattr(self, 'volume_target_input') and self.volume_target_input:
             self.volume_target_input.SetValue(str(self._volume_target))
+        
+        if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+            mode_display = setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm')
+            self._translation_mode_choice.SetStringSelection(mode_display)
+            self._translation_mode_choice.Enable(self._translation_mode != 'apple' or is_internal)
     
     def save_config(self):
         model_path = getattr(self, '_model_path', '') or ''
         clipboard_max_count = getattr(self, '_clipboard_max_count', 1000)
         volume_limit = getattr(self, '_volume_limit', 100)
         volume_target = getattr(self, '_volume_target', 80)
-        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target)
+        translation_mode = getattr(self, '_translation_mode', 'llm')
+        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode)
 
 
     def setup_clipboard_panel(self):
@@ -807,6 +873,8 @@ class MainFrame(wx.Frame):
                 self._toolbar_source_choice.Destroy()
             if hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
                 self._toolbar_target_choice.Destroy()
+            if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+                self._translation_mode_choice.Destroy()
             
             source_display = setting.get_lang_display(self._source_lang)
             target_display = setting.get_lang_display(self._target_lang)
@@ -826,6 +894,25 @@ class MainFrame(wx.Frame):
             self._toolbar_target_choice.SetStringSelection(target_display)
             self._toolbar_target_choice.Bind(wx.EVT_CHOICE, self.on_toolbar_target_lang_changed)
             self.toolbar.AddControl(self._toolbar_target_choice)
+            
+            mode_label = wx.StaticText(self.toolbar, label=setting._('trans_mode') + ':')
+            self.toolbar.AddControl(mode_label)
+            
+            self._translation_mode_choice = wx.Choice(self.toolbar, choices=[setting._('mode_llm'), setting._('mode_apple')])
+            is_internal = setting.is_internal_device()
+            supports_apple = setting.supports_apple_translation()
+            
+            if self._translation_mode == 'apple':
+                self._translation_mode_choice.SetStringSelection(setting._('mode_apple'))
+            else:
+                self._translation_mode_choice.SetStringSelection(setting._('mode_llm'))
+            
+            self._translation_mode_choice.Bind(wx.EVT_CHOICE, self.on_translation_mode_changed)
+            
+            if is_internal or not supports_apple:
+                self._translation_mode_choice.Enable(False)
+            
+            self.toolbar.AddControl(self._translation_mode_choice)
         
         self.toolbar.Realize()
 
@@ -882,6 +969,47 @@ class MainFrame(wx.Frame):
 
     def init_translator(self):
         """初始化翻译器"""
+        is_internal = setting.is_internal_device()
+        
+        if self._translation_mode == 'apple':
+            self._init_apple_translator(is_internal)
+        else:
+            self._init_llm_translator()
+    
+    def _init_apple_translator(self, is_internal: bool):
+        """初始化 Apple 翻译器"""
+        try:
+            from apple_translator import AppleTranslator
+            self.apple_translator = AppleTranslator()
+            
+            if self.apple_translator.is_available():
+                self.text_ctrl.SetValue(self.apple_translator.get_readiness_message())
+            else:
+                if is_internal:
+                    self.text_ctrl.SetValue(self.apple_translator.get_readiness_message())
+                else:
+                    self._translation_mode = 'llm'
+                    self._init_llm_translator()
+                    self._update_mode_choice_ui()
+                    self.save_config()
+        except Exception as e:
+            logging.warning(f"Apple翻译器初始化失败: {e}")
+            if is_internal:
+                self.text_ctrl.SetValue(setting._('apple_translation_not_available'))
+            else:
+                self._translation_mode = 'llm'
+                self._init_llm_translator()
+                self._update_mode_choice_ui()
+                self.save_config()
+    
+    def _update_mode_choice_ui(self):
+        """更新翻译模式选择 UI"""
+        if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+            mode_display = setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm')
+            self._translation_mode_choice.SetStringSelection(mode_display)
+    
+    def _init_llm_translator(self):
+        """初始化 LLM 翻译器"""
         try:
             self.translator = Translator(
                 log_level=logging.INFO,
@@ -1196,8 +1324,9 @@ class MainFrame(wx.Frame):
                 self.vo_handler.speak_text(explained_text)
                 return
 
-            result_text = self.translator.lookup_dictionary(vo_text[0])
-            self.vo_handler.speak_text(result_text)
+            if self._translation_mode == 'llm' and self.translator:
+                result_text = self.translator.lookup_dictionary(vo_text[0])
+                self.vo_handler.speak_text(result_text)
 
 
     def on_hotkey_altd(self, event):
@@ -1473,7 +1602,7 @@ class MainFrame(wx.Frame):
                 self.vo_handler.speak_text(explained_text)
                 return
 
-        if self.translator:
+        if self._translation_mode == 'llm' and self.translator:
             result_text = self.translator.lookup_dictionary(result_text[0])
             self.vo_handler.speak_text(result_text)
 
@@ -1596,7 +1725,7 @@ class MainFrame(wx.Frame):
 
     def on_to_translate(self, event, langType: str = None):
         """Option + 回车键：翻译文本"""
-        if not self.translator:
+        if self._translation_mode != 'llm' or not self.translator:
             wx.MessageBox(
                 setting._("init_failed"), 
                 setting._("error"), 
