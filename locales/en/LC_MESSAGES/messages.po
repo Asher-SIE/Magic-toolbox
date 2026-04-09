@@ -264,6 +264,10 @@ msgid "edd_not_found"
 msgstr "Not found"
 
 #: main_UI.py
+msgid "edd_search_not_found"
+msgstr "Not found"
+
+#: main_UI.py
 msgid "msg_notice"
 msgstr "Notice"
 
@@ -465,7 +469,7 @@ msgstr "Select Function:"
 
 #: main_UI.py
 msgid "trans_input_placeholder"
-msgstr "Enter text to translate:"
+msgstr "Enter content and use shortcuts to translate"
 
 #: main_UI.py
 msgid "clipboard_history"
@@ -498,6 +502,34 @@ msgstr "Failed to load translation model"
 #: main_UI.py
 msgid "about_title"
 msgstr "About Magic Toolbox"
+
+#: dialogs.py
+msgid "about_version"
+msgstr "Version %s"
+
+#: dialogs.py
+msgid "about_developer"
+msgstr "Developer: Asher Sie"
+
+#: dialogs.py
+msgid "about_copyright"
+msgstr "© 2025-2026 Asher Sie"
+
+#: dialogs.py
+msgid "about_license"
+msgstr "Open Source Software (MIT License)"
+
+#: dialogs.py
+msgid "about_github"
+msgstr "GitHub Project Page"
+
+#: dialogs.py
+msgid "about_view_github"
+msgstr "View GitHub"
+
+#: dialogs.py
+msgid "about_view_license"
+msgstr "View License"
 
 #: main_UI.py
 msgid "got_it_btn"
@@ -646,4 +678,12 @@ msgstr "Failed to download update, please try again later"
 #: update.py
 msgid "update_download_conflict_msg"
 msgstr "Update downloaded to desktop:\n{app_path}\n\nOld version detected on desktop. Please move the old version to Trash before using the new version."
+
+#: update.py
+msgid "permission_denied_title"
+msgstr "File Access Required"
+
+#: update.py
+msgid "permission_denied_msg"
+msgstr "Cannot access desktop folder to save update file.\n\nPlease allow MagicToolbox to access Desktop in System Settings > Privacy & Security > Files and Folders.\n\nClick Yes to open System Settings."
 
