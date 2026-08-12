@@ -20,3 +20,9 @@ MagicToolboxAvalonia/
 # 忽略 macOS 系统的 .DS_Store 文件
 **/.DS_Store
 Thumbs.db
+# gettext 编译产物（由 msgfmt.sh 从 .po 生成）
+*.mo
+# Swift 构建目录
+**/.build/
+# 剪贴板残留数据
+**/.clipboard_data
