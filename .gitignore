@@ -1,22 +1,31 @@
-# Python 编译文件
+# Python compiled files
 __pycache__/
 *.py[cod]
 *$py.class
-# 虚拟环境
+
+# Virtual environments
 venv/
 env/
 .env
-# 操作系统临时文件
-temp/
+
+# Operating-system files
 .DS_Store
+**/.DS_Store
 Thumbs.db
-# 日志/缓存
+
+# Logs, caches, and build outputs
 *.log
 *.tmp
+temp/
 build/
 dist/
 MagicToolboxAvalonia/
 
-# 忽略 macOS 系统的 .DS_Store 文件
-**/.DS_Store
-Thumbs.db
+# gettext compiled catalogs (generated from .po files)
+*.mo
+
+# Swift build output
+**/.build/
+
+# Clipboard residual data
+**/.clipboard_data
