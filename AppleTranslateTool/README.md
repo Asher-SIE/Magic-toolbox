@@ -1,29 +1,33 @@
-# Apple Translate Tool 构建说明
+# Apple Translation 本地桥接工具
 
-需要手动构建翻译工具后才能使用苹果翻译功能。
+此工具使用 macOS 15 的 Apple Translation 框架，在设备本地完成翻译。主程序通过标准输入发送 JSON，工具通过标准输出返回 JSON；译文不会发送到第三方服务。
 
-## 构建步骤
+## 要求
 
-### 方法1: 使用 Xcode（推荐）
+- macOS 15 或更高版本
+- Xcode 16 或对应版本的 Command Line Tools
+- 首次使用某个语言对时允许系统下载离线语言模型
 
-1. 打开 `AppleTranslateTool/AppleTranslateTool.xcodeproj`
-2. 在 Xcode 中选择 Product > Build (Cmd+B)
-3. 构建成功后，可执行文件会在 `build/Release/AppleTranslateTool-bin`
-4. 将 `build/Release/AppleTranslateTool-bin` 复制到主目录：
-   ```bash
-   cp build/Release/AppleTranslateTool-bin ../AppleTranslateTool-bin
-   ```
+## 构建
 
-### 方法2: 命令行
+在项目根目录执行：
 
 ```bash
-cd AppleTranslateTool
-xcodegen generate
-xcodebuild -project AppleTranslateTool.xcodeproj -scheme AppleTranslateTool-bin -configuration Release build
+./build_apple_translator.sh
 ```
 
-## 注意
+脚本会生成并临时签名根目录下的 `AppleTranslateTool.app`。应用 bundle 提供 Translation 框架系统验证所需的稳定 bundle identifier，属于本机构建产物，不应提交到 Git。
 
-- 需要 Xcode 15+ 
-- 需要 macOS 14.4+
-- 首次翻译时会提示下载语言模型
+## 手动验证
+
+```bash
+printf '%s' '{"action":"translate","sourceLanguage":"en","targetLanguage":"zh-Hans","text":"Hello"}' | ./AppleTranslateTool.app/Contents/MacOS/AppleTranslateTool-bin
+```
+
+成功时会返回类似：
+
+```json
+{"ok":true,"translatedText":"你好"}
+```
+
+首次下载模型时，系统会显示 Apple 提供的授权与进度界面。工具必须作为当前登录用户的图形会话进程运行，不能在无 GUI 的 SSH/后台服务会话中完成首次模型下载。

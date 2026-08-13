@@ -549,17 +549,13 @@ def supports_apple_translation() -> bool:
     """检测是否支持 Apple Translation Framework
     
     Returns:
-        True: 支持 (macOS 14.4+)
+        True: 支持 (macOS 15.0+)
         False: 不支持
     """
     version = get_system_version()
     if version[0] == 0:
         return False
-    if version[0] > 14:
-        return True
-    if version[0] == 14 and version[1] >= 4:
-        return True
-    return False
+    return version[0] >= 15
 
 
 class TranslationMode:

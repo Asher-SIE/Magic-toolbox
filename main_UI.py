@@ -1333,52 +1333,7 @@ class MainFrame(wx.Frame):
         """Alt+D：英译中"""
         if event.GetId() != self.hotkey_ids["altd"]:
             return
-
-        last_phrase = self.vo_handler.get_last_phrase()
-        if last_phrase:
-            vo_text, _ = last_phrase
-            explained_text = self.TB.get_char_explanation(vo_text)
-            # 若解释存在（与原文本不同），则使用解释结果；否则用原文本
-            
-            if explained_text != vo_text:
-                self.vo_handler.speak_text(explained_text)
-                return
-
-            if self.translator:
-                result_text = self.translator.lookup_dictionary(vo_text)
-                if result_text:
-                    self.vo_handler.speak_text(result_text)
-                    return
-                
-                if not self._translation_lock.acquire(blocking=False):
-                    self.vo_handler.speak_text(setting._('translation_in_progress'))
-                    return
-                
-                if not self.translator.model_available:
-                    self._translation_lock.release()
-                    self.vo_handler.speak_text(setting._("model_unavailable"))
-                    return
-                
-                def translate_worker():
-                    try:
-                        result = self.translator.translate_with_streaming(
-                            vo_text, self._source_lang, self._target_lang
-                        )
-                        if result:
-                            wx.CallAfter(self.vo_handler.speak_text, result)
-                        else:
-                            wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
-                    except Exception as e:
-                        logging.warning(f"翻译失败: {e}")
-                        wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
-                    finally:
-                        self._is_translating = False
-                        self._translation_lock.release()
-                
-                self._is_translating = True
-                threading.Thread(target=translate_worker, daemon=True).start()
-        else:
-            self.vo_handler.speak_text(setting._('vo_warning'))
+        self._translate_last_phrase(self._source_lang, self._target_lang)
 
 
     def on_hotkey_altshiftd(self, event):
@@ -1387,51 +1342,47 @@ class MainFrame(wx.Frame):
         if event.GetId() != self.hotkey_ids["altshiftd"]:
             return
 
-        last_phrase = self.vo_handler.get_last_phrase()
-        if last_phrase:
-            vo_text, _ = last_phrase
-            explained_text = self.TB.get_char_explanation(vo_text)
-            # 若解释存在（与原文本不同），则使用解释结果；否则用原文本
-            
-            if explained_text != vo_text:
-                self.vo_handler.speak_text(explained_text)
-                return
+        self._translate_last_phrase(self._target_lang, self._source_lang)
 
-            if self.translator:
-                result_text = self.translator.lookup_dictionary(vo_text)
-                if result_text:
-                    self.vo_handler.speak_text(result_text)
-                    return
-                
-                if not self._translation_lock.acquire(blocking=False):
-                    self.vo_handler.speak_text(setting._('translation_in_progress'))
-                    return
-                
-                if not self.translator.model_available:
-                    self._translation_lock.release()
-                    self.vo_handler.speak_text(setting._("model_unavailable"))
-                    return
-                
-                def translate_worker():
-                    try:
-                        result = self.translator.translate_with_streaming(
-                            vo_text, self._target_lang, self._source_lang
-                        )
-                        if result:
-                            wx.CallAfter(self.vo_handler.speak_text, result)
-                        else:
-                            wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
-                    except Exception as e:
-                        logging.warning(f"翻译失败: {e}")
-                        wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
-                    finally:
-                        self._is_translating = False
-                        self._translation_lock.release()
-                
-                self._is_translating = True
-                threading.Thread(target=translate_worker, daemon=True).start()
-        else:
+    def _translate_last_phrase(self, source_lang: str, target_lang: str):
+        """Translate the last VoiceOver phrase using the selected backend."""
+        last_phrase = self.vo_handler.get_last_phrase()
+        if not last_phrase:
             self.vo_handler.speak_text(setting._('vo_warning'))
+            return
+        vo_text, _ = last_phrase
+        explained_text = self.TB.get_char_explanation(vo_text)
+        if explained_text != vo_text:
+            self.vo_handler.speak_text(explained_text)
+            return
+        dictionary_result = self._lookup_dictionary(vo_text)
+        if dictionary_result:
+            self.vo_handler.speak_text(dictionary_result)
+            return
+        if not self._translation_lock.acquire(blocking=False):
+            self.vo_handler.speak_text(setting._('translation_in_progress'))
+            return
+        if self._translation_mode == 'llm' and (not self.translator or not self.translator.model_available):
+            self._translation_lock.release()
+            self.vo_handler.speak_text(setting._("model_unavailable"))
+            return
+
+        def translate_worker():
+            try:
+                result = self._do_translate(vo_text, source_lang, target_lang)
+                wx.CallAfter(
+                    self.vo_handler.speak_text,
+                    result or setting._("translation_failed")
+                )
+            except Exception as e:
+                logging.warning(f"翻译失败: {e}")
+                wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+            finally:
+                self._is_translating = False
+                self._translation_lock.release()
+
+        self._is_translating = True
+        threading.Thread(target=translate_worker, daemon=True).start()
 
 
     def on_hotkey_altt(self, event):
@@ -1725,7 +1676,13 @@ class MainFrame(wx.Frame):
 
     def on_to_translate(self, event, langType: str = None):
         """Option + 回车键：翻译文本"""
-        if self._translation_mode != 'llm' or not self.translator:
+        apple_ready = (
+            self._translation_mode == 'apple'
+            and hasattr(self, 'apple_translator')
+            and self.apple_translator.is_available()
+        )
+        llm_ready = self._translation_mode == 'llm' and self.translator
+        if not (apple_ready or llm_ready):
             wx.MessageBox(
                 setting._("init_failed"), 
                 setting._("error"), 
@@ -1744,7 +1701,7 @@ class MainFrame(wx.Frame):
         if not text:
             return
         
-        result_text = self.translator.lookup_dictionary(text)
+        result_text = self._lookup_dictionary(text)
         if result_text:
             self.text_ctrl.SetValue(result_text)
             return
@@ -1753,7 +1710,7 @@ class MainFrame(wx.Frame):
             wx.MessageBox(setting._('translation_in_progress'), setting._('warning'), wx.OK | wx.ICON_WARNING)
             return
         
-        if not self.translator.model_available:
+        if self._translation_mode == 'llm' and not self.translator.model_available:
             self._translation_lock.release()
             self.vo_handler.speak_text(setting._("model_unavailable"))
             return
@@ -1770,7 +1727,7 @@ class MainFrame(wx.Frame):
         """翻译短文本（在线程中执行）"""
         def translate_worker():
             try:
-                result_text = self.translator.translate(text, source_lang, target_lang)
+                result_text = self._do_translate(text, source_lang, target_lang)
                 if result_text:
                     wx.CallAfter(self.text_ctrl.SetValue, result_text)
                 else:
@@ -1796,7 +1753,7 @@ class MainFrame(wx.Frame):
         def translate_worker():
             try:
                 wx.CallAfter(self.vo_handler.speak_text, "开始翻译长文本")
-                result_text = self.translator.translate_with_streaming(
+                result_text = self._do_translate(
                     text, source_lang, target_lang, callback=segment_callback
                 )
                 if result_text:

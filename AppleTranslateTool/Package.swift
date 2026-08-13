@@ -1,15 +1,17 @@
-// swift-tools-version: 5.3
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
     name: "AppleTranslateTool",
-    platforms: [
-        .macOS
+    platforms: [.macOS(.v15)],
+    products: [
+        .executable(name: "AppleTranslateTool-bin", targets: ["AppleTranslateTool"])
     ],
     targets: [
         .executableTarget(
             name: "AppleTranslateTool",
-            path: "Sources"
+            path: "Sources",
+            swiftSettings: [.swiftLanguageMode(.v6)]
         )
     ]
 )

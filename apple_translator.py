@@ -1,130 +1,122 @@
+"""Python bridge for Apple's on-device Translation framework."""
+
+from __future__ import annotations
+
+import json
 import logging
 import os
-import platform
+import stat
 import subprocess
+from typing import Any
+
 import setting
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class AppleTranslator:
-    """Apple Translation Framework 封装类
-    
-    使用 xcrun 运行翻译（需要构建 Swift 工具）
-    """
+class AppleTranslationError(RuntimeError):
+    """Raised when the native Apple Translation helper cannot complete a request."""
 
-    def __init__(self):
-        self._tool_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "AppleTranslateTool-bin"
+
+class AppleTranslator:
+    """Invoke the bundled SwiftUI helper over a small JSON/stdin protocol."""
+
+    DEFAULT_TIMEOUT = 300
+
+    def __init__(self, tool_path: str | None = None, timeout: int = DEFAULT_TIMEOUT):
+        root = os.path.dirname(os.path.abspath(__file__))
+        self._tool_path = tool_path or os.path.join(
+            root,
+            "AppleTranslateTool.app",
+            "Contents",
+            "MacOS",
+            "AppleTranslateTool-bin",
         )
-        self._tool_available = self._check_tool_available()
+        self._timeout = timeout
 
     def _check_tool_available(self) -> bool:
-        """检查翻译工具是否可用"""
-        return os.path.exists(self._tool_path)
-    
+        if not os.path.isfile(self._tool_path):
+            return False
+        if os.name == "posix":
+            return bool(os.stat(self._tool_path).st_mode & stat.S_IXUSR)
+        return True
+
     def get_status_message(self) -> str:
-        """获取状态消息"""
-        system_ok = setting.supports_apple_translation()
-        tool_ok = self._check_tool_available()
-        
-        if not system_ok:
-            return "系统不支持，需要 macOS 14.4+"
-        if not tool_ok:
-            return "翻译工具未构建，请参考 AppleTranslateTool/README.md"
-        return "就绪"
+        if not setting.supports_apple_translation():
+            return "系统不支持，需要 macOS 15.0 或更高版本"
+        if not self._check_tool_available():
+            return "翻译工具未构建，请运行 build_apple_translator.sh"
+        return "Apple 翻译已就绪"
+
+    get_readiness_message = get_status_message
 
     def is_available(self) -> bool:
-        """检查翻译器是否可用"""
-        return self._tool_available and setting.supports_apple_translation()
-    
-    def get_readiness_message(self) -> str:
-        """获取就绪状态的消息"""
-        if not setting.supports_apple_translation():
-            return "系统不支持，需要 macOS 14.4+"
-        if not self._check_tool_available():
-            return "翻译工具未构建，请参考 AppleTranslateTool/README.md"
-        return "苹果翻译已就绪"
+        return setting.supports_apple_translation() and self._check_tool_available()
 
-    def check_and_notify(self) -> tuple:
-        """检查状态并返回 (可用状态, 消息)
-        
-        Returns:
-            (True, "") - 可用
-            (False, message) - 不可用原因
-        """
+    def check_and_notify(self) -> tuple[bool, str]:
         if not setting.supports_apple_translation():
-            return (False, "系统不支持，需要 macOS 14.4+")
-        
-        if not self._tool_available:
-            return (False, "请构建翻译工具后使用")
-        
-        return (True, "")
+            return False, "系统不支持，需要 macOS 15.0 或更高版本"
+        if not self._check_tool_available():
+            return False, "请先运行 build_apple_translator.sh 构建翻译工具"
+        return True, ""
+
+    def _invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+        available, message = self.check_and_notify()
+        if not available:
+            raise AppleTranslationError(message)
+
+        try:
+            result = subprocess.run(
+                [self._tool_path],
+                input=json.dumps(payload, ensure_ascii=False),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=self._timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise AppleTranslationError("Apple 翻译超时") from exc
+        except OSError as exc:
+            raise AppleTranslationError(f"无法启动 Apple 翻译工具：{exc}") from exc
+
+        stdout = result.stdout.strip()
+        try:
+            reply = json.loads(stdout)
+        except (json.JSONDecodeError, TypeError) as exc:
+            detail = result.stderr.strip() or stdout or f"exit code {result.returncode}"
+            raise AppleTranslationError(f"Apple 翻译工具返回了无效响应：{detail}") from exc
+
+        if result.returncode != 0 or not reply.get("ok"):
+            detail = reply.get("error") or result.stderr.strip() or "未知错误"
+            raise AppleTranslationError(f"Apple 翻译失败：{detail}")
+        return reply
+
+    @staticmethod
+    def _language_code(language: str) -> str:
+        return setting.APPLE_TRANSLATION_LANG_MAP.get(language, language)
 
     def translate(self, text: str, source_lang: str, target_lang: str) -> str:
-        """翻译文本
-        
-        Args:
-            text: 待翻译文本
-            source_lang: 源语言代码
-            target_lang: 目标语言代码
-            
-        Returns:
-            翻译结果
-        """
-        available, msg = self.check_and_notify()
-        if not available:
-            raise RuntimeError(msg)
-
-        source_code = setting.APPLE_TRANSLATION_LANG_MAP.get(source_lang, source_lang)
-        target_code = setting.APPLE_TRANSLATION_LANG_MAP.get(target_lang, target_lang)
-
-        try:
-            result = subprocess.run(
-                [self._tool_path, source_code, target_code, text],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-            else:
-                logger.warning(f"翻译失败: {result.stderr}")
-                raise RuntimeError(f"翻译失败: {result.stderr}")
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("翻译超时")
-        except Exception as e:
-            raise RuntimeError(f"翻译异常: {str(e)}")
+        if not isinstance(text, str) or not text.strip():
+            return ""
+        reply = self._invoke({
+            "action": "translate",
+            "sourceLanguage": self._language_code(source_lang),
+            "targetLanguage": self._language_code(target_lang),
+            "text": text,
+        })
+        translated = reply.get("translatedText")
+        if not isinstance(translated, str):
+            raise AppleTranslationError("Apple 翻译工具未返回译文")
+        return translated
 
     def prepare_translation(self, source_lang: str, target_lang: str) -> bool:
-        """预下载语言包
-        
-        Args:
-            source_lang: 源语言代码
-            target_lang: 目标语言代码
-            
-        Returns:
-            是否成功开始下载
-        """
-        if not self._tool_available:
-            return False
+        self._invoke({
+            "action": "prepare",
+            "sourceLanguage": self._language_code(source_lang),
+            "targetLanguage": self._language_code(target_lang),
+        })
+        return True
 
-        source_code = setting.APPLE_TRANSLATION_LANG_MAP.get(source_lang, source_lang)
-        target_code = setting.APPLE_TRANSLATION_LANG_MAP.get(target_lang, target_lang)
-
-        try:
-            result = subprocess.run(
-                [self._tool_path, "--prepare", source_code, target_code],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
-
-    def get_supported_languages(self) -> list:
-        """获取支持的语言列表"""
-        return list(setting.APPLE_TRANSLATION_LANG_MAP.keys())
+    def get_supported_languages(self) -> list[str]:
+        return list(setting.APPLE_TRANSLATION_LANG_MAP)

@@ -26,6 +26,8 @@ MagicToolboxAvalonia/
 
 # Swift build output
 **/.build/
+AppleTranslateTool-bin
+AppleTranslateTool.app/
 
 # Clipboard residual data
 **/.clipboard_data
