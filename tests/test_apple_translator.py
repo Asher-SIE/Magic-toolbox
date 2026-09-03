@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -73,6 +74,42 @@ class AppleTranslatorTests(unittest.TestCase):
         with mock.patch.object(self.translator, "_invoke") as invoke:
             self.assertEqual(self.translator.translate("  ", "English", "Chinese"), "")
             invoke.assert_not_called()
+
+
+class AppleTranslatorPathResolutionTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        tool_dir = os.path.join(self._tmp.name, "AppleTranslateTool.app", "Contents", "MacOS")
+        os.makedirs(tool_dir)
+        self.tool_path = os.path.join(tool_dir, "AppleTranslateTool-bin")
+        with open(self.tool_path, "wb") as fh:
+            fh.write(b"stub")
+        os.chmod(self.tool_path, 0o755)
+
+    def test_resolves_tool_from_candidate_root(self):
+        translator = AppleTranslator()
+        with mock.patch.object(
+            AppleTranslator, "_candidate_roots", return_value=[self._tmp.name]
+        ):
+            self.assertEqual(translator._resolve_tool_path(), self.tool_path)
+            self.assertTrue(translator._check_tool_available())
+
+    def test_frozen_app_includes_bundle_roots(self):
+        exe_dir = os.path.join(self._tmp.name, "MacOS")
+        os.makedirs(exe_dir)
+        with mock.patch.object(sys, "frozen", True, create=True), \
+                mock.patch.object(sys, "_MEIPASS", self._tmp.name, create=True), \
+                mock.patch.object(sys, "executable", os.path.join(exe_dir, "MagicToolbox")):
+            roots = AppleTranslator._candidate_roots()
+        self.assertIn(self._tmp.name, roots)
+        self.assertIn(exe_dir, roots)
+
+    @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
+    def test_missing_explicit_tool_path_is_unavailable(self, _supports):
+        translator = AppleTranslator(tool_path=os.path.join(self._tmp.name, "missing"))
+        self.assertIsNone(translator._resolve_tool_path())
+        self.assertFalse(translator.is_available())
 
 
 if __name__ == "__main__":

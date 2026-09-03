@@ -14,7 +14,7 @@ import wx.adv
 
 from AppKit import NSApplication, NSApp, NSWindow
 from dialogs import FindReplaceDialog, EditDialog, AboutDialog
-from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController
+from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, split_text_by_punctuation
 from typing import Optional, Tuple
 
 import update
@@ -357,11 +357,33 @@ class MainFrame(wx.Frame):
         """
         if self._translation_mode == 'apple':
             if hasattr(self, 'apple_translator') and self.apple_translator.is_available():
-                return self.apple_translator.translate(text, source_lang, target_lang)
+                return self._translate_with_apple(text, source_lang, target_lang, callback)
             else:
                 raise RuntimeError(setting._('apple_translation_not_available'))
         else:
             return self.translator.translate_with_streaming(text, source_lang, target_lang, callback)
+
+    APPLE_TRANSLATION_SEGMENT_CHARS = 1000
+
+    def _translate_with_apple(self, text: str, source_lang: str, target_lang: str, callback=None) -> str:
+        """Apple 翻译：长文本分段调用，每段完成后流式回调
+
+        与 LLM 通道的 translate_with_streaming 行为对齐，
+        结果以空行拼接，callback 签名为 callback(segment_text, translated_text)
+        """
+        max_chars = self.APPLE_TRANSLATION_SEGMENT_CHARS
+        if len(text) <= max_chars:
+            segments = [text]
+        else:
+            segments = split_text_by_punctuation(text, max_chars)
+
+        results = []
+        for segment in segments:
+            translated = self.apple_translator.translate(segment, source_lang, target_lang)
+            results.append(translated)
+            if callback:
+                callback(segment, translated)
+        return '\n\n'.join(results)
     
     def _lookup_dictionary(self, word: str) -> str:
         """查词典"""

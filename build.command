@@ -73,6 +73,18 @@ else
     echo "找到 locales 目录：$LOCALES_PATH"
 fi
 
+# 构建 Apple 翻译工具（需 macOS 15+，否则打包时跳过该功能）
+MACOS_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
+if (( MACOS_MAJOR >= 15 )); then
+    echo "正在构建 Apple 翻译工具..."
+    bash "$SCRIPT_DIR/build_apple_translator.sh" || {
+        echo "错误：Apple 翻译工具构建失败，请检查上方错误信息"
+        exit 1
+    }
+else
+    echo "macOS 版本低于 15，跳过 Apple 翻译工具（Apple 翻译模式不可用）"
+fi
+
 # 清除之前的构建文件
 echo "正在清除之前的构建文件..."
 rm -rf "$DIST_DIR" "$BUILD_DIR"

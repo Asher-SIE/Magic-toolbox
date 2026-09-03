@@ -1,11 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+
+# macOS 15+ 且已构建时，将 Apple 翻译工具作为嵌套 bundle 打入应用
+apple_tool_datas = []
+if os.path.exists('AppleTranslateTool.app'):
+    apple_tool_datas.append(('AppleTranslateTool.app', 'AppleTranslateTool.app'))
+
 
 a = Analysis(
     ['main_UI.py'],
     pathex=[],
     binaries=[('venv/lib/python3.13/site-packages/llama_cpp/lib', '.')],
-    datas=[('resources', 'resources'), ('locales', 'locales')],
+    datas=[('resources', 'resources'), ('locales', 'locales')] + apple_tool_datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

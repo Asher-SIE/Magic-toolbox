@@ -7,11 +7,17 @@ import logging
 import os
 import stat
 import subprocess
+import sys
 from typing import Any
 
 import setting
 
 logger = logging.getLogger(__name__)
+
+
+TOOL_RELATIVE_PATH = os.path.join(
+    "AppleTranslateTool.app", "Contents", "MacOS", "AppleTranslateTool-bin"
+)
 
 
 class AppleTranslationError(RuntimeError):
@@ -24,21 +30,38 @@ class AppleTranslator:
     DEFAULT_TIMEOUT = 300
 
     def __init__(self, tool_path: str | None = None, timeout: int = DEFAULT_TIMEOUT):
-        root = os.path.dirname(os.path.abspath(__file__))
-        self._tool_path = tool_path or os.path.join(
-            root,
-            "AppleTranslateTool.app",
-            "Contents",
-            "MacOS",
-            "AppleTranslateTool-bin",
-        )
+        self._tool_path = tool_path
         self._timeout = timeout
 
+    @staticmethod
+    def _candidate_roots() -> list[str]:
+        """按优先级返回翻译工具可能所在的根目录（源码目录与打包后的 bundle 内部）"""
+        roots = [os.path.dirname(os.path.abspath(__file__))]
+        if getattr(sys, "frozen", False):
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                roots.append(meipass)
+            exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+            roots.append(exe_dir)
+            roots.append(os.path.normpath(os.path.join(exe_dir, os.pardir, "Resources")))
+        return roots
+
+    def _resolve_tool_path(self) -> str | None:
+        """惰性解析工具路径：显式指定优先，其次依次查找各候选目录"""
+        if self._tool_path:
+            return self._tool_path if os.path.isfile(self._tool_path) else None
+        for root in self._candidate_roots():
+            candidate = os.path.join(root, TOOL_RELATIVE_PATH)
+            if os.path.isfile(candidate):
+                return candidate
+        return None
+
     def _check_tool_available(self) -> bool:
-        if not os.path.isfile(self._tool_path):
+        tool_path = self._resolve_tool_path()
+        if not tool_path:
             return False
         if os.name == "posix":
-            return bool(os.stat(self._tool_path).st_mode & stat.S_IXUSR)
+            return bool(os.stat(tool_path).st_mode & stat.S_IXUSR)
         return True
 
     def get_status_message(self) -> str:
@@ -64,10 +87,13 @@ class AppleTranslator:
         available, message = self.check_and_notify()
         if not available:
             raise AppleTranslationError(message)
+        tool_path = self._resolve_tool_path()
+        if not tool_path:
+            raise AppleTranslationError("未找到 Apple 翻译工具")
 
         try:
             result = subprocess.run(
-                [self._tool_path],
+                [tool_path],
                 input=json.dumps(payload, ensure_ascii=False),
                 capture_output=True,
                 text=True,

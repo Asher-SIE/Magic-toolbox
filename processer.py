@@ -132,6 +132,55 @@ class BaseThreadedWorker:
             self.stop_worker()
 
 
+def split_text_by_punctuation(text: str, max_chars: int) -> List[str]:
+    """按标点分割文本，确保每段不超过max_chars
+
+    策略：先按空行分大段，单段超限时往前找最后一个标点截断
+    """
+    if not text or max_chars <= 0:
+        return [text] if text else []
+
+    result = []
+    # 先按空行分割成大段落
+    paragraphs = re.split(r'\n\n+', text)
+
+    for para in paragraphs:
+        if len(para) <= max_chars:
+            result.append(para)
+            continue
+
+        # 段落超长，需要进一步拆分
+        start = 0
+        para_len = len(para)
+        while start < para_len:
+            remaining = para[start:]
+            if len(remaining) <= max_chars:
+                result.append(remaining)
+                break
+
+            # 从max_chars位置往前找标点
+            chunk = remaining[:max_chars]
+            punctuation = re.compile(r'[^a-zA-Z0-9\s\d\u4e00-\u9fff]')
+            match = punctuation.search(chunk[::-1])
+
+            if match:
+                # 找到标点，截断位置
+                cut_pos = max_chars - match.start()
+                if cut_pos > 0:
+                    result.append(remaining[:cut_pos].strip())
+                    start += cut_pos
+                else:
+                    # 标点在开头，强制截断
+                    result.append(remaining[:max_chars].strip())
+                    start += max_chars
+            else:
+                # 没找到标点，直接截断
+                result.append(remaining[:max_chars].strip())
+                start += max_chars
+
+    return [s for s in result if s.strip()]
+
+
 # 翻译类
 class Translator(BaseThreadedWorker):
     #  HY-MT1.5-1.8B 配置
@@ -196,52 +245,8 @@ class Translator(BaseThreadedWorker):
         return text.strip()
 
     def _split_text_by_punctuation(self, text: str, max_chars: int) -> List[str]:
-        """按标点分割文本，确保每段不超过max_chars
-        
-        策略：先按空行分大段，单段超限时往前找最后一个标点截断
-        """
-        if not text or max_chars <= 0:
-            return [text] if text else []
-        
-        result = []
-        # 先按空行分割成大段落
-        paragraphs = re.split(r'\n\n+', text)
-        
-        for para in paragraphs:
-            if len(para) <= max_chars:
-                result.append(para)
-                continue
-            
-            # 段落超长，需要进一步拆分
-            start = 0
-            para_len = len(para)
-            while start < para_len:
-                remaining = para[start:]
-                if len(remaining) <= max_chars:
-                    result.append(remaining)
-                    break
-                
-                # 从max_chars位置往前找标点
-                chunk = remaining[:max_chars]
-                punctuation = re.compile(r'[^a-zA-Z0-9\s\d\u4e00-\u9fff]')
-                match = punctuation.search(chunk[::-1])
-                
-                if match:
-                    # 找到标点，截断位置
-                    cut_pos = max_chars - match.start()
-                    if cut_pos > 0:
-                        result.append(remaining[:cut_pos].strip())
-                        start += cut_pos
-                    else:
-                        # 标点在开头，强制截断
-                        result.append(remaining[:max_chars].strip())
-                        start += max_chars
-                else:
-                    # 没找到标点，直接截断
-                    result.append(remaining[:max_chars].strip())
-                    start += max_chars
-        
-        return [s for s in result if s.strip()]
+        """按标点分割文本（委托给模块级实现，供分段翻译复用）"""
+        return split_text_by_punctuation(text, max_chars)
 
     def _get_cache_key(self, text: str, source_lang: str, target_lang: str) -> str:
         """生成缓存key (md5哈希，包含语言方向)"""
