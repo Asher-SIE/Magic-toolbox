@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
-import Translation
+@preconcurrency import Translation
 
 private struct TranslationRequest: Decodable {
     let action: String
