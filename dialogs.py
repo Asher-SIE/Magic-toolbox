@@ -7,6 +7,7 @@ import wx.adv
 
 from processer import TextProcessor
 import update
+import ime_guard
 
 
 def _open_url(url):
@@ -67,6 +68,7 @@ class AboutDialog(wx.Dialog):
         
         panel.SetSizer(sizer)
         self.Centre()
+        ime_guard.install(self)
 
 
 class FindReplaceDialog(wx.Dialog):
@@ -143,8 +145,12 @@ class FindReplaceDialog(wx.Dialog):
         self.find_input.SetFocus()
         if find_text:
             self.find_input.SelectAll()
-    
+        ime_guard.install(self)
+
     def on_key_down(self, event):
+        if ime_guard.guard_key_event(event):
+            # 输入法组合中的 ESC（取消组合/候选），不关闭对话框
+            return
         key_code = event.GetKeyCode()
         if key_code == wx.WXK_ESCAPE:
             self.EndModal(wx.ID_CANCEL)
@@ -377,6 +383,7 @@ class EditDialog(wx.Dialog):
         self.Bind(wx.EVT_MENU, self.on_punc_to_newline, self.punc_to_newline_menu)
 
         self.save_state_to_undo()
+        ime_guard.install(self)
         
 
     def save_state_to_undo(self):
@@ -414,6 +421,11 @@ class EditDialog(wx.Dialog):
         key_code = event.GetKeyCode()
         modifiers = event.GetModifiers()
         is_alt_pressed = (modifiers & wx.MOD_ALT) == wx.MOD_ALT
+
+        if ime_guard.guard_key_event(event):
+            # 输入法组合中的 ESC（取消组合/候选），不触发关闭确认
+            event.Skip(False)
+            return
 
         if is_alt_pressed:
             if key_code == ord('1'):

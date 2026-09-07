@@ -18,6 +18,7 @@ from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOve
 from typing import Optional, Tuple
 
 import update
+import ime_guard
 
 
 class MainFrame(wx.Frame):
@@ -669,6 +670,7 @@ class MainFrame(wx.Frame):
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
 
         panel.SetSizer(sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -696,6 +698,7 @@ class MainFrame(wx.Frame):
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
 
         panel.SetSizer(sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -754,6 +757,7 @@ class MainFrame(wx.Frame):
         main_sizer.Add(button_panel, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.TOP, 15)
         
         dialog.SetSizer(main_sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -793,6 +797,7 @@ class MainFrame(wx.Frame):
         main_sizer.Add(button_panel, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.TOP, 15)
         
         dialog.SetSizer(main_sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -841,6 +846,7 @@ class MainFrame(wx.Frame):
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
 
         panel.SetSizer(sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
