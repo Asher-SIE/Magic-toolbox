@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 
 
-ACTIVATION_DATE = datetime.date(2026, 4, 8)
+ACTIVATION_DATE = datetime.date(2026, 9, 16)
 EXPIRY_DAYS = 180
 EXPIRY_WARNING_DAYS = 30
 
