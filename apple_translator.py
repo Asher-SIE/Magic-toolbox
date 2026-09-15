@@ -1,4 +1,9 @@
-"""Python bridge for Apple's on-device Translation framework."""
+"""Python bridge for Apple's on-device Translation framework.
+
+Requires macOS 26+: the bundled helper is a headless CLI that creates
+TranslationSession directly (no window, no language-download prompts).
+Missing language packs must be downloaded manually via System Settings.
+"""
 
 from __future__ import annotations
 
@@ -19,19 +24,28 @@ TOOL_RELATIVE_PATH = os.path.join(
     "AppleTranslateTool.app", "Contents", "MacOS", "AppleTranslateTool-bin"
 )
 
+# 无头 session 不能请求下载语言包，缺失时引导用户去系统设置手动下载
+LANGUAGE_DOWNLOAD_HINT = "翻译语言包未下载，请到 系统设置 > 通用 > 语言与地区 > 翻译语言 手动下载"
+
+# LanguageAvailability 状态（与 Swift 侧 reply 的 status 字段对应）
+STATUS_INSTALLED = "installed"
+STATUS_SUPPORTED = "supported"
+STATUS_UNSUPPORTED = "unsupported"
+
 
 class AppleTranslationError(RuntimeError):
     """Raised when the native Apple Translation helper cannot complete a request."""
 
 
 class AppleTranslator:
-    """Invoke the bundled SwiftUI helper over a small JSON/stdin protocol."""
+    """Invoke the bundled headless CLI helper over a small JSON/stdin protocol."""
 
-    DEFAULT_TIMEOUT = 300
+    DEFAULT_TIMEOUT = 90
 
     def __init__(self, tool_path: str | None = None, timeout: int = DEFAULT_TIMEOUT):
         self._tool_path = tool_path
         self._timeout = timeout
+        self._language_status_cache: dict[tuple[str, str], str] = {}
 
     @staticmethod
     def _candidate_roots() -> list[str]:
@@ -66,7 +80,7 @@ class AppleTranslator:
 
     def get_status_message(self) -> str:
         if not setting.supports_apple_translation():
-            return "系统不支持，需要 macOS 15.0 或更高版本"
+            return "系统不支持，需要 macOS 26.0 或更高版本"
         if not self._check_tool_available():
             return "翻译工具未构建，请运行 build_apple_translator.sh"
         return "Apple 翻译已就绪"
@@ -78,7 +92,7 @@ class AppleTranslator:
 
     def check_and_notify(self) -> tuple[bool, str]:
         if not setting.supports_apple_translation():
-            return False, "系统不支持，需要 macOS 15.0 或更高版本"
+            return False, "系统不支持，需要 macOS 26.0 或更高版本"
         if not self._check_tool_available():
             return False, "请先运行 build_apple_translator.sh 构建翻译工具"
         return True, ""
@@ -114,6 +128,8 @@ class AppleTranslator:
             raise AppleTranslationError(f"Apple 翻译工具返回了无效响应：{detail}") from exc
 
         if result.returncode != 0 or not reply.get("ok"):
+            if reply.get("code") == "language_not_installed":
+                raise AppleTranslationError(LANGUAGE_DOWNLOAD_HINT)
             detail = reply.get("error") or result.stderr.strip() or "未知错误"
             raise AppleTranslationError(f"Apple 翻译失败：{detail}")
         return reply
@@ -122,9 +138,37 @@ class AppleTranslator:
     def _language_code(language: str) -> str:
         return setting.APPLE_TRANSLATION_LANG_MAP.get(language, language)
 
+    def get_language_status(self, source_lang: str, target_lang: str) -> str:
+        """查询语言对的语言包状态：installed / supported / unsupported（带缓存）"""
+        key = (self._language_code(source_lang), self._language_code(target_lang))
+        if key not in self._language_status_cache:
+            reply = self._invoke({
+                "action": "status",
+                "sourceLanguage": key[0],
+                "targetLanguage": key[1],
+            })
+            status = reply.get("status")
+            if status not in (STATUS_INSTALLED, STATUS_SUPPORTED, STATUS_UNSUPPORTED):
+                raise AppleTranslationError("Apple 翻译工具返回了未知的语言包状态")
+            self._language_status_cache[key] = status
+        return self._language_status_cache[key]
+
+    def get_language_hint(self, source_lang: str, target_lang: str) -> str:
+        """返回语言对的状态引导提示；语言包已安装时返回空字符串"""
+        status = self.get_language_status(source_lang, target_lang)
+        if status == STATUS_INSTALLED:
+            return ""
+        if status == STATUS_UNSUPPORTED:
+            return f"苹果翻译不支持「{source_lang} → {target_lang}」语言对"
+        return f"{source_lang} → {target_lang}：{LANGUAGE_DOWNLOAD_HINT}"
+
     def translate(self, text: str, source_lang: str, target_lang: str) -> str:
         if not isinstance(text, str) or not text.strip():
             return ""
+        # 前置预检：语言包缺失/语言对不支持时直接报错，绝不进入可能挂起的翻译调用
+        status = self.get_language_status(source_lang, target_lang)
+        if status != STATUS_INSTALLED:
+            raise AppleTranslationError(self.get_language_hint(source_lang, target_lang))
         reply = self._invoke({
             "action": "translate",
             "sourceLanguage": self._language_code(source_lang),
@@ -135,14 +179,6 @@ class AppleTranslator:
         if not isinstance(translated, str):
             raise AppleTranslationError("Apple 翻译工具未返回译文")
         return translated
-
-    def prepare_translation(self, source_lang: str, target_lang: str) -> bool:
-        self._invoke({
-            "action": "prepare",
-            "sourceLanguage": self._language_code(source_lang),
-            "targetLanguage": self._language_code(target_lang),
-        })
-        return True
 
     def get_supported_languages(self) -> list[str]:
         return list(setting.APPLE_TRANSLATION_LANG_MAP)

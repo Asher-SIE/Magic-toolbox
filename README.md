@@ -116,15 +116,31 @@ chmod +x build.command
 ### 注意事项
 - 确保项目根目录中存在 `resources` 文件夹，且包含全部必要资源文件
 - 首次打包前，需先安装打包工具：`pip install pyinstaller`
+- Apple 翻译工具的构建与手动验证方法见 `AppleTranslateTool/README.md`（需 macOS 26+ 与 Xcode 26 工具链）
+
+## 开发与测试
+### 运行单元测试
+```bash
+python -m unittest discover -s tests -t . -v
+```
+部分用例（如剪贴板、VoiceOver 相关）仅在 macOS 上运行，其他平台会自动跳过。
+
+### Apple 翻译工具单独构建
+```bash
+./build_apple_translator.sh
+```
 
 ## 项目结构
 ```
 Magic-toolbox/
 ├── main_UI.py          # 主界面程序代码
 ├── processer.py        # 核心处理器（翻译、剪贴板、VoiceOver 功能）
+├── dictionary.py       # 本地词典（各翻译模式共用的查询层）
+├── apple_translator.py # Apple 翻译桥接（调用无头 Swift CLI，需 macOS 26+）
 ├── setting.py          # 配置文件与国际化模块
 ├── resources/          # 资源文件目录
 │   └── dict.txt        # 本地词典文件
+├── tests/              # 单元测试
 ├── locales/            # 国际化语言文件
 │   ├── zh_CN/          # 中文语言包
 │   └── en/             # 英文语言包

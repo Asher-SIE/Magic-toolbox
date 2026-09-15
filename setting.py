@@ -547,15 +547,15 @@ def get_system_version() -> tuple:
 
 def supports_apple_translation() -> bool:
     """检测是否支持 Apple Translation Framework
-    
+
     Returns:
-        True: 支持 (macOS 15.0+)
+        True: 支持 (macOS 26.0+，无头 TranslationSession API)
         False: 不支持
     """
     version = get_system_version()
     if version[0] == 0:
         return False
-    return version[0] >= 15
+    return version[0] >= 26
 
 
 class TranslationMode:

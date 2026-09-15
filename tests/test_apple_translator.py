@@ -11,24 +11,43 @@ with mock.patch("os.path.expanduser", return_value=_test_home.name), mock.patch(
         "subprocess.run",
         return_value=subprocess.CompletedProcess([], 0, '"IOPlatformUUID" = "TEST-UUID"\n', ""),
     ):
-    from apple_translator import AppleTranslationError, AppleTranslator
+    from apple_translator import (
+        LANGUAGE_DOWNLOAD_HINT,
+        STATUS_INSTALLED,
+        STATUS_SUPPORTED,
+        STATUS_UNSUPPORTED,
+        AppleTranslationError,
+        AppleTranslator,
+    )
 
 
 class AppleTranslatorTests(unittest.TestCase):
     def setUp(self):
         self.translator = AppleTranslator(tool_path=__file__, timeout=12)
 
+    @staticmethod
+    def _completed(stdout):
+        return subprocess.CompletedProcess([__file__], 0, stdout, "")
+
     @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
     @mock.patch("apple_translator.subprocess.run")
-    def test_translate_uses_json_stdin_and_maps_languages(self, run, _supports):
-        run.return_value = subprocess.CompletedProcess(
-            [__file__], 0, json.dumps({"ok": True, "translatedText": "你好"}), ""
-        )
+    def test_translate_prechecks_status_then_translates(self, run, _supports):
+        run.side_effect = [
+            self._completed(json.dumps({"ok": True, "status": STATUS_INSTALLED})),
+            self._completed(json.dumps({"ok": True, "translatedText": "你好"})),
+        ]
 
         result = self.translator.translate("Hello 世界", "English", "Chinese")
 
         self.assertEqual(result, "你好")
-        kwargs = run.call_args.kwargs
+        self.assertEqual(run.call_count, 2)
+        status_payload = json.loads(run.call_args_list[0].kwargs["input"])
+        self.assertEqual(status_payload, {
+            "action": "status",
+            "sourceLanguage": "en",
+            "targetLanguage": "zh-Hans",
+        })
+        kwargs = run.call_args_list[1].kwargs
         self.assertEqual(kwargs["timeout"], 12)
         payload = json.loads(kwargs["input"])
         self.assertEqual(payload, {
@@ -40,22 +59,70 @@ class AppleTranslatorTests(unittest.TestCase):
 
     @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
     @mock.patch("apple_translator.subprocess.run")
-    def test_prepare_uses_same_protocol(self, run, _supports):
-        run.return_value = subprocess.CompletedProcess(
-            [__file__], 0, json.dumps({"ok": True}), ""
-        )
-        self.assertTrue(self.translator.prepare_translation("Japanese", "English"))
+    def test_get_language_status_caches_result(self, run, _supports):
+        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_INSTALLED}))
+
+        self.assertEqual(self.translator.get_language_status("English", "Chinese"), STATUS_INSTALLED)
+        self.assertEqual(self.translator.get_language_status("English", "Chinese"), STATUS_INSTALLED)
+
+        self.assertEqual(run.call_count, 1)
+
+    @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
+    @mock.patch("apple_translator.subprocess.run")
+    def test_missing_language_pack_blocks_translation(self, run, _supports):
+        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_SUPPORTED}))
+
+        with self.assertRaisesRegex(AppleTranslationError, LANGUAGE_DOWNLOAD_HINT):
+            self.translator.translate("hello", "English", "Chinese")
+
+        # 只发生 status 预检，绝不进入可能挂起的翻译调用
+        self.assertEqual(run.call_count, 1)
         payload = json.loads(run.call_args.kwargs["input"])
-        self.assertEqual(payload["action"], "prepare")
-        self.assertEqual(payload["sourceLanguage"], "ja")
-        self.assertEqual(payload["targetLanguage"], "en")
+        self.assertEqual(payload["action"], "status")
+
+    @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
+    @mock.patch("apple_translator.subprocess.run")
+    def test_unsupported_pair_blocks_translation(self, run, _supports):
+        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_UNSUPPORTED}))
+
+        with self.assertRaisesRegex(AppleTranslationError, "不支持"):
+            self.translator.translate("hello", "English", "Chinese")
+
+    @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
+    @mock.patch("apple_translator.subprocess.run")
+    def test_get_language_hint_messages(self, run, _supports):
+        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_SUPPORTED}))
+        self.assertIn("系统设置", self.translator.get_language_hint("English", "Chinese"))
+        self.translator._language_status_cache.clear()
+
+        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_UNSUPPORTED}))
+        self.assertIn("不支持", self.translator.get_language_hint("English", "Chinese"))
+        self.translator._language_status_cache.clear()
+
+        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_INSTALLED}))
+        self.assertEqual(self.translator.get_language_hint("English", "Chinese"), "")
+
+    @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
+    @mock.patch("apple_translator.subprocess.run")
+    def test_native_not_installed_code_maps_to_download_hint(self, run, _supports):
+        run.side_effect = [
+            self._completed(json.dumps({"ok": True, "status": STATUS_INSTALLED})),
+            self._completed(json.dumps({
+                "ok": False, "error": "not installed", "code": "language_not_installed",
+            })),
+        ]
+
+        with self.assertRaisesRegex(AppleTranslationError, "系统设置"):
+            self.translator.translate("hello", "English", "Chinese")
 
     @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
     @mock.patch("apple_translator.subprocess.run")
     def test_native_error_is_reported(self, run, _supports):
-        run.return_value = subprocess.CompletedProcess(
-            [__file__], 0, json.dumps({"ok": False, "error": "unsupported language"}), ""
-        )
+        run.side_effect = [
+            self._completed(json.dumps({"ok": True, "status": STATUS_INSTALLED})),
+            self._completed(json.dumps({"ok": False, "error": "unsupported language"})),
+        ]
+
         with self.assertRaisesRegex(AppleTranslationError, "unsupported language"):
             self.translator.translate("hello", "English", "Klingon")
 
@@ -68,7 +135,7 @@ class AppleTranslatorTests(unittest.TestCase):
     @mock.patch("apple_translator.setting.supports_apple_translation", return_value=False)
     def test_unsupported_system_is_unavailable(self, _supports):
         self.assertFalse(self.translator.is_available())
-        self.assertIn("macOS 15", self.translator.get_status_message())
+        self.assertIn("macOS 26", self.translator.get_status_message())
 
     def test_empty_text_does_not_launch_helper(self):
         with mock.patch.object(self.translator, "_invoke") as invoke:

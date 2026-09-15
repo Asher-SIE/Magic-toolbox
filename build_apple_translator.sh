@@ -8,7 +8,7 @@ CONTENTS="$APP_BUNDLE/Contents"
 DESTINATION="$CONTENTS/MacOS/AppleTranslateTool-bin"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-    echo "错误：Apple Translation 工具只能在 macOS 15+ 上构建。" >&2
+    echo "错误：Apple Translation 工具只能在 macOS 26+ 上构建。" >&2
     exit 1
 fi
 
@@ -18,8 +18,8 @@ if ! command -v xcrun >/dev/null 2>&1; then
 fi
 
 MACOS_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
-if (( MACOS_MAJOR < 15 )); then
-    echo "错误：Apple Translation 需要 macOS 15 或更高版本。" >&2
+if (( MACOS_MAJOR < 26 )); then
+    echo "错误：Apple Translation（无头 TranslationSession API）需要 macOS 26 或更高版本，且需 Xcode 26 工具链。" >&2
     exit 1
 fi
 

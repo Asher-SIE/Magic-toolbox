@@ -14,6 +14,7 @@ import wx.adv
 
 from AppKit import NSApplication, NSApp, NSWindow
 from dialogs import FindReplaceDialog, EditDialog, AboutDialog
+from dictionary import Dictionary
 from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, split_text_by_punctuation
 from typing import Optional, Tuple
 
@@ -82,6 +83,8 @@ class MainFrame(wx.Frame):
 
         # 实例化核心处理器
         self.translator = None
+        # 本地词典：与翻译模式无关，所有模式共用（先查词库、无匹配再翻译）
+        self.dictionary = Dictionary()
         self.vo_handler = VoiceOverHandler(
             log_level=logging.INFO,
             repeat_threshold=0.02,
@@ -387,9 +390,9 @@ class MainFrame(wx.Frame):
         return '\n\n'.join(results)
     
     def _lookup_dictionary(self, word: str) -> str:
-        """查词典"""
-        if self._translation_mode == 'llm' and self.translator:
-            return self.translator.lookup_dictionary(word)
+        """查词典（所有翻译模式共用：先查词库、无匹配再走翻译引擎）"""
+        if self.dictionary:
+            return self.dictionary.lookup(word)
         return None
     
     def on_source_lang_changed(self, event):
@@ -1009,17 +1012,18 @@ class MainFrame(wx.Frame):
         try:
             from apple_translator import AppleTranslator
             self.apple_translator = AppleTranslator()
-            
+
             if self.apple_translator.is_available():
                 self.text_ctrl.SetValue(self.apple_translator.get_readiness_message())
+                self._check_apple_language_status_background()
+            elif is_internal:
+                # 内部机不回退 LLM：系统低于 macOS 26 或工具缺失时直接禁用翻译
+                self.text_ctrl.SetValue(setting._('apple_translation_not_available'))
             else:
-                if is_internal:
-                    self.text_ctrl.SetValue(self.apple_translator.get_readiness_message())
-                else:
-                    self._translation_mode = 'llm'
-                    self._init_llm_translator()
-                    self._update_mode_choice_ui()
-                    self.save_config()
+                self._translation_mode = 'llm'
+                self._init_llm_translator()
+                self._update_mode_choice_ui()
+                self.save_config()
         except Exception as e:
             logging.warning(f"Apple翻译器初始化失败: {e}")
             if is_internal:
@@ -1029,6 +1033,22 @@ class MainFrame(wx.Frame):
                 self._init_llm_translator()
                 self._update_mode_choice_ui()
                 self.save_config()
+
+    def _check_apple_language_status_background(self):
+        """后台预检当前语言对的语言包状态，未安装/不支持时给出引导提示"""
+        source_lang, target_lang = self._source_lang, self._target_lang
+
+        def status_worker():
+            try:
+                hint = self.apple_translator.get_language_hint(source_lang, target_lang)
+            except Exception as e:
+                logging.warning(f"Apple 翻译语言状态预检失败: {e}")
+                return
+            if hint:
+                wx.CallAfter(self.text_ctrl.SetValue, hint)
+                wx.CallAfter(self.vo_handler.speak_text, hint)
+
+        threading.Thread(target=status_worker, daemon=True).start()
     
     def _update_mode_choice_ui(self):
         """更新翻译模式选择 UI"""
@@ -1352,9 +1372,9 @@ class MainFrame(wx.Frame):
                 self.vo_handler.speak_text(explained_text)
                 return
 
-            if self._translation_mode == 'llm' and self.translator:
-                result_text = self.translator.lookup_dictionary(vo_text[0])
-                self.vo_handler.speak_text(result_text)
+            # 注：保持取首字符的既有行为（与 _translate_last_phrase 传整串不一致，疑似历史遗留）
+            result_text = self._lookup_dictionary(vo_text[0])
+            self.vo_handler.speak_text(result_text)
 
 
     def on_hotkey_altd(self, event):
@@ -1581,8 +1601,9 @@ class MainFrame(wx.Frame):
                 self.vo_handler.speak_text(explained_text)
                 return
 
-        if self._translation_mode == 'llm' and self.translator:
-            result_text = self.translator.lookup_dictionary(result_text[0])
+        # 注：保持取首字符的既有行为（剪贴板浏览定位的是单字符）
+        if result_text:
+            result_text = self._lookup_dictionary(result_text[0])
             self.vo_handler.speak_text(result_text)
 
 
@@ -1704,13 +1725,19 @@ class MainFrame(wx.Frame):
 
     def on_to_translate(self, event, langType: str = None):
         """Option + 回车键：翻译文本"""
-        apple_ready = (
+        apple_selected = (
             self._translation_mode == 'apple'
             and hasattr(self, 'apple_translator')
-            and self.apple_translator.is_available()
         )
+        apple_ready = apple_selected and self.apple_translator.is_available()
         llm_ready = self._translation_mode == 'llm' and self.translator
         if not (apple_ready or llm_ready):
+            if apple_selected and not llm_ready:
+                # 内部机系统低于 macOS 26 或工具缺失：明确提示不可用，不回退 LLM
+                message = setting._('apple_translation_not_available')
+                self.text_ctrl.SetValue(message)
+                self.vo_handler.speak_text(message)
+                return
             wx.MessageBox(
                 setting._("init_failed"), 
                 setting._("error"), 
@@ -1762,6 +1789,8 @@ class MainFrame(wx.Frame):
                     wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             except Exception as e:
                 logging.warning(f"翻译失败: {e}")
+                # 错误必须回写编辑框，避免界面上表现为"卡在处理中"
+                wx.CallAfter(self.text_ctrl.SetValue, f"[{setting._('translation_failed')}: {e}]")
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
                 self._is_translating = False
@@ -1791,6 +1820,10 @@ class MainFrame(wx.Frame):
                     wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             except Exception as e:
                 logging.warning(f"翻译失败: {e}")
+                # 错误必须回写编辑框（保留已完成的分段结果），避免界面上表现为"卡在处理中"
+                partial = '\n\n'.join(accumulated_result)
+                error_line = f"[{setting._('translation_failed')}: {e}]"
+                wx.CallAfter(self.text_ctrl.SetValue, f"{partial}\n\n{error_line}" if partial else error_line)
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
                 self._is_translating = False
