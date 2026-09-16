@@ -70,6 +70,7 @@ MagicToolbox 是一款专为 macOS VoiceOver 视障用户设计的辅助工具�
 | Option+Shift+J | 将剪贴板内容同步至系统剪贴板 |
 | Option+Shift+K | 切换至当前剪贴板内容下一行 |
 | Option+Shift+M | 查看剪贴板综述（行列信息） |
+| Option+Shift+P | 将当前行粘贴到前台应用输入框（粘贴后约 1 秒还原系统剪贴板；连续触发时从最后一次操作重新计时） |
 
 ## 环境要求
 - macOS 12.0 及以上版本

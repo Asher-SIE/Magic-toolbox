@@ -97,6 +97,10 @@ class MainFrame(wx.Frame):
         self.TB = TextBrowser()
         self.volume_controller = VolumeController(loop_interval=0.02)
         self.volume_controller.set_config(self._volume_limit, self._volume_target)
+
+        # Option+Shift+P 粘贴当前行：粘贴前的系统剪贴板内容与延时还原计时器
+        self._paste_original_clipboard = None
+        self._paste_restore_timer = None
         
         # 应用启动时检查VoiceOver状态，如果未运行则后台启动
         if not self.vo_handler.is_voiceover_running():
@@ -563,6 +567,10 @@ class MainFrame(wx.Frame):
         for hid in self.hotkey_ids.values():
             self.UnregisterHotKey(hid)
         self.hotkey_ids.clear()
+
+        #  停止粘贴还原计时器
+        if self._paste_restore_timer is not None:
+            self._paste_restore_timer.Stop()
 
         #  关闭窗口
         os._exit(0)
@@ -1697,30 +1705,78 @@ class MainFrame(wx.Frame):
 
 
     def on_hotkey_altshiftp(self, event):
-        """alt+shift+p: 粘贴剪贴板当前行"""
+        """alt+shift+p: 粘贴剪贴板当前行到前台应用输入框"""
         result_text = self.TB._current_line
         if not result_text:
             return
-        
+
         try:
-            from AppKit import NSPasteboard
-            from ApplicationServices import AXUIElementCreateSystemWide, AXUIElementCopyAttributeValue, AXUIElementSetAttributeValue
-            
+            from AppKit import NSPasteboard, NSPasteboardTypeString
+            from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
+
+            # 辅助功能权限预检：未授权时弹出系统授权窗口并播报提示
+            if not AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True}):
+                logging.warning("粘贴失败：未授予辅助功能权限")
+                self.vo_handler.speak_text("需要辅助功能权限，请在系统设置中授权后重试")
+                return
+
             pasteboard = NSPasteboard.general()
+
+            # 仅在无待还原任务时保存原剪贴板，避免把上一次粘贴的行误存为原始内容
+            restore_pending = self._paste_restore_timer is not None and self._paste_restore_timer.IsRunning()
+            if not restore_pending:
+                original = pasteboard.stringForType_(NSPasteboardTypeString)
+                self._paste_original_clipboard = str(original) if original else None
+
             pasteboard.clearContents()
             pasteboard.setString_forType_(result_text, 'public.utf8-plain-text')
-            
-            system_wide = AXUIElementCreateSystemWide()
-            focused_app, _ = AXUIElementCopyAttributeValue(system_wide, "AXFocusedApplication")
-            if focused_app:
-                focused_element, _ = AXUIElementCopyAttributeValue(focused_app, "AXFocusedUIElement")
-                if focused_element:
-                    AXUIElementSetAttributeValue(focused_element, "AXValue", result_text)
-                    return
-            
-            subprocess.run(['osascript', '-e', 'tell application "System Events" to keystroke "v" using command down'], capture_output=True)
+
+            # 延时合成按键：等待物理修饰键（Option/Shift）松开，且不阻塞 UI 线程
+            wx.CallLater(100, self._post_paste_keystroke)
+
+            # 还原计时器：连续触发时重置，从最后一次粘贴算起 1 秒后才还原剪贴板
+            if restore_pending:
+                self._paste_restore_timer.Stop()
+            self._paste_restore_timer = wx.CallLater(1000, self._restore_clipboard_after_paste)
         except Exception as e:
             logging.warning(f"粘贴失败: {e}")
+
+
+    def _post_paste_keystroke(self):
+        """向前台应用合成 Cmd+V（Quartz 优先，osascript 兜底）"""
+        try:
+            import Quartz
+
+            v_keycode = 9  # kVK_ANSI_V
+            for key_down in (True, False):
+                key_event = Quartz.CGEventCreateKeyboardEvent(None, v_keycode, key_down)
+                # 显式只设 Command 标志，覆盖仍被按住的物理修饰键（Option/Shift）
+                Quartz.CGEventSetFlags(key_event, Quartz.kCGEventFlagMaskCommand)
+                Quartz.CGEventPost(Quartz.kCGSessionEventTap, key_event)
+        except Exception as e:
+            logging.warning(f"Quartz 合成 Cmd+V 失败，回退 osascript: {e}")
+            script = 'delay 0.1\ntell application "System Events" to keystroke "v" using command down'
+            try:
+                proc = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
+                if proc.returncode != 0:
+                    logging.error(f"osascript 粘贴失败: {proc.stderr.strip()}")
+            except Exception as fallback_error:
+                logging.error(f"osascript 调用失败: {fallback_error}")
+
+
+    def _restore_clipboard_after_paste(self):
+        """延时还原系统剪贴板为粘贴前的内容"""
+        try:
+            from AppKit import NSPasteboard
+
+            pasteboard = NSPasteboard.general()
+            pasteboard.clearContents()
+            original = self._paste_original_clipboard
+            if original:
+                pasteboard.setString_forType_(original, 'public.utf8-plain-text')
+            self._paste_original_clipboard = None
+        except Exception as e:
+            logging.warning(f"还原剪贴板失败: {e}")
 
 
     def on_to_translate(self, event, langType: str = None):

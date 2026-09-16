@@ -32,3 +32,4 @@ Option+Shift+O    Next character of current clipboard content
 Option+Shift+J    Sync clipboard content to system clipboard
 Option+Shift+K    Next line of current clipboard content
 Option+Shift+M    View clipboard summary (row and column information)
+Option+Shift+P    Paste current line into the frontmost app's input box (clipboard restored about 1 second after)
