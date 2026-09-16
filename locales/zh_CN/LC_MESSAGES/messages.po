@@ -588,6 +588,54 @@ msgid "nav_settings"
 msgstr "设置"
 
 #: main_UI.py
+msgid "nav_recognition"
+msgstr "识别"
+
+#: main_UI.py
+msgid "recognition_hint"
+msgstr "按 Option+Shift+R 识别剪贴板中的图片，或通过工具栏浏览图片文件"
+
+#: main_UI.py
+msgid "ocr_engine_label"
+msgstr "OCR 引擎:"
+
+#: main_UI.py
+msgid "ocr_engine_apple"
+msgstr "Apple OCR"
+
+#: main_UI.py
+msgid "browse_ocr_image"
+msgstr "浏览图片"
+
+#: main_UI.py
+msgid "browse_ocr_image_tips"
+msgstr "选择图片文件进行文字识别"
+
+#: main_UI.py
+msgid "ocr_select_image"
+msgstr "选择图片文件"
+
+#: main_UI.py
+msgid "ocr_no_image"
+msgstr "剪贴板中没有图片，请先复制图片后再按 Option+Shift+R"
+
+#: main_UI.py
+msgid "ocr_in_progress"
+msgstr "正在识别中，请稍候"
+
+#: main_UI.py
+msgid "ocr_engine_unavailable"
+msgstr "OCR 引擎不可用"
+
+#: main_UI.py
+msgid "ocr_failed"
+msgstr "识别失败"
+
+#: main_UI.py
+msgid "ocr_empty_result"
+msgstr "未识别到文字"
+
+#: main_UI.py
 msgid "clipboard_max_count_warning_title"
 msgstr "剪贴板记录警告"
 

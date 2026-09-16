@@ -33,3 +33,6 @@ Option+Shift+J    将剪贴板内容同步至系统剪贴板
 Option+Shift+K    切换至当前剪贴板内容下一行
 Option+Shift+M    查看剪贴板综述（行列信息）
 Option+Shift+P    粘贴剪贴板当前行到输入框
+
+四、图片识别快捷键
+Option+Shift+R    识别剪贴板中的图片（先在访达等应用中按 Command+C 复制图片），结果自动朗读

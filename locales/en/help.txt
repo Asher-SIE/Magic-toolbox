@@ -1,5 +1,5 @@
 MagicToolbox
-MagicToolbox is an assistive tool designed exclusively for macOS VoiceOver visually impaired users, integrating core features including real-time translation, clipboard management, and one-click text processing.
+MagicToolbox is an assistive tool designed exclusively for macOS VoiceOver visually impaired users, integrating core features including real-time translation, clipboard management, image recognition, and one-click text processing.
 
 Features
 Translation Features
@@ -17,6 +17,13 @@ Clipboard Management
 - Editing Function: Built-in text editor with undo and redo functionality
 - Find/Replace: Supports find next/previous, case sensitivity and regular expressions; in non-regex mode the replacement text supports escape sequences \n \t \r \\, unknown escapes are kept as-is
 - Quick Processing: Provides handy features including removing blank spaces, merging spaces, converting numbers to Chinese characters, and text splitting
+
+Image Recognition
+- Built-in System OCR: Uses the macOS Vision framework for on-device recognition on macOS 26 and later, no internet connection or model download required
+- Quick Recognition: While browsing an image in Finder or other apps, press Command+C to copy it, then press Option+Shift+R to recognize the image in the clipboard
+- File Recognition: The recognition panel toolbar offers a "Browse Image" button to pick an image file directly
+- Result Sync: Recognition results are shown live in the recognition panel edit box (new results overwrite old ones) and are read aloud by VoiceOver automatically
+- Engine Extension: The recognition panel toolbar lets you switch OCR engines; Apple OCR is available now, with more engines to come
 
 Voice Enhancement
 - VoiceOver Integration: Optimized for VoiceOver, works seamlessly with the screen reader
@@ -36,4 +43,5 @@ Interface Navigation
 The app uses a layout with a left navigation bar and a right content panel:
 - Translation Panel: Enter text to perform translation
 - Clipboard Panel: Browse and manage clipboard history
+- Recognition Panel: Shows image text recognition results (new results overwrite old ones); the toolbar switches OCR engines and browses image files
 - Settings Panel: Configure the translation model path and the maximum number of saved clipboard records

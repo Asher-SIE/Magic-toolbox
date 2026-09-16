@@ -413,6 +413,13 @@ hotKeys = [
         "key": "p",
         "handler": "on_hotkey_altshiftp",
         "description": "alt+shift+p: 粘贴剪贴板当前行"
+    },
+    {
+        "name": "altshiftr",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": "r",
+        "handler": "on_hotkey_altshiftr",
+        "description": "alt+shift+r: 识别剪贴板图片(OCR)"
     }
 ]
 
@@ -432,7 +439,8 @@ def load_config():
         'clipboard_max_count': 1000,
         'volume_limit': 100,
         'volume_target': 80,
-        'translation_mode': 'llm'
+        'translation_mode': 'llm',
+        'ocr_mode': 'apple'
     }
     try:
         if os.path.exists(config_path):
@@ -444,7 +452,7 @@ def load_config():
     return config
 
 
-def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm'):
+def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple'):
     """保存配置"""
     try:
         config = {
@@ -454,7 +462,8 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
             'clipboard_max_count': clipboard_max_count,
             'volume_limit': volume_limit,
             'volume_target': volume_target,
-            'translation_mode': translation_mode
+            'translation_mode': translation_mode,
+            'ocr_mode': ocr_mode
         }
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)

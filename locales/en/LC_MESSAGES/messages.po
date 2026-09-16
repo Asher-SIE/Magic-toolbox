@@ -588,6 +588,54 @@ msgid "nav_settings"
 msgstr "Settings"
 
 #: main_UI.py
+msgid "nav_recognition"
+msgstr "Recognition"
+
+#: main_UI.py
+msgid "recognition_hint"
+msgstr "Press Option+Shift+R to recognize the image in the clipboard, or browse an image file from the toolbar"
+
+#: main_UI.py
+msgid "ocr_engine_label"
+msgstr "OCR Engine:"
+
+#: main_UI.py
+msgid "ocr_engine_apple"
+msgstr "Apple OCR"
+
+#: main_UI.py
+msgid "browse_ocr_image"
+msgstr "Browse Image"
+
+#: main_UI.py
+msgid "browse_ocr_image_tips"
+msgstr "Choose an image file for text recognition"
+
+#: main_UI.py
+msgid "ocr_select_image"
+msgstr "Select an image file"
+
+#: main_UI.py
+msgid "ocr_no_image"
+msgstr "No image in the clipboard. Copy an image first, then press Option+Shift+R"
+
+#: main_UI.py
+msgid "ocr_in_progress"
+msgstr "Recognition in progress, please wait"
+
+#: main_UI.py
+msgid "ocr_engine_unavailable"
+msgstr "OCR engine is unavailable"
+
+#: main_UI.py
+msgid "ocr_failed"
+msgstr "Recognition failed"
+
+#: main_UI.py
+msgid "ocr_empty_result"
+msgstr "No text recognized"
+
+#: main_UI.py
 msgid "clipboard_max_count_warning_title"
 msgstr "Clipboard Records Warning"
 

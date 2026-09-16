@@ -53,6 +53,11 @@ class MainFrame(wx.Frame):
         
         self._is_translating = False
         self._translation_lock = threading.Lock()
+
+        # 识别（OCR）：当前引擎模式、引擎实例与防重入锁
+        self._ocr_mode = 'apple'
+        self.ocr_engine = None
+        self._ocr_lock = threading.Lock()
         
         self.edit_dialog = None
         
@@ -77,6 +82,8 @@ class MainFrame(wx.Frame):
         
         self._toolbar_source_choice = None
         self._toolbar_target_choice = None
+        self._ocr_engine_choice = None
+        self._ocr_engine_key_by_display = {}
         
         self.init_ui()
         self.create_menu_bar()
@@ -138,6 +145,9 @@ class MainFrame(wx.Frame):
         # 初始化翻译器
         self.init_translator()
 
+        # 初始化 OCR 引擎
+        self.init_ocr_engine()
+
         #启动处理器
         self.clipboard_monitor.start_worker(callback=self.on_new_clipboard_content)
 
@@ -160,6 +170,7 @@ class MainFrame(wx.Frame):
         self.copy_btn_id = wx.NewIdRef()
         self.edit_btn_id = wx.NewIdRef()
         self.delete_btn_id = wx.NewIdRef()
+        self.browse_ocr_btn_id = wx.NewIdRef()
 
         self.toolbar.Realize()
 
@@ -244,6 +255,7 @@ class MainFrame(wx.Frame):
         self.nav_list = wx.ListBox(self.nav_container_panel, choices=[
             setting._('nav_translation'),
             setting._('nav_clipboard'),
+            setting._('nav_recognition'),
             setting._('nav_settings')
         ])
         self.nav_list.SetMinSize((150, -1)) # 设置最小宽度
@@ -272,6 +284,11 @@ class MainFrame(wx.Frame):
         self.setup_clipboard_panel()
         self.clipboard_panel.Hide() # 默认隐藏
 
+        # 识别面板
+        self.recognition_panel = wx.Panel(self.main_panel)
+        self.setup_recognition_panel()
+        self.recognition_panel.Hide() # 默认隐藏
+
         # 设置面板
         self.settings_panel = wx.Panel(self.main_panel)
         self.setup_settings_panel()
@@ -280,6 +297,7 @@ class MainFrame(wx.Frame):
         # 将各功能面板添加到 main_panel 的 Sizer 中
         self.main_panel_sizer.Add(self.translation_panel, 1, wx.EXPAND)
         self.main_panel_sizer.Add(self.clipboard_panel, 1, wx.EXPAND)
+        self.main_panel_sizer.Add(self.recognition_panel, 1, wx.EXPAND)
         self.main_panel_sizer.Add(self.settings_panel, 1, wx.EXPAND)
 
         # 将左右两部分加入分割窗口
@@ -299,15 +317,26 @@ class MainFrame(wx.Frame):
 
     def setup_translation_panel(self):
         """设置翻译功能面板的UI元素"""
-        static_box = wx.StaticBox(self.translation_panel, label=setting._("trans_input_placeholder")) 
-        sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
-        
+        static_box = wx.StaticBox(self.translation_panel, label=setting._("trans_input_placeholder"))
+        sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL)
+
         self.text_ctrl = wx.TextCtrl(self.translation_panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
         self.text_ctrl.Bind(wx.EVT_CHAR_HOOK, self.on_key_to_translate)
-        
+
         sizer.Add(self.text_ctrl, 1, wx.EXPAND | wx.ALL, 5)
-        
+
         self.translation_panel.SetSizer(sizer)
+
+    def setup_recognition_panel(self):
+        """设置识别（OCR）功能面板的UI元素，布局与翻译面板一致"""
+        static_box = wx.StaticBox(self.recognition_panel, label=setting._("recognition_hint"))
+        sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL)
+
+        self.ocr_result_ctrl = wx.TextCtrl(self.recognition_panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
+
+        sizer.Add(self.ocr_result_ctrl, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.recognition_panel.SetSizer(sizer)
     
     def on_toolbar_source_lang_changed(self, event):
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice:
@@ -415,15 +444,20 @@ class MainFrame(wx.Frame):
         self._volume_limit = config.get('volume_limit', 100)
         self._volume_target = config.get('volume_target', 80)
         self._translation_mode = config.get('translation_mode', 'llm')
-        
+        self._ocr_mode = config.get('ocr_mode', 'apple')
+
         is_internal = setting.is_internal_device()
         supports_apple = setting.supports_apple_translation()
-        
+
         if is_internal:
             self._translation_mode = 'apple'
         elif not supports_apple:
             self._translation_mode = 'llm'
-        
+
+        # 内部机只开放 Apple OCR（与翻译模式的内部机策略一致）
+        if is_internal:
+            self._ocr_mode = 'apple'
+
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             source_display = setting.get_lang_display(self._source_lang)
             target_display = setting.get_lang_display(self._target_lang)
@@ -441,14 +475,21 @@ class MainFrame(wx.Frame):
             mode_display = setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm')
             self._translation_mode_choice.SetStringSelection(mode_display)
             self._translation_mode_choice.Enable(self._translation_mode != 'apple' or is_internal)
-    
+
+        if hasattr(self, '_ocr_engine_choice') and self._ocr_engine_choice:
+            for display, key in self._ocr_engine_key_by_display.items():
+                if key == self._ocr_mode:
+                    self._ocr_engine_choice.SetStringSelection(display)
+                    break
+
     def save_config(self):
         model_path = getattr(self, '_model_path', '') or ''
         clipboard_max_count = getattr(self, '_clipboard_max_count', 1000)
         volume_limit = getattr(self, '_volume_limit', 100)
         volume_target = getattr(self, '_volume_target', 80)
         translation_mode = getattr(self, '_translation_mode', 'llm')
-        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode)
+        ocr_mode = getattr(self, '_ocr_mode', 'apple')
+        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode)
 
 
     def setup_clipboard_panel(self):
@@ -948,12 +989,47 @@ class MainFrame(wx.Frame):
                 self._translation_mode_choice.SetStringSelection(setting._('mode_llm'))
             
             self._translation_mode_choice.Bind(wx.EVT_CHOICE, self.on_translation_mode_changed)
-            
+
             if is_internal or not supports_apple:
                 self._translation_mode_choice.Enable(False)
-            
+
             self.toolbar.AddControl(self._translation_mode_choice)
-        
+
+        elif module_name == "recognition":
+            if hasattr(self, '_ocr_engine_choice') and self._ocr_engine_choice:
+                self._ocr_engine_choice.Destroy()
+
+            engine_label = wx.StaticText(self.toolbar, label=setting._('ocr_engine_label'))
+            self.toolbar.AddControl(engine_label)
+
+            from ocr_engine import available_engines
+            engines = available_engines(setting.is_internal_device())
+            self._ocr_engine_key_by_display = {
+                setting._(engine.display_key): engine.key for engine in engines
+            }
+            self._ocr_engine_choice = wx.Choice(self.toolbar, choices=list(self._ocr_engine_key_by_display))
+            for display, key in self._ocr_engine_key_by_display.items():
+                if key == self._ocr_mode:
+                    self._ocr_engine_choice.SetStringSelection(display)
+                    break
+            self._ocr_engine_choice.Bind(wx.EVT_CHOICE, self.on_ocr_engine_changed)
+
+            # 仅一个可用引擎时禁用切换（当前内部机/公开版均只有 Apple OCR）
+            if len(self._ocr_engine_key_by_display) <= 1:
+                self._ocr_engine_choice.Enable(False)
+
+            self.toolbar.AddControl(self._ocr_engine_choice)
+
+            self.toolbar.AddSeparator()
+
+            self.toolbar.AddTool(
+                self.browse_ocr_btn_id,
+                setting._('browse_ocr_image'),
+                wx.NullBitmap,
+                setting._('browse_ocr_image_tips')
+            )
+            self.Bind(wx.EVT_TOOL, self.on_browse_ocr_image, id=self.browse_ocr_btn_id)
+
         self.toolbar.Realize()
 
 
@@ -966,6 +1042,8 @@ class MainFrame(wx.Frame):
             self.switch_to_module("translation")
         elif selection == setting._('nav_clipboard'):
             self.switch_to_module("clipboard")
+        elif selection == setting._('nav_recognition'):
+            self.switch_to_module("recognition")
         elif selection == setting._('nav_settings'):
             self.switch_to_module("settings")
 
@@ -975,8 +1053,9 @@ class MainFrame(wx.Frame):
         # 隐藏所有面板
         self.translation_panel.Hide()
         self.clipboard_panel.Hide()
+        self.recognition_panel.Hide()
         self.settings_panel.Hide()
-        
+
         # 显示目标面板
         if module_name == "translation":
             self.translation_panel.Show()
@@ -985,6 +1064,9 @@ class MainFrame(wx.Frame):
             self.clipboard_panel.Show()
             self.refresh_list_box()  # 刷新剪贴板列表
             self.list_Box.SetFocus()
+        elif module_name == "recognition":
+            self.recognition_panel.Show()
+            self.ocr_result_ctrl.SetFocus()
         elif module_name == "settings":
             self.settings_panel.Show()
         
@@ -1782,6 +1864,100 @@ class MainFrame(wx.Frame):
         except Exception as e:
             logging.warning(f"还原剪贴板失败: {e}")
             self._is_pasting = False
+
+
+    def init_ocr_engine(self):
+        """按当前 OCR 模式初始化引擎（引擎切换时重建）"""
+        try:
+            from ocr_engine import create_engine
+            self.ocr_engine = create_engine(self._ocr_mode)
+        except Exception as e:
+            logging.warning(f"OCR 引擎初始化失败: {e}")
+            self.ocr_engine = None
+
+    def on_ocr_engine_changed(self, event):
+        """工具栏切换 OCR 引擎"""
+        if hasattr(self, '_ocr_engine_choice') and self._ocr_engine_choice:
+            display_text = self._ocr_engine_choice.GetStringSelection()
+            engine_key = self._ocr_engine_key_by_display.get(display_text)
+            if engine_key and engine_key != self._ocr_mode:
+                self._ocr_mode = engine_key
+                self.save_config()
+                self.init_ocr_engine()
+
+    def on_hotkey_altshiftr(self, event):
+        """alt+shift+r: 识别剪贴板中的图片（OCR），结果回写识别面板并朗读"""
+        try:
+            from ocr_engine import extract_clipboard_image
+            extracted = extract_clipboard_image()
+        except Exception as e:
+            logging.warning(f"读取剪贴板图片失败: {e}")
+            extracted = None
+
+        if not extracted:
+            self.vo_handler.speak_text(setting._('ocr_no_image'))
+            return
+
+        image_path, is_temp = extracted
+        self.run_ocr(image_path, temp_path=image_path if is_temp else None)
+
+    def on_browse_ocr_image(self, event):
+        """工具栏浏览图片文件并识别"""
+        wildcard = ("Image Files (*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.heic;*.bmp;*.gif;*.webp)"
+                    "|*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.heic;*.bmp;*.gif;*.webp"
+                    "|All Files (*.*)|*.*")
+        dialog = wx.FileDialog(
+            self,
+            message=setting._("ocr_select_image"),
+            wildcard=wildcard,
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+        )
+
+        if dialog.ShowModal() == wx.ID_OK:
+            image_path = dialog.GetPath()
+            dialog.Destroy()
+            self.run_ocr(image_path)
+        else:
+            dialog.Destroy()
+
+    def run_ocr(self, image_path: str, temp_path: str = None):
+        """在后台线程执行 OCR，结果覆盖写入识别面板并经 VO 朗读"""
+        if not self.ocr_engine:
+            self.vo_handler.speak_text(setting._('ocr_engine_unavailable'))
+            return
+        if not self._ocr_lock.acquire(blocking=False):
+            self.vo_handler.speak_text(setting._('ocr_in_progress'))
+            return
+
+        def ocr_worker():
+            try:
+                text = self.ocr_engine.recognize(image_path)
+                wx.CallAfter(self._on_ocr_result, text)
+            except Exception as e:
+                logging.warning(f"OCR 识别失败: {e}")
+                wx.CallAfter(self._on_ocr_error, str(e))
+            finally:
+                if temp_path:
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
+                self._ocr_lock.release()
+
+        threading.Thread(target=ocr_worker, daemon=True).start()
+
+    def _on_ocr_result(self, text: str):
+        """识别完成：结果覆盖写入编辑框并朗读（新内容覆盖模式）"""
+        self.ocr_result_ctrl.SetValue(text)
+        if text.strip():
+            self.vo_handler.speak_text(text)
+        else:
+            self.vo_handler.speak_text(setting._('ocr_empty_result'))
+
+    def _on_ocr_error(self, message: str):
+        """识别失败：错误回写编辑框并朗读，避免界面表现为无响应"""
+        self.ocr_result_ctrl.SetValue(f"[{setting._('ocr_failed')}: {message}]")
+        self.vo_handler.speak_text(setting._('ocr_failed'))
 
 
     def on_to_translate(self, event, langType: str = None):
