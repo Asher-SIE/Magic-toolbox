@@ -1720,7 +1720,7 @@ class MainFrame(wx.Frame):
                 self.vo_handler.speak_text("需要辅助功能权限，请在系统设置中授权后重试")
                 return
 
-            pasteboard = NSPasteboard.general()
+            pasteboard = NSPasteboard.generalPasteboard()
 
             # 仅在无待还原任务时保存原剪贴板，避免把上一次粘贴的行误存为原始内容
             restore_pending = self._paste_restore_timer is not None and self._paste_restore_timer.IsRunning()
@@ -1769,7 +1769,7 @@ class MainFrame(wx.Frame):
         try:
             from AppKit import NSPasteboard
 
-            pasteboard = NSPasteboard.general()
+            pasteboard = NSPasteboard.generalPasteboard()
             pasteboard.clearContents()
             original = self._paste_original_clipboard
             if original:
