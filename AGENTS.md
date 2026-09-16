@@ -1,5 +1,17 @@
 # AGENTS.md
 
+## 项目概述
+
+MagicToolbox：专为 macOS VoiceOver 视障用户设计的辅助工具，Python + wxPython 实现，PyInstaller 打包。
+集成实时翻译（LLM / Apple 翻译 + 本地词典）、剪贴板管理、文本快捷处理；注释与文案以中文为主，文案经 `locales/` 做 zh_CN/en 双语。
+核心依赖（wxPython、appscript、pyobjc、llama_cpp）仅在 macOS 环境完整可用，无 wx/pytest 的环境按下方测试要求降级验证。
+
+## 常用命令
+
+- 测试：`python -m pytest tests/`；GUI 测试（如 `tests/test_ime_escape.py`）依赖 macOS + wx 真实显示环境，
+  无该环境时最低要求：`python -m py_compile <改动的 .py>` 通过，且新增纯逻辑用独立断言验证。
+- 文案编译：`bash msgfmt.sh`（`.po` 编译为 `.mo`；`.mo` 不入库，只提交 `.po`，改动需 zh_CN 与 en 同步）。
+
 ## 代码规范
 
 Python：
