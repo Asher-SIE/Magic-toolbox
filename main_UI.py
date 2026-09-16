@@ -14,10 +14,12 @@ import wx.adv
 
 from AppKit import NSApplication, NSApp, NSWindow
 from dialogs import FindReplaceDialog, EditDialog, AboutDialog
-from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController
+from dictionary import Dictionary
+from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, split_text_by_punctuation
 from typing import Optional, Tuple
 
 import update
+import ime_guard
 
 
 class MainFrame(wx.Frame):
@@ -81,6 +83,8 @@ class MainFrame(wx.Frame):
 
         # 实例化核心处理器
         self.translator = None
+        # 本地词典：与翻译模式无关，所有模式共用（先查词库、无匹配再翻译）
+        self.dictionary = Dictionary()
         self.vo_handler = VoiceOverHandler(
             log_level=logging.INFO,
             repeat_threshold=0.02,
@@ -93,6 +97,11 @@ class MainFrame(wx.Frame):
         self.TB = TextBrowser()
         self.volume_controller = VolumeController(loop_interval=0.02)
         self.volume_controller.set_config(self._volume_limit, self._volume_target)
+
+        # Option+Shift+P 粘贴当前行：粘贴前的系统剪贴板内容与延时还原计时器
+        self._paste_original_clipboard = None
+        self._paste_restore_timer = None
+        self._is_pasting = False
         
         # 应用启动时检查VoiceOver状态，如果未运行则后台启动
         if not self.vo_handler.is_voiceover_running():
@@ -318,6 +327,79 @@ class MainFrame(wx.Frame):
                     break
             self.save_config()
     
+    def on_translation_mode_changed(self, event):
+        if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+            display_text = self._translation_mode_choice.GetStringSelection()
+            if display_text == setting._('mode_apple'):
+                self._translation_mode = 'apple'
+            else:
+                self._translation_mode = 'llm'
+            self.save_config()
+            self._update_translator_for_mode()
+    
+    def _update_translator_for_mode(self):
+        """根据翻译模式更新翻译器"""
+        if self._translation_mode == 'apple':
+            if not hasattr(self, 'apple_translator'):
+                try:
+                    from apple_translator import AppleTranslator
+                    self.apple_translator = AppleTranslator()
+                except Exception as e:
+                    logging.warning(f"Apple翻译器初始化失败: {e}")
+                    self._translation_mode = 'llm'
+                    self.save_config()
+        else:
+            if hasattr(self, 'apple_translator'):
+                del self.apple_translator
+    
+    def _do_translate(self, text: str, source_lang: str, target_lang: str, callback=None) -> str:
+        """统一的翻译方法
+        
+        Args:
+            text: 待翻译文本
+            source_lang: 源语言
+            target_lang: 目标语言
+            callback: 回调函数
+            
+        Returns:
+            翻译结果
+        """
+        if self._translation_mode == 'apple':
+            if hasattr(self, 'apple_translator') and self.apple_translator.is_available():
+                return self._translate_with_apple(text, source_lang, target_lang, callback)
+            else:
+                raise RuntimeError(setting._('apple_translation_not_available'))
+        else:
+            return self.translator.translate_with_streaming(text, source_lang, target_lang, callback)
+
+    APPLE_TRANSLATION_SEGMENT_CHARS = 1000
+
+    def _translate_with_apple(self, text: str, source_lang: str, target_lang: str, callback=None) -> str:
+        """Apple 翻译：长文本分段调用，每段完成后流式回调
+
+        与 LLM 通道的 translate_with_streaming 行为对齐，
+        结果以空行拼接，callback 签名为 callback(segment_text, translated_text)
+        """
+        max_chars = self.APPLE_TRANSLATION_SEGMENT_CHARS
+        if len(text) <= max_chars:
+            segments = [text]
+        else:
+            segments = split_text_by_punctuation(text, max_chars)
+
+        results = []
+        for segment in segments:
+            translated = self.apple_translator.translate(segment, source_lang, target_lang)
+            results.append(translated)
+            if callback:
+                callback(segment, translated)
+        return '\n\n'.join(results)
+    
+    def _lookup_dictionary(self, word: str) -> str:
+        """查词典（所有翻译模式共用：先查词库、无匹配再走翻译引擎）"""
+        if self.dictionary:
+            return self.dictionary.lookup(word)
+        return None
+    
     def on_source_lang_changed(self, event):
         pass
     
@@ -332,6 +414,15 @@ class MainFrame(wx.Frame):
         self._clipboard_max_count = config.get('clipboard_max_count', 1000)
         self._volume_limit = config.get('volume_limit', 100)
         self._volume_target = config.get('volume_target', 80)
+        self._translation_mode = config.get('translation_mode', 'llm')
+        
+        is_internal = setting.is_internal_device()
+        supports_apple = setting.supports_apple_translation()
+        
+        if is_internal:
+            self._translation_mode = 'apple'
+        elif not supports_apple:
+            self._translation_mode = 'llm'
         
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             source_display = setting.get_lang_display(self._source_lang)
@@ -345,13 +436,19 @@ class MainFrame(wx.Frame):
             self.volume_limit_input.SetValue(str(self._volume_limit))
         if hasattr(self, 'volume_target_input') and self.volume_target_input:
             self.volume_target_input.SetValue(str(self._volume_target))
+        
+        if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+            mode_display = setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm')
+            self._translation_mode_choice.SetStringSelection(mode_display)
+            self._translation_mode_choice.Enable(self._translation_mode != 'apple' or is_internal)
     
     def save_config(self):
         model_path = getattr(self, '_model_path', '') or ''
         clipboard_max_count = getattr(self, '_clipboard_max_count', 1000)
         volume_limit = getattr(self, '_volume_limit', 100)
         volume_target = getattr(self, '_volume_target', 80)
-        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target)
+        translation_mode = getattr(self, '_translation_mode', 'llm')
+        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode)
 
 
     def setup_clipboard_panel(self):
@@ -472,6 +569,10 @@ class MainFrame(wx.Frame):
             self.UnregisterHotKey(hid)
         self.hotkey_ids.clear()
 
+        #  停止粘贴还原计时器
+        if self._paste_restore_timer is not None:
+            self._paste_restore_timer.Stop()
+
         #  关闭窗口
         os._exit(0)
 
@@ -581,6 +682,7 @@ class MainFrame(wx.Frame):
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
 
         panel.SetSizer(sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -608,6 +710,7 @@ class MainFrame(wx.Frame):
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
 
         panel.SetSizer(sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -666,6 +769,7 @@ class MainFrame(wx.Frame):
         main_sizer.Add(button_panel, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.TOP, 15)
         
         dialog.SetSizer(main_sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -705,6 +809,7 @@ class MainFrame(wx.Frame):
         main_sizer.Add(button_panel, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.TOP, 15)
         
         dialog.SetSizer(main_sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -753,6 +858,7 @@ class MainFrame(wx.Frame):
         sizer.Add(btn, 0, wx.ALIGN_CENTER | wx.BOTTOM | wx.LEFT | wx.RIGHT, 10)
 
         panel.SetSizer(sizer)
+        ime_guard.install(dialog)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -807,6 +913,8 @@ class MainFrame(wx.Frame):
                 self._toolbar_source_choice.Destroy()
             if hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
                 self._toolbar_target_choice.Destroy()
+            if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+                self._translation_mode_choice.Destroy()
             
             source_display = setting.get_lang_display(self._source_lang)
             target_display = setting.get_lang_display(self._target_lang)
@@ -826,6 +934,25 @@ class MainFrame(wx.Frame):
             self._toolbar_target_choice.SetStringSelection(target_display)
             self._toolbar_target_choice.Bind(wx.EVT_CHOICE, self.on_toolbar_target_lang_changed)
             self.toolbar.AddControl(self._toolbar_target_choice)
+            
+            mode_label = wx.StaticText(self.toolbar, label=setting._('trans_mode') + ':')
+            self.toolbar.AddControl(mode_label)
+            
+            self._translation_mode_choice = wx.Choice(self.toolbar, choices=[setting._('mode_llm'), setting._('mode_apple')])
+            is_internal = setting.is_internal_device()
+            supports_apple = setting.supports_apple_translation()
+            
+            if self._translation_mode == 'apple':
+                self._translation_mode_choice.SetStringSelection(setting._('mode_apple'))
+            else:
+                self._translation_mode_choice.SetStringSelection(setting._('mode_llm'))
+            
+            self._translation_mode_choice.Bind(wx.EVT_CHOICE, self.on_translation_mode_changed)
+            
+            if is_internal or not supports_apple:
+                self._translation_mode_choice.Enable(False)
+            
+            self.toolbar.AddControl(self._translation_mode_choice)
         
         self.toolbar.Realize()
 
@@ -882,6 +1009,64 @@ class MainFrame(wx.Frame):
 
     def init_translator(self):
         """初始化翻译器"""
+        is_internal = setting.is_internal_device()
+        
+        if self._translation_mode == 'apple':
+            self._init_apple_translator(is_internal)
+        else:
+            self._init_llm_translator()
+    
+    def _init_apple_translator(self, is_internal: bool):
+        """初始化 Apple 翻译器"""
+        try:
+            from apple_translator import AppleTranslator
+            self.apple_translator = AppleTranslator()
+
+            if self.apple_translator.is_available():
+                self.text_ctrl.SetValue(self.apple_translator.get_readiness_message())
+                self._check_apple_language_status_background()
+            elif is_internal:
+                # 内部机不回退 LLM：系统低于 macOS 26 或工具缺失时直接禁用翻译
+                self.text_ctrl.SetValue(setting._('apple_translation_not_available'))
+            else:
+                self._translation_mode = 'llm'
+                self._init_llm_translator()
+                self._update_mode_choice_ui()
+                self.save_config()
+        except Exception as e:
+            logging.warning(f"Apple翻译器初始化失败: {e}")
+            if is_internal:
+                self.text_ctrl.SetValue(setting._('apple_translation_not_available'))
+            else:
+                self._translation_mode = 'llm'
+                self._init_llm_translator()
+                self._update_mode_choice_ui()
+                self.save_config()
+
+    def _check_apple_language_status_background(self):
+        """后台预检当前语言对的语言包状态，未安装/不支持时给出引导提示"""
+        source_lang, target_lang = self._source_lang, self._target_lang
+
+        def status_worker():
+            try:
+                hint = self.apple_translator.get_language_hint(source_lang, target_lang)
+            except Exception as e:
+                logging.warning(f"Apple 翻译语言状态预检失败: {e}")
+                return
+            if hint:
+                wx.CallAfter(self.text_ctrl.SetValue, hint)
+                wx.CallAfter(self.vo_handler.speak_text, hint)
+
+        threading.Thread(target=status_worker, daemon=True).start()
+    
+    def _update_mode_choice_ui(self):
+        """更新翻译模式选择 UI"""
+        if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+            mode_display = setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm')
+            self._translation_mode_choice.SetStringSelection(mode_display)
+    
+    def _init_llm_translator(self):
+        """初始化 LLM 翻译器"""
         try:
             self.translator = Translator(
                 log_level=logging.INFO,
@@ -1196,7 +1381,8 @@ class MainFrame(wx.Frame):
                 self.vo_handler.speak_text(explained_text)
                 return
 
-            result_text = self.translator.lookup_dictionary(vo_text[0])
+            # 注：保持取首字符的既有行为（与 _translate_last_phrase 传整串不一致，疑似历史遗留）
+            result_text = self._lookup_dictionary(vo_text[0])
             self.vo_handler.speak_text(result_text)
 
 
@@ -1204,52 +1390,7 @@ class MainFrame(wx.Frame):
         """Alt+D：英译中"""
         if event.GetId() != self.hotkey_ids["altd"]:
             return
-
-        last_phrase = self.vo_handler.get_last_phrase()
-        if last_phrase:
-            vo_text, _ = last_phrase
-            explained_text = self.TB.get_char_explanation(vo_text)
-            # 若解释存在（与原文本不同），则使用解释结果；否则用原文本
-            
-            if explained_text != vo_text:
-                self.vo_handler.speak_text(explained_text)
-                return
-
-            if self.translator:
-                result_text = self.translator.lookup_dictionary(vo_text)
-                if result_text:
-                    self.vo_handler.speak_text(result_text)
-                    return
-                
-                if not self._translation_lock.acquire(blocking=False):
-                    self.vo_handler.speak_text(setting._('translation_in_progress'))
-                    return
-                
-                if not self.translator.model_available:
-                    self._translation_lock.release()
-                    self.vo_handler.speak_text(setting._("model_unavailable"))
-                    return
-                
-                def translate_worker():
-                    try:
-                        result = self.translator.translate_with_streaming(
-                            vo_text, self._source_lang, self._target_lang
-                        )
-                        if result:
-                            wx.CallAfter(self.vo_handler.speak_text, result)
-                        else:
-                            wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
-                    except Exception as e:
-                        logging.warning(f"翻译失败: {e}")
-                        wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
-                    finally:
-                        self._is_translating = False
-                        self._translation_lock.release()
-                
-                self._is_translating = True
-                threading.Thread(target=translate_worker, daemon=True).start()
-        else:
-            self.vo_handler.speak_text(setting._('vo_warning'))
+        self._translate_last_phrase(self._source_lang, self._target_lang)
 
 
     def on_hotkey_altshiftd(self, event):
@@ -1258,51 +1399,47 @@ class MainFrame(wx.Frame):
         if event.GetId() != self.hotkey_ids["altshiftd"]:
             return
 
-        last_phrase = self.vo_handler.get_last_phrase()
-        if last_phrase:
-            vo_text, _ = last_phrase
-            explained_text = self.TB.get_char_explanation(vo_text)
-            # 若解释存在（与原文本不同），则使用解释结果；否则用原文本
-            
-            if explained_text != vo_text:
-                self.vo_handler.speak_text(explained_text)
-                return
+        self._translate_last_phrase(self._target_lang, self._source_lang)
 
-            if self.translator:
-                result_text = self.translator.lookup_dictionary(vo_text)
-                if result_text:
-                    self.vo_handler.speak_text(result_text)
-                    return
-                
-                if not self._translation_lock.acquire(blocking=False):
-                    self.vo_handler.speak_text(setting._('translation_in_progress'))
-                    return
-                
-                if not self.translator.model_available:
-                    self._translation_lock.release()
-                    self.vo_handler.speak_text(setting._("model_unavailable"))
-                    return
-                
-                def translate_worker():
-                    try:
-                        result = self.translator.translate_with_streaming(
-                            vo_text, self._target_lang, self._source_lang
-                        )
-                        if result:
-                            wx.CallAfter(self.vo_handler.speak_text, result)
-                        else:
-                            wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
-                    except Exception as e:
-                        logging.warning(f"翻译失败: {e}")
-                        wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
-                    finally:
-                        self._is_translating = False
-                        self._translation_lock.release()
-                
-                self._is_translating = True
-                threading.Thread(target=translate_worker, daemon=True).start()
-        else:
+    def _translate_last_phrase(self, source_lang: str, target_lang: str):
+        """Translate the last VoiceOver phrase using the selected backend."""
+        last_phrase = self.vo_handler.get_last_phrase()
+        if not last_phrase:
             self.vo_handler.speak_text(setting._('vo_warning'))
+            return
+        vo_text, _ = last_phrase
+        explained_text = self.TB.get_char_explanation(vo_text)
+        if explained_text != vo_text:
+            self.vo_handler.speak_text(explained_text)
+            return
+        dictionary_result = self._lookup_dictionary(vo_text)
+        if dictionary_result:
+            self.vo_handler.speak_text(dictionary_result)
+            return
+        if not self._translation_lock.acquire(blocking=False):
+            self.vo_handler.speak_text(setting._('translation_in_progress'))
+            return
+        if self._translation_mode == 'llm' and (not self.translator or not self.translator.model_available):
+            self._translation_lock.release()
+            self.vo_handler.speak_text(setting._("model_unavailable"))
+            return
+
+        def translate_worker():
+            try:
+                result = self._do_translate(vo_text, source_lang, target_lang)
+                wx.CallAfter(
+                    self.vo_handler.speak_text,
+                    result or setting._("translation_failed")
+                )
+            except Exception as e:
+                logging.warning(f"翻译失败: {e}")
+                wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
+            finally:
+                self._is_translating = False
+                self._translation_lock.release()
+
+        self._is_translating = True
+        threading.Thread(target=translate_worker, daemon=True).start()
 
 
     def on_hotkey_altt(self, event):
@@ -1473,8 +1610,9 @@ class MainFrame(wx.Frame):
                 self.vo_handler.speak_text(explained_text)
                 return
 
-        if self.translator:
-            result_text = self.translator.lookup_dictionary(result_text[0])
+        # 注：保持取首字符的既有行为（剪贴板浏览定位的是单字符）
+        if result_text:
+            result_text = self._lookup_dictionary(result_text[0])
             self.vo_handler.speak_text(result_text)
 
 
@@ -1568,35 +1706,99 @@ class MainFrame(wx.Frame):
 
 
     def on_hotkey_altshiftp(self, event):
-        """alt+shift+p: 粘贴剪贴板当前行"""
+        """alt+shift+p: 粘贴剪贴板当前行到前台应用输入框"""
         result_text = self.TB._current_line
         if not result_text:
             return
-        
+
         try:
-            from AppKit import NSPasteboard
-            from ApplicationServices import AXUIElementCreateSystemWide, AXUIElementCopyAttributeValue, AXUIElementSetAttributeValue
-            
-            pasteboard = NSPasteboard.general()
+            from AppKit import NSPasteboard, NSPasteboardTypeString
+            from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
+
+            # 辅助功能权限预检：未授权时弹出系统授权窗口并播报提示
+            if not AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True}):
+                logging.warning("粘贴失败：未授予辅助功能权限")
+                self.vo_handler.speak_text("需要辅助功能权限，请在系统设置中授权后重试")
+                return
+
+            pasteboard = NSPasteboard.generalPasteboard()
+
+            # 仅在无待还原任务时保存原剪贴板，避免把上一次粘贴的行误存为原始内容
+            restore_pending = self._paste_restore_timer is not None and self._paste_restore_timer.IsRunning()
+            if not restore_pending:
+                original = pasteboard.stringForType_(NSPasteboardTypeString)
+                self._paste_original_clipboard = str(original) if original else None
+
+            self._is_pasting = True
             pasteboard.clearContents()
             pasteboard.setString_forType_(result_text, 'public.utf8-plain-text')
-            
-            system_wide = AXUIElementCreateSystemWide()
-            focused_app, _ = AXUIElementCopyAttributeValue(system_wide, "AXFocusedApplication")
-            if focused_app:
-                focused_element, _ = AXUIElementCopyAttributeValue(focused_app, "AXFocusedUIElement")
-                if focused_element:
-                    AXUIElementSetAttributeValue(focused_element, "AXValue", result_text)
-                    return
-            
-            subprocess.run(['osascript', '-e', 'tell application "System Events" to keystroke "v" using command down'], capture_output=True)
+
+            # 延时合成按键：等待物理修饰键（Option/Shift）松开，且不阻塞 UI 线程
+            wx.CallLater(100, self._post_paste_keystroke)
+
+            # 还原计时器：连续触发时重置，从最后一次粘贴算起 1 秒后才还原剪贴板
+            if restore_pending:
+                self._paste_restore_timer.Stop()
+            self._paste_restore_timer = wx.CallLater(1000, self._restore_clipboard_after_paste)
         except Exception as e:
             logging.warning(f"粘贴失败: {e}")
+            self._is_pasting = False
+
+
+    def _post_paste_keystroke(self):
+        """向前台应用合成 Cmd+V（Quartz 优先，osascript 兜底）"""
+        try:
+            import Quartz
+
+            v_keycode = 9  # kVK_ANSI_V
+            for key_down in (True, False):
+                key_event = Quartz.CGEventCreateKeyboardEvent(None, v_keycode, key_down)
+                # 显式只设 Command 标志，覆盖仍被按住的物理修饰键（Option/Shift）
+                Quartz.CGEventSetFlags(key_event, Quartz.kCGEventFlagMaskCommand)
+                Quartz.CGEventPost(Quartz.kCGSessionEventTap, key_event)
+        except Exception as e:
+            logging.warning(f"Quartz 合成 Cmd+V 失败，回退 osascript: {e}")
+            script = 'delay 0.1\ntell application "System Events" to keystroke "v" using command down'
+            try:
+                proc = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
+                if proc.returncode != 0:
+                    logging.error(f"osascript 粘贴失败: {proc.stderr.strip()}")
+            except Exception as fallback_error:
+                logging.error(f"osascript 调用失败: {fallback_error}")
+
+
+    def _restore_clipboard_after_paste(self):
+        """延时还原系统剪贴板为粘贴前的内容"""
+        try:
+            from AppKit import NSPasteboard
+
+            pasteboard = NSPasteboard.generalPasteboard()
+            pasteboard.clearContents()
+            original = self._paste_original_clipboard
+            if original:
+                pasteboard.setString_forType_(original, 'public.utf8-plain-text')
+            self._paste_original_clipboard = None
+            self._is_pasting = False
+        except Exception as e:
+            logging.warning(f"还原剪贴板失败: {e}")
+            self._is_pasting = False
 
 
     def on_to_translate(self, event, langType: str = None):
         """Option + 回车键：翻译文本"""
-        if not self.translator:
+        apple_selected = (
+            self._translation_mode == 'apple'
+            and hasattr(self, 'apple_translator')
+        )
+        apple_ready = apple_selected and self.apple_translator.is_available()
+        llm_ready = self._translation_mode == 'llm' and self.translator
+        if not (apple_ready or llm_ready):
+            if apple_selected and not llm_ready:
+                # 内部机系统低于 macOS 26 或工具缺失：明确提示不可用，不回退 LLM
+                message = setting._('apple_translation_not_available')
+                self.text_ctrl.SetValue(message)
+                self.vo_handler.speak_text(message)
+                return
             wx.MessageBox(
                 setting._("init_failed"), 
                 setting._("error"), 
@@ -1615,7 +1817,7 @@ class MainFrame(wx.Frame):
         if not text:
             return
         
-        result_text = self.translator.lookup_dictionary(text)
+        result_text = self._lookup_dictionary(text)
         if result_text:
             self.text_ctrl.SetValue(result_text)
             return
@@ -1624,7 +1826,7 @@ class MainFrame(wx.Frame):
             wx.MessageBox(setting._('translation_in_progress'), setting._('warning'), wx.OK | wx.ICON_WARNING)
             return
         
-        if not self.translator.model_available:
+        if self._translation_mode == 'llm' and not self.translator.model_available:
             self._translation_lock.release()
             self.vo_handler.speak_text(setting._("model_unavailable"))
             return
@@ -1641,13 +1843,15 @@ class MainFrame(wx.Frame):
         """翻译短文本（在线程中执行）"""
         def translate_worker():
             try:
-                result_text = self.translator.translate(text, source_lang, target_lang)
+                result_text = self._do_translate(text, source_lang, target_lang)
                 if result_text:
                     wx.CallAfter(self.text_ctrl.SetValue, result_text)
                 else:
                     wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             except Exception as e:
                 logging.warning(f"翻译失败: {e}")
+                # 错误必须回写编辑框，避免界面上表现为"卡在处理中"
+                wx.CallAfter(self.text_ctrl.SetValue, f"[{setting._('translation_failed')}: {e}]")
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
                 self._is_translating = False
@@ -1667,7 +1871,7 @@ class MainFrame(wx.Frame):
         def translate_worker():
             try:
                 wx.CallAfter(self.vo_handler.speak_text, "开始翻译长文本")
-                result_text = self.translator.translate_with_streaming(
+                result_text = self._do_translate(
                     text, source_lang, target_lang, callback=segment_callback
                 )
                 if result_text:
@@ -1677,6 +1881,10 @@ class MainFrame(wx.Frame):
                     wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             except Exception as e:
                 logging.warning(f"翻译失败: {e}")
+                # 错误必须回写编辑框（保留已完成的分段结果），避免界面上表现为"卡在处理中"
+                partial = '\n\n'.join(accumulated_result)
+                error_line = f"[{setting._('translation_failed')}: {e}]"
+                wx.CallAfter(self.text_ctrl.SetValue, f"{partial}\n\n{error_line}" if partial else error_line)
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
                 self._is_translating = False
@@ -1715,6 +1923,8 @@ class MainFrame(wx.Frame):
 
 
     def on_new_clipboard_content(self, content: str, timestamp: float):
+        if self._is_pasting:
+            return
         wx.CallAfter(self._update_list_with_new_content, content, timestamp)
 
 

@@ -60,6 +60,7 @@ The app uses a layout with a left navigation bar and a right content panel:
 | Option+Shift+J | Sync clipboard content to system clipboard |
 | Option+Shift+K | Next line of current clipboard content |
 | Option+Shift+M | View clipboard summary (row and column information) |
+| Option+Shift+P | Paste the current line into the frontmost app's input box (system clipboard is restored about 1 second after the last paste) |
 
 ## System Requirements
 - macOS 12.0 or later

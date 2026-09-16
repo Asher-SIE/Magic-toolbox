@@ -1,7 +1,6 @@
 import appscript
 import collections
 import ctypes
-import gzip
 import hashlib
 import logging
 import llama_cpp
@@ -132,6 +131,55 @@ class BaseThreadedWorker:
             self.stop_worker()
 
 
+def split_text_by_punctuation(text: str, max_chars: int) -> List[str]:
+    """按标点分割文本，确保每段不超过max_chars
+
+    策略：先按空行分大段，单段超限时往前找最后一个标点截断
+    """
+    if not text or max_chars <= 0:
+        return [text] if text else []
+
+    result = []
+    # 先按空行分割成大段落
+    paragraphs = re.split(r'\n\n+', text)
+
+    for para in paragraphs:
+        if len(para) <= max_chars:
+            result.append(para)
+            continue
+
+        # 段落超长，需要进一步拆分
+        start = 0
+        para_len = len(para)
+        while start < para_len:
+            remaining = para[start:]
+            if len(remaining) <= max_chars:
+                result.append(remaining)
+                break
+
+            # 从max_chars位置往前找标点
+            chunk = remaining[:max_chars]
+            punctuation = re.compile(r'[^a-zA-Z0-9\s\d\u4e00-\u9fff]')
+            match = punctuation.search(chunk[::-1])
+
+            if match:
+                # 找到标点，截断位置
+                cut_pos = max_chars - match.start()
+                if cut_pos > 0:
+                    result.append(remaining[:cut_pos].strip())
+                    start += cut_pos
+                else:
+                    # 标点在开头，强制截断
+                    result.append(remaining[:max_chars].strip())
+                    start += max_chars
+            else:
+                # 没找到标点，直接截断
+                result.append(remaining[:max_chars].strip())
+                start += max_chars
+
+    return [s for s in result if s.strip()]
+
+
 # 翻译类
 class Translator(BaseThreadedWorker):
     #  HY-MT1.5-1.8B 配置
@@ -155,22 +203,16 @@ class Translator(BaseThreadedWorker):
     _CACHE_MAX_SIZE = 200
 
     def __init__(self, log_level: int = logging.WARNING, loop_interval: float = 1):
-        """初始化翻译器：加载模型、本地词典"""
+        """初始化翻译器：加载模型"""
         super().__init__(log_level=log_level, loop_interval=loop_interval)
         
         self._model = None
         self._input_text: Optional[str] = None  # 待翻译文本
-        self._dictionary: dict = {}
 
         # 查找模型
         self.model_available = False
-        self._current_dir = os.path.dirname(os.path.abspath(__file__))
         self.external_dir = os.path.expanduser("~/Downloads")
         self.model_path = None
-        self._dict_path = os.path.join(self._current_dir, "resources", "dict.txt")
-
-        # 加载词典
-        self._load_dictionary()
 
         # 翻译缓存 (FIFO, 最多100条)
         self._translation_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
@@ -196,52 +238,8 @@ class Translator(BaseThreadedWorker):
         return text.strip()
 
     def _split_text_by_punctuation(self, text: str, max_chars: int) -> List[str]:
-        """按标点分割文本，确保每段不超过max_chars
-        
-        策略：先按空行分大段，单段超限时往前找最后一个标点截断
-        """
-        if not text or max_chars <= 0:
-            return [text] if text else []
-        
-        result = []
-        # 先按空行分割成大段落
-        paragraphs = re.split(r'\n\n+', text)
-        
-        for para in paragraphs:
-            if len(para) <= max_chars:
-                result.append(para)
-                continue
-            
-            # 段落超长，需要进一步拆分
-            start = 0
-            para_len = len(para)
-            while start < para_len:
-                remaining = para[start:]
-                if len(remaining) <= max_chars:
-                    result.append(remaining)
-                    break
-                
-                # 从max_chars位置往前找标点
-                chunk = remaining[:max_chars]
-                punctuation = re.compile(r'[^a-zA-Z0-9\s\d\u4e00-\u9fff]')
-                match = punctuation.search(chunk[::-1])
-                
-                if match:
-                    # 找到标点，截断位置
-                    cut_pos = max_chars - match.start()
-                    if cut_pos > 0:
-                        result.append(remaining[:cut_pos].strip())
-                        start += cut_pos
-                    else:
-                        # 标点在开头，强制截断
-                        result.append(remaining[:max_chars].strip())
-                        start += max_chars
-                else:
-                    # 没找到标点，直接截断
-                    result.append(remaining[:max_chars].strip())
-                    start += max_chars
-        
-        return [s for s in result if s.strip()]
+        """按标点分割文本（委托给模块级实现，供分段翻译复用）"""
+        return split_text_by_punctuation(text, max_chars)
 
     def _get_cache_key(self, text: str, source_lang: str, target_lang: str) -> str:
         """生成缓存key (md5哈希，包含语言方向)"""
@@ -304,12 +302,12 @@ class Translator(BaseThreadedWorker):
             self.model_available = False
             self.logger.warning("模型路径未设置，请通过浏览按钮选择翻译模型")
             return None
-        
+
         if not os.path.exists(self.model_path):
             self.model_available = False
             self.logger.warning(f"模型文件未找到：{self.model_path}")
             return None
-        
+
         try:
             self.model_available = True
             self._model = llama_cpp.Llama(
@@ -321,53 +319,6 @@ class Translator(BaseThreadedWorker):
             self.model_available = False
             self.logger.error(f"模型加载失败：{str(e)}")
             return None
-
-    def _load_dictionary(self):
-        """本地词典加载（完全原始代码，一字未改，包括故意的文件格式实现）"""
-        self._dictionary.clear()
-        try:
-            with gzip.open(self._dict_path, 'rt', encoding='utf-8') as file:
-                for line_num, line in enumerate(file, 1):
-                    # 去除首尾空白字符跳过空行
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    # 分割字段取前两个
-                    parts = line.split('\t', 2)
-                    if len(parts) >= 2:
-                        english, chinese = parts[0], parts[1]
-                        # 统一转为小写
-                        self._dictionary[english.lower()] = chinese
-                    else:
-                        # 格式错误警告
-                        self.logger.warning(f"词典第{line_num}行格式不正确（需至少两个字段），已跳过")
-            
-            # 加载完成日志
-            self.logger.info(f"本地 gzip 词典加载完成，共加载 {len(self._dictionary)} 条有效记录（路径：{self._dict_path}）")
-        except FileNotFoundError:
-            # 文件不存在异常
-            self.logger.error(f"词典加载失败：找不到 gzip 文件 {self._dict_path}")
-        except gzip.BadGzipFile:
-            self.logger.error(f"词典加载失败：{self._dict_path} 不是有效的 gzip 压缩文件")
-        except Exception as e:
-            self.logger.error(f"加载 gzip 词典时发生错误: {str(e)}")
-
-    def lookup_dictionary(self, word: str) -> Optional[str]:
-        """本地词典查询（完全原始代码，一字未改）"""
-        if not isinstance(word, str) or not word.strip():
-            self.logger.debug("词典查询：输入无效")
-            return None
-        
-        # 统一转为小写
-        lower_word = word.strip().lower()
-        if lower_word in self._dictionary:
-            self.logger.debug(f"词典命中：{word} → {self._dictionary[lower_word]}")
-            return self._dictionary[lower_word]
-        else:
-            self.logger.debug(f"词典未命中：{word}")
-            return None
-
 
     def translate(self, original_text, source_lang, target_lang):
         """公有方法：翻译接口"""
