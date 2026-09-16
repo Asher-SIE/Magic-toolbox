@@ -159,7 +159,7 @@ class AppleTranslator:
         if status == STATUS_INSTALLED:
             return ""
         if status == STATUS_UNSUPPORTED:
-            return f"苹果翻译不支持「{source_lang} → {target_lang}」语言对"
+            return f"Apple 翻译不支持「{source_lang} → {target_lang}」语言对"
         return f"{source_lang} → {target_lang}：{LANGUAGE_DOWNLOAD_HINT}"
 
     def translate(self, text: str, source_lang: str, target_lang: str) -> str:

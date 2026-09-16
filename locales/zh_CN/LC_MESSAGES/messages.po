@@ -697,13 +697,13 @@ msgstr "LLM翻译"
 
 #: main_UI.py
 msgid "mode_apple"
-msgstr "苹果翻译"
+msgstr "Apple 翻译"
 
 #: main_UI.py
 msgid "apple_translation_ready"
-msgstr "苹果翻译已就绪"
+msgstr "Apple 翻译已就绪"
 
 #: main_UI.py
 msgid "apple_translation_not_available"
-msgstr "苹果翻译不可用"
+msgstr "Apple 翻译不可用"
 
