@@ -101,6 +101,7 @@ class MainFrame(wx.Frame):
         # Option+Shift+P 粘贴当前行：粘贴前的系统剪贴板内容与延时还原计时器
         self._paste_original_clipboard = None
         self._paste_restore_timer = None
+        self._is_pasting = False
         
         # 应用启动时检查VoiceOver状态，如果未运行则后台启动
         if not self.vo_handler.is_voiceover_running():
@@ -1728,6 +1729,7 @@ class MainFrame(wx.Frame):
                 original = pasteboard.stringForType_(NSPasteboardTypeString)
                 self._paste_original_clipboard = str(original) if original else None
 
+            self._is_pasting = True
             pasteboard.clearContents()
             pasteboard.setString_forType_(result_text, 'public.utf8-plain-text')
 
@@ -1740,6 +1742,7 @@ class MainFrame(wx.Frame):
             self._paste_restore_timer = wx.CallLater(1000, self._restore_clipboard_after_paste)
         except Exception as e:
             logging.warning(f"粘贴失败: {e}")
+            self._is_pasting = False
 
 
     def _post_paste_keystroke(self):
@@ -1775,8 +1778,10 @@ class MainFrame(wx.Frame):
             if original:
                 pasteboard.setString_forType_(original, 'public.utf8-plain-text')
             self._paste_original_clipboard = None
+            self._is_pasting = False
         except Exception as e:
             logging.warning(f"还原剪贴板失败: {e}")
+            self._is_pasting = False
 
 
     def on_to_translate(self, event, langType: str = None):
@@ -1918,6 +1923,8 @@ class MainFrame(wx.Frame):
 
 
     def on_new_clipboard_content(self, content: str, timestamp: float):
+        if self._is_pasting:
+            return
         wx.CallAfter(self._update_list_with_new_content, content, timestamp)
 
 
