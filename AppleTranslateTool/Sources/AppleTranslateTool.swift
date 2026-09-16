@@ -33,12 +33,14 @@ private func readRequest() throws -> TranslationRequest {
     }
 }
 
+// 注：不要对 standardOutput 调用 synchronizeFile()——它底层是对 fd 调 fsync()，
+// 当 stdout 是管道（主程序 capture_output=True）时会抛 NSFileHandleOperationException
+// (Invalid argument) 直接 abort。FileHandle.write 对管道是同步写，进程退出前无需 fsync。
 private func writeReply(_ reply: TranslationReply) {
     do {
         var data = try JSONEncoder().encode(reply)
         data.append(0x0A)
         FileHandle.standardOutput.write(data)
-        FileHandle.standardOutput.synchronizeFile()
     } catch {
         FileHandle.standardError.write(Data("Failed to encode reply: \(error)\n".utf8))
     }
