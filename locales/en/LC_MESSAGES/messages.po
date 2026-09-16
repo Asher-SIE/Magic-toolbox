@@ -267,6 +267,14 @@ msgstr "Not found"
 msgid "edd_search_not_found"
 msgstr "Not found"
 
+#: dialogs.py
+msgid "edd_invalid_regex"
+msgstr "Invalid regular expression"
+
+#: dialogs.py
+msgid "edd_invalid_replace"
+msgstr "Invalid escape sequence in replacement"
+
 #: main_UI.py
 msgid "msg_notice"
 msgstr "Notice"

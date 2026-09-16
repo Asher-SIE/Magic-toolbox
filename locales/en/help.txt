@@ -15,6 +15,7 @@ Clipboard Management
 - History Records: Automatically saves clipboard content and supports browsing history
 - Multi-selection Operations: Supports checking multiple records for batch copy and delete operations
 - Editing Function: Built-in text editor with undo and redo functionality
+- Find/Replace: Supports find next/previous, case sensitivity and regular expressions; in non-regex mode the replacement text supports escape sequences \n \t \r \\, unknown escapes are kept as-is
 - Quick Processing: Provides handy features including removing blank spaces, merging spaces, converting numbers to Chinese characters, and text splitting
 
 Voice Enhancement

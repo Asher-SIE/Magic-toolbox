@@ -267,6 +267,14 @@ msgstr "未找到"
 msgid "edd_search_not_found"
 msgstr "未找到"
 
+#: dialogs.py
+msgid "edd_invalid_regex"
+msgstr "正则表达式无效"
+
+#: dialogs.py
+msgid "edd_invalid_replace"
+msgstr "替换文本包含无效转义"
+
 #: main_UI.py
 msgid "msg_notice"
 msgstr "提示"
