@@ -593,7 +593,7 @@ msgstr "识别"
 
 #: main_UI.py
 msgid "recognition_hint"
-msgstr "按 Option+Shift+R 识别剪贴板中的图片，或通过工具栏浏览图片文件"
+msgstr "按 Option+Shift+R 识别剪贴板中的图片，Option+Shift+Q/W 切换识别引擎，或通过工具栏浏览图片文件"
 
 #: main_UI.py
 msgid "ocr_engine_label"
@@ -634,6 +634,46 @@ msgstr "识别失败"
 #: main_UI.py
 msgid "ocr_empty_result"
 msgstr "未识别到文字"
+
+#: main_UI.py
+msgid "ocr_engine_vlm"
+msgstr "本地视觉模型"
+
+#: main_UI.py
+msgid "ocr_model_group"
+msgstr "图像识别模型"
+
+#: main_UI.py
+msgid "browse_ocr_model"
+msgstr "浏览模型"
+
+#: main_UI.py
+msgid "browse_ocr_mmproj"
+msgstr "浏览视觉编码器"
+
+#: main_UI.py
+msgid "select_ocr_model_file"
+msgstr "选择视觉模型 GGUF 文件"
+
+#: main_UI.py
+msgid "select_ocr_mmproj_file"
+msgstr "选择视觉编码器 mmproj 文件"
+
+#: main_UI.py
+msgid "ocr_vlm_not_configured"
+msgstr "请先在设置面板选择视觉模型与视觉编码器文件"
+
+#: main_UI.py
+msgid "ocr_vlm_loading"
+msgstr "正在加载视觉模型，首次加载需要一些时间，请稍候"
+
+#: main_UI.py
+msgid "ocr_vlm_ready"
+msgstr "视觉模型已就绪"
+
+#: main_UI.py
+msgid "ocr_vlm_unavailable"
+msgstr "本地视觉模型需要新版本 llama-cpp-python，请升级后使用"
 
 #: main_UI.py
 msgid "clipboard_max_count_warning_title"

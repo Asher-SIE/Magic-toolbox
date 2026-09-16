@@ -36,3 +36,5 @@ Option+Shift+P    粘贴剪贴板当前行到输入框
 
 四、图片识别快捷键
 Option+Shift+R    识别剪贴板中的图片（先在访达等应用中按 Command+C 复制图片），结果自动朗读
+Option+Shift+Q    切换上一个识别引擎（循环切换，播报引擎名）
+Option+Shift+W    切换下一个识别引擎（循环切换，播报引擎名）

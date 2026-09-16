@@ -593,7 +593,7 @@ msgstr "Recognition"
 
 #: main_UI.py
 msgid "recognition_hint"
-msgstr "Press Option+Shift+R to recognize the image in the clipboard, or browse an image file from the toolbar"
+msgstr "Press Option+Shift+R to recognize the image in the clipboard, Option+Shift+Q/W to switch recognition engines, or browse an image file from the toolbar"
 
 #: main_UI.py
 msgid "ocr_engine_label"
@@ -634,6 +634,46 @@ msgstr "Recognition failed"
 #: main_UI.py
 msgid "ocr_empty_result"
 msgstr "No text recognized"
+
+#: main_UI.py
+msgid "ocr_engine_vlm"
+msgstr "Local Vision Model"
+
+#: main_UI.py
+msgid "ocr_model_group"
+msgstr "Image Recognition Model"
+
+#: main_UI.py
+msgid "browse_ocr_model"
+msgstr "Browse Model"
+
+#: main_UI.py
+msgid "browse_ocr_mmproj"
+msgstr "Browse Vision Encoder"
+
+#: main_UI.py
+msgid "select_ocr_model_file"
+msgstr "Select vision model GGUF file"
+
+#: main_UI.py
+msgid "select_ocr_mmproj_file"
+msgstr "Select vision encoder mmproj file"
+
+#: main_UI.py
+msgid "ocr_vlm_not_configured"
+msgstr "Please select the vision model and vision encoder files in the settings panel first"
+
+#: main_UI.py
+msgid "ocr_vlm_loading"
+msgstr "Loading vision model, the first load may take a while, please wait"
+
+#: main_UI.py
+msgid "ocr_vlm_ready"
+msgstr "Vision model ready"
+
+#: main_UI.py
+msgid "ocr_vlm_unavailable"
+msgstr "Local vision model requires an updated llama-cpp-python, please upgrade first"
 
 #: main_UI.py
 msgid "clipboard_max_count_warning_title"

@@ -12,11 +12,14 @@ with mock.patch("os.path.expanduser", return_value=_test_home.name), mock.patch(
     import ocr_engine
     from ocr_engine import (
         AppleOCREngine,
+        LocalVLMEngine,
         OCREngine,
         OCRError,
         available_engines,
         create_engine,
+        engine_display,
         extract_clipboard_image,
+        next_engine_key,
     )
 
 
@@ -41,23 +44,64 @@ class InternalOnlyEngine(OCREngine):
 
 class OCREngineRegistryTests(unittest.TestCase):
     def test_apple_engine_available_for_internal_and_public(self):
-        for is_internal in (True, False):
-            engines = available_engines(is_internal)
-            self.assertEqual([engine.key for engine in engines], ["apple"])
+        # 生产内部机策略（DEBUG_BUILD=False）：内部机只有 Apple OCR
+        with mock.patch.object(ocr_engine.setting, "DEBUG_BUILD", False):
+            for is_internal in (True, False):
+                engines = available_engines(is_internal)
+                self.assertIn("apple", [engine.key for engine in engines])
+
+    def test_internal_visibility_filter(self):
+        with mock.patch.object(ocr_engine.setting, "DEBUG_BUILD", False), \
+                mock.patch.dict(ocr_engine.OCR_ENGINES, {"thirdparty": InternalOnlyEngine}):
+            self.assertEqual(
+                [engine.key for engine in available_engines(True)], ["apple"])
+            self.assertEqual(
+                [engine.key for engine in available_engines(False)],
+                ["apple", "vlm", "thirdparty"])
+
+    def test_debug_build_opens_all_engines_for_internal(self):
+        # 开发内部版本（DEBUG_BUILD=True）：放开内部机限制，开放全部已注册引擎
+        with mock.patch.object(ocr_engine.setting, "DEBUG_BUILD", True), \
+                mock.patch.dict(ocr_engine.OCR_ENGINES, {"thirdparty": InternalOnlyEngine}):
+            self.assertEqual(
+                [engine.key for engine in available_engines(True)],
+                ["apple", "vlm", "thirdparty"])
 
     def test_create_engine_returns_instance(self):
         self.assertIsInstance(create_engine("apple"), AppleOCREngine)
+        self.assertIsInstance(create_engine("vlm"), LocalVLMEngine)
+
+    def test_create_engine_injects_config(self):
+        engine = create_engine("vlm", model_path="a.gguf", mmproj_path="b.gguf")
+        self.assertEqual(engine.model_path, "a.gguf")
+        self.assertEqual(engine.mmproj_path, "b.gguf")
 
     def test_create_unknown_engine_raises(self):
         with self.assertRaisesRegex(OCRError, "未知的 OCR 引擎"):
             create_engine("thirdparty")
 
-    def test_internal_visibility_filter(self):
-        with mock.patch.dict(ocr_engine.OCR_ENGINES, {"thirdparty": InternalOnlyEngine}):
-            self.assertEqual(
-                [engine.key for engine in available_engines(True)], ["apple"])
-            self.assertEqual(
-                [engine.key for engine in available_engines(False)], ["apple", "thirdparty"])
+    def test_engine_display_uses_localized_name(self):
+        self.assertEqual(engine_display("apple"), ocr_engine.setting._("ocr_engine_apple"))
+        self.assertEqual(engine_display("missing"), "missing")
+
+
+class NextEngineKeyTests(unittest.TestCase):
+    def test_cycles_forward_and_backward(self):
+        keys = ["apple", "vlm"]
+        self.assertEqual(next_engine_key(keys, "apple", 1), "vlm")
+        self.assertEqual(next_engine_key(keys, "vlm", 1), "apple")
+        self.assertEqual(next_engine_key(keys, "apple", -1), "vlm")
+        self.assertEqual(next_engine_key(keys, "vlm", -1), "apple")
+
+    def test_single_engine_loops_to_itself(self):
+        self.assertEqual(next_engine_key(["apple"], "apple", 1), "apple")
+        self.assertEqual(next_engine_key(["apple"], "apple", -1), "apple")
+
+    def test_empty_list_returns_current(self):
+        self.assertEqual(next_engine_key([], "apple", 1), "apple")
+
+    def test_unknown_current_falls_back_to_first(self):
+        self.assertEqual(next_engine_key(["apple", "vlm"], "missing", 1), "vlm")
 
 
 class AppleOCREngineTests(unittest.TestCase):
@@ -114,6 +158,55 @@ class AppleOCREngineTests(unittest.TestCase):
         self.assertEqual(AppleOCREngine._collect_lines(request), "你好\n世界")
 
 
+class LocalVLMEngineTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = LocalVLMEngine(model_path="model.gguf", mmproj_path="mmproj.gguf")
+
+    def test_visibility_follows_translation_llm_policy(self):
+        # 与本地翻译 LLM 定位一致：公开版开放，生产内部机关闭（DEBUG_BUILD 由列表层统一放开）
+        self.assertTrue(self.engine.is_available_for(False))
+        self.assertFalse(self.engine.is_available_for(True))
+
+    def test_unconfigured_recognize_raises(self):
+        engine = LocalVLMEngine()
+        with self.assertRaises(OCRError):
+            engine.recognize(__file__)
+
+    def test_configure_updates_paths_and_unloads_model(self):
+        self.engine._llm = mock.Mock()
+        self.assertTrue(self.engine.is_loaded())
+
+        self.engine.configure(model_path="other.gguf", mmproj_path="other-mmproj.gguf")
+
+        self.assertEqual(self.engine.model_path, "other.gguf")
+        self.assertFalse(self.engine.is_loaded())
+        self.assertTrue(self.engine.needs_load())
+
+    def test_configure_same_paths_keeps_model(self):
+        self.engine._llm = mock.Mock()
+        self.engine.configure(model_path="model.gguf", mmproj_path="mmproj.gguf")
+        self.assertTrue(self.engine.is_loaded())
+
+    def test_needs_load_states(self):
+        engine = LocalVLMEngine()
+        self.assertFalse(engine.needs_load())  # 未配置谈不上加载
+        self.engine._llm = mock.Mock()
+        self.assertFalse(self.engine.needs_load())  # 已加载
+
+    def test_recognize_without_llama_bindings_raises(self):
+        # llama-cpp-python 缺失/版本过旧时给出明确升级提示
+        with mock.patch.object(ocr_engine, "Llama", None), \
+                mock.patch.object(ocr_engine, "_LLAMA_VL_HANDLER", None):
+            with self.assertRaisesRegex(OCRError, "llama-cpp-python"):
+                self.engine.recognize(__file__)
+
+    def test_load_model_missing_file_raises(self):
+        with mock.patch.object(ocr_engine, "Llama", mock.Mock()), \
+                mock.patch.object(ocr_engine, "_LLAMA_VL_HANDLER", mock.Mock()):
+            with self.assertRaisesRegex(OCRError, "不存在"):
+                self.engine.load_model()
+
+
 class ExtractClipboardImageTests(unittest.TestCase):
     @staticmethod
     def _make_url(path, is_file=True):
@@ -149,11 +242,12 @@ class ExtractClipboardImageTests(unittest.TestCase):
                 mock.patch("ocr_engine.os.path.isfile", return_value=True):
             self.assertEqual(extract_clipboard_image(), ("/tmp/photos/pic.heic", False))
 
-    def test_non_image_file_falls_through(self):
+    def test_first_file_url_returned_without_validation(self):
+        # 不做多余校验：文件 URL（无论类型）直接交给当前引擎，错误由引擎播报
         url = self._make_url("/tmp/docs/report.txt")
         with mock.patch.object(ocr_engine, "IS_MACOS", True), \
                 self._install_pasteboard(urls=[url]):
-            self.assertIsNone(extract_clipboard_image())
+            self.assertEqual(extract_clipboard_image(), ("/tmp/docs/report.txt", False))
 
     def test_web_url_ignored(self):
         url = self._make_url("https://example.com/pic.png", is_file=False)

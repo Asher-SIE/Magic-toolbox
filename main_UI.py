@@ -54,9 +54,11 @@ class MainFrame(wx.Frame):
         self._is_translating = False
         self._translation_lock = threading.Lock()
 
-        # 识别（OCR）：当前引擎模式、引擎实例与防重入锁
+        # 识别（OCR）：当前引擎模式、引擎实例、虚拟引擎列表（循环切换用）、实例缓存与防重入锁
         self._ocr_mode = 'apple'
         self.ocr_engine = None
+        self._ocr_engine_keys = []
+        self._ocr_engine_cache = {}
         self._ocr_lock = threading.Lock()
         
         self.edit_dialog = None
@@ -145,7 +147,11 @@ class MainFrame(wx.Frame):
         # 初始化翻译器
         self.init_translator()
 
-        # 初始化 OCR 引擎
+        # 初始化 OCR 引擎（先构建虚拟引擎列表，供 Option+Shift+Q/W 循环切换）
+        from ocr_engine import available_engines
+        self._ocr_engine_keys = [engine.key for engine in available_engines(setting.is_internal_device())]
+        if self._ocr_engine_keys and self._ocr_mode not in self._ocr_engine_keys:
+            self._ocr_mode = self._ocr_engine_keys[0]
         self.init_ocr_engine()
 
         #启动处理器
@@ -445,18 +451,18 @@ class MainFrame(wx.Frame):
         self._volume_target = config.get('volume_target', 80)
         self._translation_mode = config.get('translation_mode', 'llm')
         self._ocr_mode = config.get('ocr_mode', 'apple')
+        self._ocr_model_path = config.get('ocr_model_path', '')
+        self._ocr_mmproj_path = config.get('ocr_mmproj_path', '')
 
         is_internal = setting.is_internal_device()
         supports_apple = setting.supports_apple_translation()
 
-        if is_internal:
+        # 内部机只开放 Apple（翻译/OCR 一致）；开发内部版本（DEBUG_BUILD）放开限制、开放全部能力
+        if is_internal and not setting.DEBUG_BUILD:
             self._translation_mode = 'apple'
+            self._ocr_mode = 'apple'
         elif not supports_apple:
             self._translation_mode = 'llm'
-
-        # 内部机只开放 Apple OCR（与翻译模式的内部机策略一致）
-        if is_internal:
-            self._ocr_mode = 'apple'
 
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             source_display = setting.get_lang_display(self._source_lang)
@@ -482,6 +488,10 @@ class MainFrame(wx.Frame):
                     self._ocr_engine_choice.SetStringSelection(display)
                     break
 
+        if hasattr(self, 'ocr_model_path_text') and self.ocr_model_path_text:
+            self.ocr_model_path_text.SetValue(self._ocr_model_path)
+            self.ocr_mmproj_path_text.SetValue(self._ocr_mmproj_path)
+
     def save_config(self):
         model_path = getattr(self, '_model_path', '') or ''
         clipboard_max_count = getattr(self, '_clipboard_max_count', 1000)
@@ -489,7 +499,9 @@ class MainFrame(wx.Frame):
         volume_target = getattr(self, '_volume_target', 80)
         translation_mode = getattr(self, '_translation_mode', 'llm')
         ocr_mode = getattr(self, '_ocr_mode', 'apple')
-        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode)
+        ocr_model_path = getattr(self, '_ocr_model_path', '') or ''
+        ocr_mmproj_path = getattr(self, '_ocr_mmproj_path', '') or ''
+        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode, ocr_model_path, ocr_mmproj_path)
 
 
     def setup_clipboard_panel(self):
@@ -527,6 +539,30 @@ class MainFrame(wx.Frame):
         browse_model_sizer.Add(model_path_h_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         main_sizer.Add(browse_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # --- 图像识别模型分组 ---
+        ocr_model_static_box = wx.StaticBox(self.settings_panel, label=setting._("ocr_model_group"))
+        ocr_model_sizer = wx.StaticBoxSizer(ocr_model_static_box, wx.VERTICAL)
+
+        ocr_model_row = wx.BoxSizer(wx.HORIZONTAL)
+        self.ocr_model_path_text = wx.TextCtrl(ocr_model_static_box, style=wx.TE_READONLY)
+        self.ocr_model_path_text.SetValue(getattr(self, '_ocr_model_path', ''))
+        ocr_model_row.Add(self.ocr_model_path_text, 1, wx.EXPAND | wx.RIGHT, 5)
+        self.browse_ocr_model_button = wx.Button(ocr_model_static_box, label=setting._("browse_ocr_model"))
+        self.browse_ocr_model_button.Bind(wx.EVT_BUTTON, self.on_browse_ocr_model_click)
+        ocr_model_row.Add(self.browse_ocr_model_button, 0)
+        ocr_model_sizer.Add(ocr_model_row, 0, wx.EXPAND | wx.ALL, 5)
+
+        ocr_mmproj_row = wx.BoxSizer(wx.HORIZONTAL)
+        self.ocr_mmproj_path_text = wx.TextCtrl(ocr_model_static_box, style=wx.TE_READONLY)
+        self.ocr_mmproj_path_text.SetValue(getattr(self, '_ocr_mmproj_path', ''))
+        ocr_mmproj_row.Add(self.ocr_mmproj_path_text, 1, wx.EXPAND | wx.RIGHT, 5)
+        self.browse_ocr_mmproj_button = wx.Button(ocr_model_static_box, label=setting._("browse_ocr_mmproj"))
+        self.browse_ocr_mmproj_button.Bind(wx.EVT_BUTTON, self.on_browse_ocr_mmproj_click)
+        ocr_mmproj_row.Add(self.browse_ocr_mmproj_button, 0)
+        ocr_model_sizer.Add(ocr_mmproj_row, 0, wx.EXPAND | wx.ALL, 5)
+
+        main_sizer.Add(ocr_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # --- 2. 剪贴板最大条数分组 ---
         clipboard_count_static_box = wx.StaticBox(self.settings_panel, label=setting._("clipboard_max_count"))
@@ -580,7 +616,7 @@ class MainFrame(wx.Frame):
         if dialog.ShowModal() == wx.ID_OK:
             model_path = dialog.GetPath()
             self.model_path_text.SetValue(model_path)
-            
+
             if self.translator:
                 success = self.translator.load_model(model_path)
                 if success:
@@ -590,7 +626,35 @@ class MainFrame(wx.Frame):
                     self.text_ctrl.SetValue("")
                 else:
                     wx.MessageBox(setting._("model_load_failed"), setting._("error"), wx.OK | wx.ICON_WARNING)
-        
+
+        dialog.Destroy()
+
+    def on_browse_ocr_model_click(self, event):
+        """浏览并选择图像识别的视觉模型 GGUF 文件"""
+        self._browse_ocr_model_file(self.ocr_model_path_text, 'select_ocr_model_file', '_ocr_model_path')
+
+    def on_browse_ocr_mmproj_click(self, event):
+        """浏览并选择图像识别的视觉编码器 mmproj 文件"""
+        self._browse_ocr_model_file(self.ocr_mmproj_path_text, 'select_ocr_mmproj_file', '_ocr_mmproj_path')
+
+    def _browse_ocr_model_file(self, path_text, message_key: str, attr_name: str):
+        """图像识别模型文件选择的公共流程：选择后立即保存配置并重新初始化引擎预加载"""
+        wildcard = "GGUF Model (*.gguf)|*.gguf|All Files (*.*)|*.*"
+        dialog = wx.FileDialog(
+            self,
+            message=setting._(message_key),
+            wildcard=wildcard,
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+        )
+
+        if dialog.ShowModal() == wx.ID_OK:
+            path = dialog.GetPath()
+            path_text.SetValue(path)
+            setattr(self, attr_name, path)
+            self.save_config()
+            self.init_ocr_engine()
+            self._preload_ocr_engine()
+
         dialog.Destroy()
 
 
@@ -990,7 +1054,7 @@ class MainFrame(wx.Frame):
             
             self._translation_mode_choice.Bind(wx.EVT_CHOICE, self.on_translation_mode_changed)
 
-            if is_internal or not supports_apple:
+            if (is_internal and not setting.DEBUG_BUILD) or not supports_apple:
                 self._translation_mode_choice.Enable(False)
 
             self.toolbar.AddControl(self._translation_mode_choice)
@@ -1002,10 +1066,9 @@ class MainFrame(wx.Frame):
             engine_label = wx.StaticText(self.toolbar, label=setting._('ocr_engine_label'))
             self.toolbar.AddControl(engine_label)
 
-            from ocr_engine import available_engines
-            engines = available_engines(setting.is_internal_device())
+            from ocr_engine import engine_display
             self._ocr_engine_key_by_display = {
-                setting._(engine.display_key): engine.key for engine in engines
+                engine_display(key): key for key in self._ocr_engine_keys
             }
             self._ocr_engine_choice = wx.Choice(self.toolbar, choices=list(self._ocr_engine_key_by_display))
             for display, key in self._ocr_engine_key_by_display.items():
@@ -1867,10 +1930,22 @@ class MainFrame(wx.Frame):
 
 
     def init_ocr_engine(self):
-        """按当前 OCR 模式初始化引擎（引擎切换时重建）"""
+        """按当前 OCR 模式初始化引擎；本地视觉模型复用缓存实例，避免切换往返时重复加载模型"""
         try:
             from ocr_engine import create_engine
-            self.ocr_engine = create_engine(self._ocr_mode)
+            config = {}
+            if self._ocr_mode == 'vlm':
+                config = {
+                    'model_path': getattr(self, '_ocr_model_path', ''),
+                    'mmproj_path': getattr(self, '_ocr_mmproj_path', ''),
+                }
+            cached = self._ocr_engine_cache.get(self._ocr_mode)
+            if cached is not None:
+                cached.configure(**config)
+                self.ocr_engine = cached
+            else:
+                self.ocr_engine = create_engine(self._ocr_mode, **config)
+                self._ocr_engine_cache[self._ocr_mode] = self.ocr_engine
         except Exception as e:
             logging.warning(f"OCR 引擎初始化失败: {e}")
             self.ocr_engine = None
@@ -1884,6 +1959,52 @@ class MainFrame(wx.Frame):
                 self._ocr_mode = engine_key
                 self.save_config()
                 self.init_ocr_engine()
+
+    def on_hotkey_altshiftq(self, event):
+        """alt+shift+q: 切换上一个识别引擎"""
+        self.switch_ocr_engine(-1)
+
+    def on_hotkey_altshiftw(self, event):
+        """alt+shift+w: 切换下一个识别引擎"""
+        self.switch_ocr_engine(1)
+
+    def switch_ocr_engine(self, step: int):
+        """在虚拟引擎列表中循环切换识别引擎，切换后经 VO 播报引擎名反馈"""
+        from ocr_engine import engine_display, next_engine_key
+
+        if not self._ocr_engine_keys:
+            return
+        new_key = next_engine_key(self._ocr_engine_keys, self._ocr_mode, step)
+        if new_key != self._ocr_mode:
+            self._ocr_mode = new_key
+            self.save_config()
+            self.init_ocr_engine()
+            if hasattr(self, '_ocr_engine_choice') and self._ocr_engine_choice:
+                self._ocr_engine_choice.SetStringSelection(engine_display(new_key))
+        # TTS 反馈：循环回原引擎同样播报，确认按键已生效
+        self.vo_handler.speak_text(engine_display(new_key))
+        self._preload_ocr_engine()
+
+    def _preload_ocr_engine(self):
+        """本地视觉模型已配置未加载时后台预加载，完成后播报就绪"""
+        engine = self.ocr_engine
+        is_configured = getattr(engine, "is_configured", None)
+        is_loaded = getattr(engine, "is_loaded", None)
+        if not (callable(is_configured) and callable(is_loaded)):
+            return
+        if not is_configured() or is_loaded():
+            return
+
+        def preload_worker():
+            try:
+                engine.load_model()
+            except Exception as e:
+                # 预加载失败保持静默，识别时会给出具体错误播报
+                logging.warning(f"视觉模型预加载失败: {e}")
+                return
+            wx.CallAfter(self.vo_handler.speak_text, setting._('ocr_vlm_ready'))
+
+        threading.Thread(target=preload_worker, daemon=True).start()
 
     def on_hotkey_altshiftr(self, event):
         """alt+shift+r: 识别剪贴板中的图片（OCR），结果回写识别面板并朗读"""
@@ -1931,6 +2052,9 @@ class MainFrame(wx.Frame):
 
         def ocr_worker():
             try:
+                needs_load = getattr(self.ocr_engine, "needs_load", None)
+                if callable(needs_load) and needs_load():
+                    wx.CallAfter(self.vo_handler.speak_text, setting._('ocr_vlm_loading'))
                 text = self.ocr_engine.recognize(image_path)
                 wx.CallAfter(self._on_ocr_result, text)
             except Exception as e:

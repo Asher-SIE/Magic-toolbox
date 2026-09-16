@@ -36,3 +36,5 @@ Option+Shift+P    Paste the current line of the clipboard into the input box
 
 4. Image Recognition Shortcuts
 Option+Shift+R    Recognize the image in the clipboard (press Command+C on an image in Finder first); the result is read aloud automatically
+Option+Shift+Q    Switch to the previous recognition engine (cycles with spoken engine name)
+Option+Shift+W    Switch to the next recognition engine (cycles with spoken engine name)

@@ -20,10 +20,12 @@ Clipboard Management
 
 Image Recognition
 - Built-in System OCR: Uses the macOS Vision framework for on-device recognition on macOS 26 and later, no internet connection or model download required
+- Local Vision Model: Same tech stack as local translation (llama.cpp), supports both OCR and image description; Qwen2.5-VL-3B recommended (search ggml-org/Qwen2.5-VL-3B-Instruct-GGUF on Hugging Face, download the main model Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf and the vision encoder mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf), requires an updated llama-cpp-python
 - Quick Recognition: While browsing an image in Finder or other apps, press Command+C to copy it, then press Option+Shift+R to recognize the image in the clipboard
+- Engine Switching: Option+Shift+Q for the previous engine, Option+Shift+W for the next (cycles and speaks the engine name)
 - File Recognition: The recognition panel toolbar offers a "Browse Image" button to pick an image file directly
 - Result Sync: Recognition results are shown live in the recognition panel edit box (new results overwrite old ones) and are read aloud by VoiceOver automatically
-- Engine Extension: The recognition panel toolbar lets you switch OCR engines; Apple OCR is available now, with more engines to come
+- Model Setup: Use the "Image Recognition Model" group in the settings panel to pick the vision model and vision encoder files; once configured, switching to the local vision model preloads it in the background
 
 Voice Enhancement
 - VoiceOver Integration: Optimized for VoiceOver, works seamlessly with the screen reader
@@ -44,4 +46,4 @@ The app uses a layout with a left navigation bar and a right content panel:
 - Translation Panel: Enter text to perform translation
 - Clipboard Panel: Browse and manage clipboard history
 - Recognition Panel: Shows image text recognition results (new results overwrite old ones); the toolbar switches OCR engines and browses image files
-- Settings Panel: Configure the translation model path and the maximum number of saved clipboard records
+- Settings Panel: Configure the translation model path, the image recognition model path, and the maximum number of saved clipboard records

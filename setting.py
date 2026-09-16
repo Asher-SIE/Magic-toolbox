@@ -10,6 +10,10 @@ import subprocess
 from cryptography.fernet import Fernet
 
 
+# 开发内部版本标志：True 时放开"内部机只开放 Apple"限制，开放全部引擎/翻译模式（正式发布须改为 False）
+DEBUG_BUILD = True
+
+
 def _get_fernet():
     result = subprocess.run(
         ['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
@@ -420,6 +424,20 @@ hotKeys = [
         "key": "r",
         "handler": "on_hotkey_altshiftr",
         "description": "alt+shift+r: 识别剪贴板图片(OCR)"
+    },
+    {
+        "name": "altshiftq",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": "q",
+        "handler": "on_hotkey_altshiftq",
+        "description": "alt+shift+q: 切换上一个识别引擎"
+    },
+    {
+        "name": "altshiftw",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": "w",
+        "handler": "on_hotkey_altshiftw",
+        "description": "alt+shift+w: 切换下一个识别引擎"
     }
 ]
 
@@ -440,7 +458,9 @@ def load_config():
         'volume_limit': 100,
         'volume_target': 80,
         'translation_mode': 'llm',
-        'ocr_mode': 'apple'
+        'ocr_mode': 'apple',
+        'ocr_model_path': '',
+        'ocr_mmproj_path': ''
     }
     try:
         if os.path.exists(config_path):
@@ -452,7 +472,7 @@ def load_config():
     return config
 
 
-def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple'):
+def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple', ocr_model_path: str = '', ocr_mmproj_path: str = ''):
     """保存配置"""
     try:
         config = {
@@ -463,7 +483,9 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
             'volume_limit': volume_limit,
             'volume_target': volume_target,
             'translation_mode': translation_mode,
-            'ocr_mode': ocr_mode
+            'ocr_mode': ocr_mode,
+            'ocr_model_path': ocr_model_path,
+            'ocr_mmproj_path': ocr_mmproj_path
         }
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
