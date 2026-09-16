@@ -6,6 +6,8 @@ Translation Features
 - Real-time Translation: Supports instant translation of content read aloud by VoiceOver
 - Multi-language Support: Supports over 38 languages, including English, Chinese, French, Japanese, Korean, Spanish, etc.
 - Offline Translation: Powered by the Tencent Hunyuan Large Language Model (model file must be downloaded separately), works without an internet connection
+- Apple Translation: Uses the native system translation on macOS 26 and later, no internet connection or model file download required; switch between LLM (Tencent Hunyuan) and Apple modes in the translation toolbar
+- Local Dictionary: In all translation modes, the local dictionary is checked first, falling back to the translation engine only when no match is found
 - Long Text Translation: Intelligently splits long articles, auto-translates in segments and combines complete results
 - Translation Cache: Records translation history, quickly returns results for identical texts
 
