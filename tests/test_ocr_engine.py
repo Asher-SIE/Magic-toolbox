@@ -167,6 +167,15 @@ class LocalVLMEngineTests(unittest.TestCase):
         self.assertTrue(self.engine.is_available_for(False))
         self.assertFalse(self.engine.is_available_for(True))
 
+    def test_describe_prompt_targets_captioning_not_ocr(self):
+        # 本地视觉模型定位为图像描述引擎：提示词要求约 100 字描述，且不再包含 OCR 逐行输出指令
+        self.assertIn("100", LocalVLMEngine.DESCRIBE_PROMPT)
+        self.assertIn("描述", LocalVLMEngine.DESCRIBE_PROMPT)
+        self.assertNotIn("OCR", LocalVLMEngine.DESCRIBE_PROMPT)
+        # 100 字中文约 200 token，上限留冗余但不给 OCR 级别的 2048
+        self.assertEqual(LocalVLMEngine.MAX_OUTPUT_TOKENS, 512)
+        self.assertFalse(hasattr(LocalVLMEngine, "OCR_PROMPT"))
+
     def test_unconfigured_recognize_raises(self):
         engine = LocalVLMEngine()
         with self.assertRaises(OCRError):

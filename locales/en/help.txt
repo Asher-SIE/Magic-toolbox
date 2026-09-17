@@ -20,9 +20,9 @@ Clipboard Management
 
 Image Recognition
 - Built-in System OCR: Uses the macOS Vision framework for on-device recognition on macOS 26 and later, no internet connection or model download required
-- Local Vision Model: Same tech stack as local translation (llama.cpp), supports both OCR and image description; Qwen2.5-VL-3B recommended (search ggml-org/Qwen2.5-VL-3B-Instruct-GGUF on Hugging Face, download the main model Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf and the vision encoder mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf), requires an updated llama-cpp-python
+- Local Vision Model: An image description engine on the same tech stack as local translation (llama.cpp), producing a ~100-character short description of the image; Qwen3-VL-4B recommended (search Qwen/Qwen3-VL-4B-Instruct-GGUF on Hugging Face, download the main model Qwen3VL-4B-Instruct-Q4_K_M.gguf and the vision encoder mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf), requires an updated llama-cpp-python
 - Quick Recognition: While browsing an image in Finder or other apps, press Command+C to copy it, then press Option+Shift+R to recognize the image in the clipboard
-- Engine Switching: Option+Shift+Q for the previous engine, Option+Shift+W for the next (cycles and speaks the engine name)
+- Engine Switching: Option+Shift+Q cycles engines and speaks the engine name (Apple OCR extracts text; the local vision model produces image descriptions)
 - File Recognition: The recognition panel toolbar offers a "Browse Image" button to pick an image file directly
 - Result Sync: Recognition results are shown live in the recognition panel edit box (new results overwrite old ones) and are read aloud by VoiceOver automatically
 - Model Setup: Use the "Image Recognition Model" group in the settings panel to pick the vision model and vision encoder files; once configured, switching to the local vision model preloads it in the background

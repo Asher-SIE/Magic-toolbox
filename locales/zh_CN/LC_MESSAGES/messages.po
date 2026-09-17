@@ -141,11 +141,11 @@ msgstr "下载视觉模型"
 
 #: main_UI.py
 msgid "ocr_vlm_download_model"
-msgstr "下载主模型（Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf）"
+msgstr "下载主模型（Qwen3VL-4B-Instruct-Q4_K_M.gguf）"
 
 #: main_UI.py
 msgid "ocr_vlm_download_mmproj"
-msgstr "下载视觉编码器（mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf）"
+msgstr "下载视觉编码器（mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf）"
 
 #: main_UI.py
 msgid "ocr_vlm_download_home"
@@ -609,7 +609,7 @@ msgstr "识别"
 
 #: main_UI.py
 msgid "recognition_hint"
-msgstr "按 Option+Shift+R 识别剪贴板中的图片，Option+Shift+Q/W 切换识别引擎，或通过工具栏浏览图片文件"
+msgstr "按 Option+Shift+R 识别剪贴板中的图片，Option+Shift+Q 切换识别引擎，或通过工具栏浏览图片文件"
 
 #: main_UI.py
 msgid "ocr_engine_label"
@@ -653,7 +653,7 @@ msgstr "未识别到文字"
 
 #: main_UI.py
 msgid "ocr_engine_vlm"
-msgstr "本地视觉模型"
+msgstr "图像描述（本地视觉模型）"
 
 #: main_UI.py
 msgid "ocr_model_group"

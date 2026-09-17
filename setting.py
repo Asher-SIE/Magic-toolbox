@@ -423,21 +423,14 @@ hotKeys = [
         "modifiers": ["ALT", "SHIFT"],
         "key": "r",
         "handler": "on_hotkey_altshiftr",
-        "description": "alt+shift+r: 识别剪贴板图片(OCR)"
+        "description": "alt+shift+r: 按当前引擎识别剪贴板图片(OCR/图像描述)"
     },
     {
         "name": "altshiftq",
         "modifiers": ["ALT", "SHIFT"],
         "key": "q",
         "handler": "on_hotkey_altshiftq",
-        "description": "alt+shift+q: 切换上一个识别引擎"
-    },
-    {
-        "name": "altshiftw",
-        "modifiers": ["ALT", "SHIFT"],
-        "key": "w",
-        "handler": "on_hotkey_altshiftw",
-        "description": "alt+shift+w: 切换下一个识别引擎"
+        "description": "alt+shift+q: 循环切换识别引擎"
     }
 ]
 

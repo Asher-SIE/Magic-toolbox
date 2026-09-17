@@ -1,7 +1,7 @@
-"""OCR 引擎抽象层与内置引擎实现，引擎技术选型与推荐模型见 README。
+"""识别引擎抽象层与内置引擎实现（Apple OCR 与本地视觉模型图像描述），技术选型与推荐模型见 README。
 
 新增引擎时：继承 OCREngine 并在 OCR_ENGINES 注册表登记即可，
-识别面板的引擎列表、Option+Shift+Q/W 循环切换与 ocr_mode 配置会自动生效。
+识别面板的引擎列表、Option+Shift+Q 循环切换与 ocr_mode 配置会自动生效。
 """
 
 from __future__ import annotations
@@ -45,13 +45,16 @@ if IS_MACOS:
         VNRecognizeTextRequest = None
         VNRequestTextRecognitionLevelAccurate = None
 
-# llama_cpp 多模态按存在性守卫导入：Qwen25VLChatHandler 需较新版本 llama-cpp-python
+# llama_cpp 多模态按存在性守卫导入：优先通用 MTMDChatHandler（需 llama-cpp-python ≥ 0.3.26，
+# 支持 Qwen3-VL 等新架构多模态模型），旧版本回退 Qwen25VLChatHandler（仅支持 Qwen2.5-VL）
 Llama = None
 _LLAMA_VL_HANDLER = None
 try:
     from llama_cpp import Llama
     from llama_cpp import llama_chat_format
-    _LLAMA_VL_HANDLER = getattr(llama_chat_format, "Qwen25VLChatHandler", None)
+    _LLAMA_VL_HANDLER = getattr(llama_chat_format, "MTMDChatHandler", None) or getattr(
+        llama_chat_format, "Qwen25VLChatHandler", None
+    )
 except ImportError:
     Llama = None
     _LLAMA_VL_HANDLER = None
@@ -150,23 +153,25 @@ class AppleOCREngine(OCREngine):
 
 
 class LocalVLMEngine(OCREngine):
-    """本地视觉语言模型 OCR：llama_cpp 加载 GGUF 多模态模型（OCR 与图像描述两用）
+    """本地视觉语言模型图像描述引擎：llama_cpp 加载 GGUF 多模态模型，输出约 100 字简短图片描述
 
-    推荐模型与下载方式见 README；需要 llama-cpp-python 提供 Qwen25VLChatHandler（旧版本需升级）。
+    推荐模型与下载方式见 README；优先经通用 MTMDChatHandler 加载（Qwen3-VL 等），
+    旧版 llama-cpp-python 回退 Qwen25VLChatHandler（仅 Qwen2.5-VL）。
     模型仅在首次识别/预加载时加载，实例可跨引擎切换复用（MainFrame 缓存）。
     """
 
     key = "vlm"
     display_key = "ocr_engine_vlm"
 
-    # 通用 VLM 做 OCR 需要明确指令（参照 llama.cpp multimodal 文档建议）
-    OCR_PROMPT = "请对图片进行 OCR：逐行原样输出图片中的全部文字，保持原有排版和换行，不要输出任何解释、总结或多余内容。"
+    # 图像描述指令：面向视障用户，控制篇幅约 100 字并要求覆盖场景/主体/细节
+    DESCRIBE_PROMPT = "请用大约100字简短描述这张图片：说明场景、主体与重要细节，不要输出任何解释或多余内容。"
     IMAGE_MIME = {
         ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
         ".tif": "image/tiff", ".tiff": "image/tiff", ".bmp": "image/bmp",
         ".gif": "image/gif", ".webp": "image/webp", ".heic": "image/heic",
     }
-    MAX_OUTPUT_TOKENS = 2048
+    # 100 字中文约 200 token，留冗余避免截断
+    MAX_OUTPUT_TOKENS = 512
 
     def __init__(self, **config):
         super().__init__(**config)
@@ -254,11 +259,11 @@ class LocalVLMEngine(OCREngine):
                     "role": "user",
                     "content": [
                         {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
-                        {"type": "text", "text": self.OCR_PROMPT},
+                        {"type": "text", "text": self.DESCRIBE_PROMPT},
                     ],
                 }],
                 max_tokens=self.MAX_OUTPUT_TOKENS,
-                temperature=0.0,
+                temperature=0.2,
             )
             text = (output.get("choices") or [{}])[0].get("message", {}).get("content") or ""
             return text.strip()
@@ -269,7 +274,7 @@ class LocalVLMEngine(OCREngine):
 
 
 # 引擎注册表（key -> 引擎类）：新引擎在此登记后，UI 引擎列表、
-# Option+Shift+Q/W 循环切换与 ocr_mode 配置自动生效
+# Option+Shift+Q 循环切换与 ocr_mode 配置自动生效
 OCR_ENGINES = {
     AppleOCREngine.key: AppleOCREngine,
     LocalVLMEngine.key: LocalVLMEngine,

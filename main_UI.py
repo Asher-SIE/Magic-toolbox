@@ -147,7 +147,7 @@ class MainFrame(wx.Frame):
         # 初始化翻译器
         self.init_translator()
 
-        # 初始化 OCR 引擎（先构建虚拟引擎列表，供 Option+Shift+Q/W 循环切换）
+        # 初始化 OCR 引擎（先构建虚拟引擎列表，供 Option+Shift+Q 循环切换）
         from ocr_engine import available_engines
         self._ocr_engine_keys = [engine.key for engine in available_engines(setting.is_internal_device())]
         if self._ocr_engine_keys and self._ocr_mode not in self._ocr_engine_keys:
@@ -944,10 +944,10 @@ class MainFrame(wx.Frame):
             webbrowser.open('https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF')
 
 
-    # 本地视觉模型推荐下载地址（ggml-org/Qwen2.5-VL-3B-Instruct-GGUF，模型说明见 README）
-    VLM_HOME_URL = 'https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF'
-    VLM_MODEL_URL = VLM_HOME_URL + '/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf?download=true'
-    VLM_MMPROJ_URL = VLM_HOME_URL + '/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf?download=true'
+    # 本地视觉模型推荐下载地址（Qwen/Qwen3-VL-4B-Instruct-GGUF，模型说明见 README）
+    VLM_HOME_URL = 'https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF'
+    VLM_MODEL_URL = VLM_HOME_URL + '/resolve/main/Qwen3VL-4B-Instruct-Q4_K_M.gguf?download=true'
+    VLM_MMPROJ_URL = VLM_HOME_URL + '/resolve/main/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf?download=true'
 
     def on_download_vlm_model(self, event):
         """打开主模型直链"""
@@ -1992,11 +1992,7 @@ class MainFrame(wx.Frame):
                 self.init_ocr_engine()
 
     def on_hotkey_altshiftq(self, event):
-        """alt+shift+q: 切换上一个识别引擎"""
-        self.switch_ocr_engine(-1)
-
-    def on_hotkey_altshiftw(self, event):
-        """alt+shift+w: 切换下一个识别引擎"""
+        """alt+shift+q: 循环切换识别引擎（当前两引擎间往返）"""
         self.switch_ocr_engine(1)
 
     def switch_ocr_engine(self, step: int):

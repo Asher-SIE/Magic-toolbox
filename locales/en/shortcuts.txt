@@ -35,6 +35,5 @@ Option+Shift+M    View clipboard summary (row and column information)
 Option+Shift+P    Paste the current line of the clipboard into the input box
 
 4. Image Recognition Shortcuts
-Option+Shift+R    Recognize the image in the clipboard (press Command+C on an image in Finder first); the result is read aloud automatically
-Option+Shift+Q    Switch to the previous recognition engine (cycles with spoken engine name)
-Option+Shift+W    Switch to the next recognition engine (cycles with spoken engine name)
+Option+Shift+R    Recognize the image in the clipboard with the current engine (Apple OCR extracts text; the local vision model produces a ~100-character description. Press Command+C on an image in Finder first); the result is read aloud automatically
+Option+Shift+Q    Cycle recognition engines (speaks the engine name)
