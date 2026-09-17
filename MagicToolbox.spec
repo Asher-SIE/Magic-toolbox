@@ -11,11 +11,11 @@ if os.path.exists('AppleTranslateTool.app'):
 a = Analysis(
     ['main_UI.py'],
     pathex=[],
-    # llama_cpp 运行时按「包目录/lib」搜索动态库；PyInstaller 钩子未收集 libmtmd.dylib，
-    # 除拷入 Frameworks 根目录外，需再补一份到包内 lib 目录，否则打包版视觉模型报 mtmd not found
+    # llama_cpp（0.3.26+）运行时按「包目录/lib」搜索 libllama/libmtmd 等全部动态库，
+    # 故须将整个 lib 目录拷入包内 llama_cpp/lib；另拷一份到 Frameworks 根目录兜底 @rpath 依赖解析
     binaries=[
         ('venv/lib/python3.13/site-packages/llama_cpp/lib', '.'),
-        ('venv/lib/python3.13/site-packages/llama_cpp/lib/libmtmd.dylib', 'llama_cpp/lib'),
+        ('venv/lib/python3.13/site-packages/llama_cpp/lib', 'llama_cpp/lib'),
     ],
     datas=[('resources', 'resources'), ('locales', 'locales')] + apple_tool_datas,
     hiddenimports=[],
