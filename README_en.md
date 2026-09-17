@@ -13,6 +13,11 @@ MagicToolbox is an assistive tool designed exclusively for macOS VoiceOver visua
 - **Editing Function**: Built-in text editor with undo and redo functionality
 - **Quick Processing**: Provides handy features including removing blank spaces, merging spaces, converting numbers to Chinese characters, and text splitting
 
+### Image Recognition (OCR)
+- **Dual Engines**: Apple system OCR (Vision framework, macOS 26+) and a local vision model, switchable with Option+Shift+Q/W
+- **Multiple Image Sources**: Supports recognizing clipboard images and local image files
+- **Local Vision Model**: Based on llama.cpp loading a GGUF multimodal model with mmproj visual projection for offline recognition; works for both OCR and image captioning (model must be downloaded separately, see Installation Steps)
+
 ### Voice Enhancement
 - **VoiceOver Integration**: Optimized for VoiceOver, works seamlessly with the screen reader
 - **Character Explanation**: Supports viewing detailed explanations of individual characters
@@ -23,6 +28,7 @@ MagicToolbox is an assistive tool designed exclusively for macOS VoiceOver visua
 The app uses a layout with a left navigation bar and a right content panel:
 - **Translation Panel**: Enter text to perform translation
 - **Clipboard Panel**: Browse and manage clipboard history
+- **Recognition Panel**: Perform text recognition (OCR) on clipboard images or image files
 - **Settings Panel**: Configure the translation model path and the maximum number of saved clipboard records
 
 ### Keyboard Shortcuts
@@ -62,6 +68,11 @@ The app uses a layout with a left navigation bar and a right content panel:
 | Option+Shift+M | View clipboard summary (row and column information) |
 | Option+Shift+P | Paste the current line into the frontmost app's input box (system clipboard is restored about 1 second after the last paste) |
 
+### 4. Image Recognition Shortcuts
+| Option+Shift+R | Recognize clipboard image (OCR) |
+| Option+Shift+Q | Switch to previous recognition engine |
+| Option+Shift+W | Switch to next recognition engine |
+
 ## System Requirements
 - macOS 12.0 or later
 - Python 3.10 or later
@@ -91,7 +102,15 @@ The translation function requires the Tencent Hunyuan Large Language Model (GGUF
 2. Save the model file to any local directory
 3. On the first run, select the model file path via the built-in Settings panel
 
-### 5. Run the Application
+### 5. Download the Vision Model (Optional)
+The local vision model OCR requires the recommended model ggml-org/Qwen2.5-VL-3B-Instruct-GGUF (two files in total; you can also reach the download links via the app menu "Help" -> "Download Vision Model"):
+1. Main model: [Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf](https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf?download=true) (~1.93GB)
+2. Vision encoder: [mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf](https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf?download=true) (~845MB)
+3. Save both files to any local directory and select their paths in the Recognition group of the Settings panel
+
+Apple system OCR requires no model download; skip this step if you don't use the local vision model. Note: the local vision model requires a recent version of llama-cpp-python (with Qwen25VLChatHandler).
+
+### 6. Run the Application
 ```bash
 python main_UI.py
 ```
@@ -114,6 +133,7 @@ Magic-toolbox/
 ├── main_UI.py          # Main interface code
 ├── processer.py        # Core processor (translation, clipboard, VoiceOver functions)
 ├── setting.py          # Configuration and internationalization module
+├── ocr_engine.py       # Image recognition engines (Apple Vision OCR and local vision model)
 ├── resources/          # Resource files directory
 │   └── dict.txt        # Local dictionary file
 ├── locales/            # Internationalization language files
@@ -127,6 +147,7 @@ Magic-toolbox/
 ## Tech Stack
 - **GUI Framework**: wxPython 4.2
 - **Translation Model**: llama.cpp + Tencent Hunyuan Large Language Model
+- **Image Recognition**: Apple Vision (via PyObjC) + llama.cpp + Qwen2.5-VL multimodal model
 - **System Integration**: appscript, PyObjC
 - **Packaging Tool**: PyInstaller
 

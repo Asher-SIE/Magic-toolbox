@@ -136,6 +136,22 @@ msgid "download_model_prompt"
 msgstr "是否自动下载翻译模型？\n\n选择\"是\"将直接下载推荐模型（HY-MT1.5-1.8B-Q4_K_M.gguf），选择\"否\"可前往 Hugging Face 手动选择其他模型。"
 
 #: main_UI.py
+msgid "menu_help_download_vlm"
+msgstr "下载视觉模型"
+
+#: main_UI.py
+msgid "ocr_vlm_download_model"
+msgstr "下载主模型（Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf）"
+
+#: main_UI.py
+msgid "ocr_vlm_download_mmproj"
+msgstr "下载视觉编码器（mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf）"
+
+#: main_UI.py
+msgid "ocr_vlm_download_home"
+msgstr "打开模型首页"
+
+#: main_UI.py
 msgid "donate_title"
 msgstr "鼓励一下开发者"
 

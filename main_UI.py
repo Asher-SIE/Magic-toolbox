@@ -221,10 +221,20 @@ class MainFrame(wx.Frame):
         changelog_help = help_menu.Append(wx.NewId(), setting._('menu_help_changelog'))
         download_model = help_menu.Append(wx.NewId(), setting._('menu_help_download_model'))
 
+        # 视觉模型下载子菜单：需分别下载主模型与视觉编码器两个文件，故分列直链与首页
+        download_vlm_menu = wx.Menu()
+        vlm_model_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_model'))
+        vlm_mmproj_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_mmproj'))
+        vlm_home_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_home'))
+        download_vlm = help_menu.AppendSubMenu(download_vlm_menu, setting._('menu_help_download_vlm'))
+
         self.Bind(wx.EVT_MENU, self.on_help_program, program_help)
         self.Bind(wx.EVT_MENU, self.on_help_shortcuts, shortcuts_help)
         self.Bind(wx.EVT_MENU, self.on_help_changelog, changelog_help)
         self.Bind(wx.EVT_MENU, self.on_download_model, download_model)
+        self.Bind(wx.EVT_MENU, self.on_download_vlm_model, vlm_model_item)
+        self.Bind(wx.EVT_MENU, self.on_download_vlm_mmproj, vlm_mmproj_item)
+        self.Bind(wx.EVT_MENU, self.on_download_vlm_home, vlm_home_item)
 
         # 检查更新菜单
         check_update = help_menu.Append(wx.NewId(), setting._('menu_help_check_update'))
@@ -932,6 +942,27 @@ class MainFrame(wx.Frame):
             webbrowser.open('https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/resolve/main/HY-MT1.5-1.8B-Q4_K_M.gguf?download=true')
         else:
             webbrowser.open('https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF')
+
+
+    # 本地视觉模型推荐下载地址（ggml-org/Qwen2.5-VL-3B-Instruct-GGUF，模型说明见 README）
+    VLM_HOME_URL = 'https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF'
+    VLM_MODEL_URL = VLM_HOME_URL + '/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf?download=true'
+    VLM_MMPROJ_URL = VLM_HOME_URL + '/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf?download=true'
+
+    def on_download_vlm_model(self, event):
+        """打开主模型直链"""
+        import webbrowser
+        webbrowser.open(self.VLM_MODEL_URL)
+
+    def on_download_vlm_mmproj(self, event):
+        """打开视觉编码器直链"""
+        import webbrowser
+        webbrowser.open(self.VLM_MMPROJ_URL)
+
+    def on_download_vlm_home(self, event):
+        """打开模型仓库首页"""
+        import webbrowser
+        webbrowser.open(self.VLM_HOME_URL)
 
 
     def on_help_changelog(self, event):

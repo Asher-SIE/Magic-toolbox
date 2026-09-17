@@ -15,6 +15,11 @@ MagicToolbox 是一款专为 macOS VoiceOver 视障用户设计的辅助工具�
 - **编辑功能**：内置文本编辑器，支持撤销与重做操作
 - **快捷处理**：提供移除空白、合并空格、数字转中文、文本分句等快捷功能
 
+### 图像识别（OCR）
+- **双引擎切换**：Apple 系统 OCR（Vision 框架，需 macOS 26+）与本地视觉模型，Option+Shift+Q/W 一键循环切换
+- **多种图片来源**：支持识别剪贴板图片与本地图片文件
+- **本地视觉模型**：基于 llama.cpp 加载 GGUF 多模态模型，经 mmproj 视觉投影离线识别，OCR 与图像描述两用（模型需单独下载，见安装步骤）
+
 ### 语音增强
 - **VoiceOver 集成**：专为 VoiceOver 优化设计，可与屏幕阅读器无缝配合使用
 - **音量限制**：内置听力保护机制，自动限制音量在安全范围内
@@ -33,6 +38,7 @@ MagicToolbox 是一款专为 macOS VoiceOver 视障用户设计的辅助工具�
 应用采用左侧导航栏搭配右侧内容面板的布局形式：
 - **翻译面板**：输入文本即可执行翻译操作
 - **剪贴板面板**：浏览并管理剪贴板历史记录
+- **识别面板**：对剪贴板图片或图片文件执行文字识别（OCR）
 - **设置面板**：配置翻译模型路径、剪贴板记录最大保存条数
 
 ### 快捷键列表
@@ -72,6 +78,11 @@ MagicToolbox 是一款专为 macOS VoiceOver 视障用户设计的辅助工具�
 | Option+Shift+M | 查看剪贴板综述（行列信息） |
 | Option+Shift+P | 将当前行粘贴到前台应用输入框（粘贴后约 1 秒还原系统剪贴板；连续触发时从最后一次操作重新计时） |
 
+### 四、图像识别快捷键
+| Option+Shift+R | 识别剪贴板图片（OCR） |
+| Option+Shift+Q | 切换上一个识别引擎 |
+| Option+Shift+W | 切换下一个识别引擎 |
+
 ## 环境要求
 - macOS 12.0 及以上版本
 - Python 3.10 及以上版本
@@ -101,7 +112,15 @@ pip install -r requirements.txt
 2. 将模型文件保存至本地任意目录
 3. 首次运行应用时，通过内置设置面板选择模型文件路径
 
-### 5. 运行应用
+### 5. 下载视觉模型（可选）
+本地视觉模型 OCR 需下载推荐模型 ggml-org/Qwen2.5-VL-3B-Instruct-GGUF（共两个文件，也可通过应用「帮助」->「下载视觉模型」菜单直达下载链接）：
+1. 主模型：[Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf](https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf?download=true)（约 1.93GB）
+2. 视觉编码器：[mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf](https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf?download=true)（约 845MB）
+3. 将两个文件保存至本地任意目录，在设置面板的识别分组中分别选择其路径
+
+Apple 系统 OCR 无需下载模型，不使用本地视觉模型时可跳过此步。注意：本地视觉模型需要较新版本的 llama-cpp-python（需提供 Qwen25VLChatHandler）。
+
+### 6. 运行应用
 ```bash
 python main_UI.py
 ```
@@ -138,6 +157,7 @@ Magic-toolbox/
 ├── processer.py        # 核心处理器（翻译、剪贴板、VoiceOver 功能）
 ├── dictionary.py       # 本地词典（各翻译模式共用的查询层）
 ├── apple_translator.py # Apple 翻译桥接（调用无头 Swift CLI，需 macOS 26+）
+├── ocr_engine.py       # 图像识别引擎（Apple Vision OCR 与本地视觉模型）
 ├── setting.py          # 配置文件与国际化模块
 ├── resources/          # 资源文件目录
 │   └── dict.txt        # 本地词典文件
@@ -153,6 +173,7 @@ Magic-toolbox/
 ## 技术栈
 - **GUI 框架**：wxPython 4.2
 - **翻译模型**：llama.cpp + 腾讯混元大模型
+- **图像识别**：Apple Vision（PyObjC 直调）+ llama.cpp + Qwen2.5-VL 多模态模型
 - **系统集成**：appscript、PyObjC
 - **打包工具**：PyInstaller
 

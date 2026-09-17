@@ -1,11 +1,4 @@
-"""OCR 引擎抽象层与内置引擎实现。
-
-Apple OCR 通过 pyobjc 直接调用 macOS Vision 框架（VNRecognizeTextRequest），
-与 Apple 翻译（必须经 Swift 无头 CLI）不同：Vision 是标准 ObjC API，
-pyobjc==12.1 全量包自带 Vision 绑定，无需构建额外的 Swift 工具。
-
-本地视觉模型 OCR 通过 llama_cpp 加载 GGUF 多模态模型（与本地翻译 LLM 同技术栈），
-经官方 Qwen25VLChatHandler 走 mmproj 视觉投影，OCR 与图像描述两用。
+"""OCR 引擎抽象层与内置引擎实现，引擎技术选型与推荐模型见 README。
 
 新增引擎时：继承 OCREngine 并在 OCR_ENGINES 注册表登记即可，
 识别面板的引擎列表、Option+Shift+Q/W 循环切换与 ocr_mode 配置会自动生效。
@@ -159,10 +152,7 @@ class AppleOCREngine(OCREngine):
 class LocalVLMEngine(OCREngine):
     """本地视觉语言模型 OCR：llama_cpp 加载 GGUF 多模态模型（OCR 与图像描述两用）
 
-    推荐模型（ggml-org/Qwen2.5-VL-3B-Instruct-GGUF，约 1.93GB + mmproj 845MB）：
-    - 主模型：Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf
-    - 视觉编码器（mmproj）：mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf
-    需要 llama-cpp-python 提供 Qwen25VLChatHandler（旧版本需升级）。
+    推荐模型与下载方式见 README；需要 llama-cpp-python 提供 Qwen25VLChatHandler（旧版本需升级）。
     模型仅在首次识别/预加载时加载，实例可跨引擎切换复用（MainFrame 缓存）。
     """
 

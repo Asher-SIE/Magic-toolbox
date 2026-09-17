@@ -136,6 +136,22 @@ msgid "download_model_prompt"
 msgstr "Would you like to automatically download the translation model?\n\nSelect \"Yes\" to directly download the recommended model (HY-MT1.5-1.8B-Q4_K_M.gguf), or select \"No\" to go to Hugging Face and manually select another model."
 
 #: main_UI.py
+msgid "menu_help_download_vlm"
+msgstr "Download Vision Model"
+
+#: main_UI.py
+msgid "ocr_vlm_download_model"
+msgstr "Download Main Model (Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf)"
+
+#: main_UI.py
+msgid "ocr_vlm_download_mmproj"
+msgstr "Download Vision Encoder (mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf)"
+
+#: main_UI.py
+msgid "ocr_vlm_download_home"
+msgstr "Open Model Homepage"
+
+#: main_UI.py
 msgid "donate_title"
 msgstr "Support the Developer"
 
