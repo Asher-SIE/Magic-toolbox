@@ -10,8 +10,31 @@ import subprocess
 from cryptography.fernet import Fernet
 
 
-# 开发内部版本标志：True 时放开"内部机只开放 Apple"限制，开放全部引擎/翻译模式（正式发布须改为 False）
-DEBUG_BUILD = True
+# 应用数据目录（各配置文件均存放于此）
+app_support_dir = os.path.expanduser("~/Library/Application Support/")
+app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
+os.makedirs(app_data_dir, exist_ok=True)
+config_path = os.path.join(app_data_dir, "config.json")
+
+
+def _load_debug_build() -> bool:
+    """从应用数据目录的 debug_config.json 读取开发内部版本标志
+
+    本机开发测试时写入 {"debug_build": true} 并重启应用即可放开限制，
+    文件缺失、解析失败或值为 false 时默认关闭，正式发布无需改动代码。
+    """
+    path = os.path.join(app_data_dir, "debug_config.json")
+    try:
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                return bool(json.load(f).get('debug_build', False))
+    except Exception as e:
+        logging.warning(f"加载调试配置失败: {e}")
+    return False
+
+
+# 开发内部版本标志：True 时放开"内部机只开放 Apple"限制，开放全部引擎/翻译模式
+DEBUG_BUILD = _load_debug_build()
 
 
 def _get_fernet():
@@ -433,12 +456,6 @@ hotKeys = [
         "description": "alt+shift+q: 循环切换识别引擎"
     }
 ]
-
-
-app_support_dir = os.path.expanduser("~/Library/Application Support/")
-app_data_dir = os.path.join(app_support_dir, "MagicToolbox")
-os.makedirs(app_data_dir, exist_ok=True)
-config_path = os.path.join(app_data_dir, "config.json")
 
 
 def load_config():
