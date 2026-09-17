@@ -2170,6 +2170,30 @@ class MainFrame(wx.Frame):
 
         threading.Thread(target=preload_worker, daemon=True).start()
 
+    def on_hotkey_altshiftt(self, event):
+        """alt+shift+t: 循环切换翻译引擎（当前两引擎间往返）"""
+        self.switch_translation_engine(1)
+
+    def switch_translation_engine(self, step: int):
+        """在翻译引擎（apple/llm）间循环切换，切换后经 VO 播报引擎名反馈"""
+        if not setting.supports_apple_translation():
+            # Apple 翻译不可用、仅 llm 可选：不切换，播报当前引擎确认按键生效
+            self.vo_handler.speak_text(setting._('mode_llm'))
+            return
+        modes = ["apple", "llm"]
+        if self._translation_mode not in modes:
+            self._translation_mode = modes[0]
+        new_mode = modes[(modes.index(self._translation_mode) + step) % len(modes)]
+        if new_mode != self._translation_mode:
+            self._translation_mode = new_mode
+            self.save_config()
+            self._update_translator_for_mode()
+            mode_display = setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm')
+            if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+                self._translation_mode_choice.SetStringSelection(mode_display)
+        # TTS 反馈：循环回原引擎同样播报，确认按键已生效；Apple 初始化失败回退时播报实际引擎
+        self.vo_handler.speak_text(setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm'))
+
     def on_hotkey_altshiftr(self, event):
         """alt+shift+r: 识别剪贴板中的图片（OCR），结果回写识别面板并朗读"""
         try:

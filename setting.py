@@ -454,6 +454,13 @@ hotKeys = [
         "key": "q",
         "handler": "on_hotkey_altshiftq",
         "description": "alt+shift+q: 循环切换识别引擎"
+    },
+    {
+        "name": "altshiftt",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": "t",
+        "handler": "on_hotkey_altshiftt",
+        "description": "alt+shift+t: 循环切换翻译引擎"
     }
 ]
 
