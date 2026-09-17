@@ -107,7 +107,7 @@ Image description requires the recommended model Qwen/Qwen3-VL-4B-Instruct-GGUF 
 2. Vision encoder: [mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf?download=true) (~434MB)
 3. Save both files to any local directory and select their paths in the Recognition group of the Settings panel
 
-Apple system OCR requires no model download; skip this step if you don't use image description. Note: Qwen3-VL requires a recent version of llama-cpp-python (>= 0.3.26, with the generic MTMDChatHandler); older versions only work with Qwen2.5-VL models (falls back to Qwen25VLChatHandler).
+Apple system OCR requires no model download; skip this step if you don't use image description. Note: image description requires llama-cpp-python >= 0.3.26 (with the generic MTMDChatHandler); older versions cannot load Qwen3-VL models.
 
 ### 6. Run the Application
 ```bash

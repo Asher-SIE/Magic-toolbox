@@ -2,7 +2,7 @@
 
 **2026-09-17**
 1. 本地视觉模型重定位为图像描述引擎：按 Option+Shift+R 输出约 100 字图片描述并朗读（文字识别交给 Apple OCR 引擎），推荐模型升级为 Qwen3-VL-4B（官方 GGUF）
-2. 多模态加载优先使用 llama-cpp-python 通用 MTMDChatHandler（≥ 0.3.26，支持 Qwen3-VL），旧版本自动回退 Qwen25VLChatHandler（兼容 Qwen2.5-VL 模型）
+2. 多模态加载改用 llama-cpp-python 通用 MTMDChatHandler，依赖锁定 ≥ 0.3.26（支持 Qwen3-VL，不再兼容旧版库）
 3. 删除 Option+Shift+W 热键：仅两个识别引擎，Option+Shift+Q 一键循环切换即可
 4. 新增图片识别（OCR）功能：访达浏览图片按 Command+C 复制后，按 Option+Shift+R 识别剪贴板中的图片，结果自动朗读
 5. 新增"识别"面板：工具栏支持切换 OCR 引擎、浏览图片文件，编辑框实时同步识别结果（新内容覆盖）

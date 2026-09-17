@@ -45,16 +45,13 @@ if IS_MACOS:
         VNRecognizeTextRequest = None
         VNRequestTextRecognitionLevelAccurate = None
 
-# llama_cpp 多模态按存在性守卫导入：优先通用 MTMDChatHandler（需 llama-cpp-python ≥ 0.3.26，
-# 支持 Qwen3-VL 等新架构多模态模型），旧版本回退 Qwen25VLChatHandler（仅支持 Qwen2.5-VL）
+# llama_cpp 多模态按存在性守卫导入：通用 MTMDChatHandler 需 llama-cpp-python ≥ 0.3.26（支持 Qwen3-VL 等）
 Llama = None
 _LLAMA_VL_HANDLER = None
 try:
     from llama_cpp import Llama
     from llama_cpp import llama_chat_format
-    _LLAMA_VL_HANDLER = getattr(llama_chat_format, "MTMDChatHandler", None) or getattr(
-        llama_chat_format, "Qwen25VLChatHandler", None
-    )
+    _LLAMA_VL_HANDLER = getattr(llama_chat_format, "MTMDChatHandler", None)
 except ImportError:
     Llama = None
     _LLAMA_VL_HANDLER = None
@@ -155,8 +152,7 @@ class AppleOCREngine(OCREngine):
 class LocalVLMEngine(OCREngine):
     """本地视觉语言模型图像描述引擎：llama_cpp 加载 GGUF 多模态模型，输出约 100 字简短图片描述
 
-    推荐模型与下载方式见 README；优先经通用 MTMDChatHandler 加载（Qwen3-VL 等），
-    旧版 llama-cpp-python 回退 Qwen25VLChatHandler（仅 Qwen2.5-VL）。
+    推荐模型与下载方式见 README；经通用 MTMDChatHandler 加载（需 llama-cpp-python ≥ 0.3.26）。
     模型仅在首次识别/预加载时加载，实例可跨引擎切换复用（MainFrame 缓存）。
     """
 

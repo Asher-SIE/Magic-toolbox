@@ -117,7 +117,7 @@ pip install -r requirements.txt
 2. 视觉编码器：[mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf?download=true)（约 434MB）
 3. 将两个文件保存至本地任意目录，在设置面板的识别分组中分别选择其路径
 
-Apple 系统 OCR 无需下载模型，不使用图像描述功能时可跳过此步。注意：Qwen3-VL 需要较新版本的 llama-cpp-python（≥ 0.3.26，需提供通用 MTMDChatHandler）；旧版本仅可搭配 Qwen2.5-VL 模型使用（回退 Qwen25VLChatHandler）。
+Apple 系统 OCR 无需下载模型，不使用图像描述功能时可跳过此步。注意：图像描述需要 llama-cpp-python ≥ 0.3.26（提供通用 MTMDChatHandler），旧版本无法加载 Qwen3-VL 模型。
 
 ### 6. 运行应用
 ```bash
