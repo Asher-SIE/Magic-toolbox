@@ -207,6 +207,8 @@ class Translator(BaseThreadedWorker):
         super().__init__(log_level=log_level, loop_interval=loop_interval)
         
         self._model = None
+        # 加载/卸载与推理互斥锁：防止推理进行中模型被释放导致底层指针悬空崩溃
+        self._model_lock = threading.Lock()
         self._input_text: Optional[str] = None  # 待翻译文本
 
         # 查找模型
@@ -283,18 +285,29 @@ class Translator(BaseThreadedWorker):
         
         try:
             self.model_path = model_path
-            self._model = llama_cpp.Llama(
-                model_path=self.model_path,
-                **self.DEFAULT_CONFIG
-            )
-            self.model_available = True
+            with self._model_lock:
+                self._model = llama_cpp.Llama(
+                    model_path=self.model_path,
+                    **self.DEFAULT_CONFIG
+                )
+                self.model_available = True
             self.logger.info(f"模型加载成功：{self.model_path}")
             return True
         except Exception as e:
-            self.model_available = False
-            self._model = None
+            with self._model_lock:
+                self.model_available = False
+                self._model = None
             self.logger.error(f"模型加载失败：{str(e)}")
             return False
+
+    def unload_model(self):
+        """卸载翻译模型释放内存（视觉模型识别前调用腾出统一内存）
+
+        与加载/推理互斥：翻译进行中调用会等待推理完成后再卸载，不会释放正在使用的模型
+        """
+        with self._model_lock:
+            self._model = None
+            self.model_available = False
 
     def _load_model(self) -> Optional[llama_cpp.Llama]:
         """加载模型"""
@@ -344,29 +357,33 @@ class Translator(BaseThreadedWorker):
             prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
 Text: {cleaned_text_for_translation}"""
 
-        try:
-            output = self._model.create_completion(
-                prompt=prompt,
-                max_tokens=768,
-                temperature=0.33,
-                top_p=0.9,
-                stop=[],
-                echo=False,
-                repeat_penalty=1.1
-            )
-            translated_text = output["choices"][0]["text"].strip()
-            translated_text = self._post_process_translation(translated_text, cleaned_text)
-            
-            # 保存到缓存
-            self._save_to_cache(cleaned_text, translated_text, source_lang, target_lang)
-            
-            return translated_text or ""
-        except Exception as e:
-            raise RuntimeError(f"翻译失败：{str(e)}") from e
-        finally:
-            if self._model:
-                self._model.reset()
-            time.sleep(0.05)
+        # 与加载/卸载互斥：推理期间模型不会被释放，卸载会等待推理完成
+        with self._model_lock:
+            if not self._model:
+                raise RuntimeError("翻译模型不可用，请通过设置面板浏览并选择翻译模型")
+            try:
+                output = self._model.create_completion(
+                    prompt=prompt,
+                    max_tokens=768,
+                    temperature=0.33,
+                    top_p=0.9,
+                    stop=[],
+                    echo=False,
+                    repeat_penalty=1.1
+                )
+                translated_text = output["choices"][0]["text"].strip()
+                translated_text = self._post_process_translation(translated_text, cleaned_text)
+
+                # 保存到缓存
+                self._save_to_cache(cleaned_text, translated_text, source_lang, target_lang)
+
+                return translated_text or ""
+            except Exception as e:
+                raise RuntimeError(f"翻译失败：{str(e)}") from e
+            finally:
+                if self._model:
+                    self._model.reset()
+                time.sleep(0.05)
 
     def _post_process_translation(self, translated_text: str, original_text: str) -> str:
         """后处理翻译结果"""
@@ -418,55 +435,60 @@ Text: {cleaned_text_for_translation}"""
         ctx_window = self.DEFAULT_CONFIG["n_ctx"]
         safe_margin = 200
         max_chars = int((ctx_window - safe_margin) * 0.4)
-        
+
         # 使用新的分段逻辑
         segments = self._split_text_by_punctuation(cleaned_text, max_chars)
-        all_translated = []
-        
-        for i, segment in enumerate(segments):
-            if not segment.strip():
-                continue
-            
-            segment = segment.strip()
-            
-            segment_normalized = segment.replace('\n', ' ')
-            
-            prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
+
+        # 与加载/卸载互斥：长文本分段推理期间模型不会被释放，卸载会等待全部段落完成
+        with self._model_lock:
+            if not self._model:
+                raise RuntimeError("翻译模型不可用，请通过设置面板浏览并选择翻译模型")
+            all_translated = []
+
+            for i, segment in enumerate(segments):
+                if not segment.strip():
+                    continue
+
+                segment = segment.strip()
+
+                segment_normalized = segment.replace('\n', ' ')
+
+                prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
 Text: {segment_normalized}"""
-            
-            try:
-                output = self._model.create_completion(
-                    prompt=prompt,
-                    max_tokens=768,
-                    temperature=0.33,
-                    top_p=0.9,
-                    echo=False,
-                    repeat_penalty=1.1
-                )
-                translated_segment = output["choices"][0]["text"].strip()
-                translated_segment = self._post_process_translation(translated_segment, segment_normalized)
-                
-                all_translated.append(translated_segment)
-                
-                if callback:
-                    callback(segment, translated_segment)
-                    
-            except Exception as e:
-                self.logger.warning(f"分段翻译失败 (第{i+1}段): {e}")
-                error_msg = f"[翻译失败: {segment[:20]}...]"
-                all_translated.append(error_msg)
-                if callback:
-                    callback(segment, error_msg)
-            finally:
-                if self._model:
-                    self._model.reset()
-                time.sleep(0.05)
-        
-        result = '\n\n'.join(all_translated)
-        
+
+                try:
+                    output = self._model.create_completion(
+                        prompt=prompt,
+                        max_tokens=768,
+                        temperature=0.33,
+                        top_p=0.9,
+                        echo=False,
+                        repeat_penalty=1.1
+                    )
+                    translated_segment = output["choices"][0]["text"].strip()
+                    translated_segment = self._post_process_translation(translated_segment, segment_normalized)
+
+                    all_translated.append(translated_segment)
+
+                    if callback:
+                        callback(segment, translated_segment)
+
+                except Exception as e:
+                    self.logger.warning(f"分段翻译失败 (第{i+1}段): {e}")
+                    error_msg = f"[翻译失败: {segment[:20]}...]"
+                    all_translated.append(error_msg)
+                    if callback:
+                        callback(segment, error_msg)
+                finally:
+                    if self._model:
+                        self._model.reset()
+                    time.sleep(0.05)
+
+            result = '\n\n'.join(all_translated)
+
         # 缓存完整翻译结果
         self._save_to_cache(cleaned_text, result, source_lang, target_lang)
-        
+
         return result
 
     # 仅实现：父类抽象方法（空逻辑，满足继承要求，无任何新增功能）

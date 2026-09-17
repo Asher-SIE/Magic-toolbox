@@ -415,6 +415,11 @@ class MainFrame(wx.Frame):
             else:
                 raise RuntimeError(setting._('apple_translation_not_available'))
         else:
+            if not self.translator.model_available:
+                # 模型可能因视觉识别被异步卸载：按配置路径重新加载（后台线程中执行，不阻塞界面）
+                model_path = getattr(self, '_model_path', '') or ''
+                if model_path and os.path.exists(model_path):
+                    self.translator.load_model(model_path)
             return self.translator.translate_with_streaming(text, source_lang, target_lang, callback)
 
     APPLE_TRANSLATION_SEGMENT_CHARS = 1000
@@ -1596,9 +1601,12 @@ class MainFrame(wx.Frame):
             self.vo_handler.speak_text(setting._('translation_in_progress'))
             return
         if self._translation_mode == 'llm' and (not self.translator or not self.translator.model_available):
-            self._translation_lock.release()
-            self.vo_handler.speak_text(setting._("model_unavailable"))
-            return
+            model_path = getattr(self, '_model_path', '') or ''
+            # 模型可能因视觉识别被卸载：配置路径仍有效时放行，由翻译线程重新加载
+            if not (model_path and os.path.exists(model_path)):
+                self._translation_lock.release()
+                self.vo_handler.speak_text(setting._("model_unavailable"))
+                return
 
         def translate_worker():
             try:
@@ -2068,11 +2076,32 @@ class MainFrame(wx.Frame):
         else:
             dialog.Destroy()
 
+    def _unload_llm_for_vlm_ocr(self):
+        """视觉模型识别内存开销大：VLM 识别触发时异步卸载已加载的翻译模型腾出统一内存
+
+        卸载在后台线程执行（模型与推理互斥，翻译进行中会等待完成后再卸载）；
+        下次翻译时由 _do_translate 按配置路径自动重新加载
+        """
+        if self._ocr_mode != 'vlm':
+            return
+        translator = getattr(self, 'translator', None)
+        if not translator or not translator.model_available:
+            return
+
+        def unload_worker():
+            try:
+                translator.unload_model()
+            except Exception as e:
+                logging.warning(f"卸载翻译模型失败: {e}")
+
+        threading.Thread(target=unload_worker, daemon=True).start()
+
     def run_ocr(self, image_path: str, temp_path: str = None):
         """在后台线程执行 OCR，结果覆盖写入识别面板并经 VO 朗读"""
         if not self.ocr_engine:
             self.vo_handler.speak_text(setting._('ocr_engine_unavailable'))
             return
+        self._unload_llm_for_vlm_ocr()
         if not self._ocr_lock.acquire(blocking=False):
             self.vo_handler.speak_text(setting._('ocr_in_progress'))
             return
@@ -2154,10 +2183,13 @@ class MainFrame(wx.Frame):
             return
         
         if self._translation_mode == 'llm' and not self.translator.model_available:
-            self._translation_lock.release()
-            self.vo_handler.speak_text(setting._("model_unavailable"))
-            return
-        
+            model_path = getattr(self, '_model_path', '') or ''
+            # 模型可能因视觉识别被卸载：配置路径仍有效时放行，由翻译线程重新加载
+            if not (model_path and os.path.exists(model_path)):
+                self._translation_lock.release()
+                self.vo_handler.speak_text(setting._("model_unavailable"))
+                return
+
         text_length = len(text)
         LONG_TEXT_THRESHOLD = 2000
         
