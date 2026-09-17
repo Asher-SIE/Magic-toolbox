@@ -38,6 +38,39 @@ def unescape_replace_text(text: str) -> str:
     return ''.join(result)
 
 
+def search_next_match(pattern, full_text: str, insertion: int):
+    """查找下一个匹配：自插入点向后搜索，未命中绕回开头。
+
+    零宽匹配恰好停在插入点上时跳过继续向后，避免"查找下一个"原地不动；
+    绕回（插入点已到文本末尾）后不再跳过，否则开头的零宽匹配永远无法再次选中。
+    """
+    wrapped = insertion >= len(full_text)
+    start_pos = 0 if wrapped else insertion
+    match = pattern.search(full_text, start_pos)
+    if match and not wrapped and match.start() == match.end() == start_pos:
+        match = pattern.search(full_text, start_pos + 1)
+    if not match:
+        match = pattern.search(full_text, 0)
+    return match
+
+
+def search_prev_match(pattern, full_text: str, insertion: int, sel_start: int, sel_end: int):
+    """查找上一个匹配：返回起点在界限之前的最后一个匹配。
+
+    界限取选区起点（无选区时取插入点），避免反复停在当前匹配上；
+    全部匹配都不在界限之前时绕回最后一个，无任何匹配返回 None。
+    """
+    boundary = insertion if sel_start == sel_end else min(sel_start, sel_end)
+    matches = list(pattern.finditer(full_text))
+    if not matches:
+        return None
+    match = None
+    for m in matches:
+        if m.start() < boundary:
+            match = m
+    return match if match is not None else matches[-1]
+
+
 class AboutDialog(wx.Dialog):
     def __init__(self, parent):
         super().__init__(parent, title=setting._('about_title'), size=(400, 380))
@@ -220,45 +253,23 @@ class FindReplaceDialog(wx.Dialog):
             return False
 
         full_text = self.text_ctrl.GetValue()
-        text_len = len(full_text)
 
         if direction == 'next':
-            start_pos = self.text_ctrl.GetInsertionPoint()
-            start_pos = start_pos if start_pos < text_len else 0
-            match = pattern.search(full_text, start_pos)
-            if match and match.start() == match.end() == start_pos:
-                # 零宽匹配停在同一位置会让"查找下一个"无法前进
-                match = pattern.search(full_text, start_pos + 1)
-            if not match:
-                match = pattern.search(full_text, 0)
+            match = search_next_match(pattern, full_text, self.text_ctrl.GetInsertionPoint())
         else:
             sel_start, sel_end = self.text_ctrl.GetSelection()
-            if sel_start == sel_end:
-                boundary = self.text_ctrl.GetInsertionPoint()
-            else:
-                # 有选区时以上一次匹配的起点为界，否则会反复停在当前匹配上
-                boundary = min(sel_start, sel_end)
-            matches = list(pattern.finditer(full_text))
-            if not matches:
-                self._show_error(setting._('edd_not_found'))
-                return False
-            match = None
-            for m in matches:
-                if m.start() < boundary:
-                    match = m
-            if match is None:
-                match = matches[-1]
+            match = search_prev_match(pattern, full_text, self.text_ctrl.GetInsertionPoint(), sel_start, sel_end)
 
-        if match:
-            start, end = match.span()
-            self.text_ctrl.SetSelection(start, end)
-            self.text_ctrl.SetInsertionPoint(end)
-            self.last_find_pos = end if direction == 'next' else start
-            self.status_text.SetLabel("")
-            return True
-        else:
+        if match is None:
             self._show_error(setting._('edd_not_found'))
             return False
+
+        start, end = match.span()
+        self.text_ctrl.SetSelection(start, end)
+        self.text_ctrl.SetInsertionPoint(end)
+        self.last_find_pos = end if direction == 'next' else start
+        self.status_text.SetLabel("")
+        return True
     
     def on_find_next(self, event):
         if self._find('next'):
@@ -287,7 +298,7 @@ class FindReplaceDialog(wx.Dialog):
             match = pattern.search(full_text, 0)
 
         if not match:
-            self.status_text.SetLabel(setting._('edd_not_found'))
+            self._show_error(setting._('edd_not_found'))
             return
 
         start, end = match.span()
@@ -629,74 +640,42 @@ class EditDialog(wx.Dialog):
         
         pattern = self._get_pattern_for_quick_find()
         if not pattern:
+            # 非法正则经 VoiceOver 播报，避免快速查找静默失效
+            if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
+                self.Parent.vo_handler.speak_text(setting._('edd_invalid_regex'))
             return False
         
         full_text = self.text_ctrl.GetValue()
-        text_len = len(full_text)
         
         if direction == 'next':
-            start_pos = self.text_ctrl.GetInsertionPoint()
-            start_pos = start_pos if start_pos < text_len else 0
-            match = pattern.search(full_text, start_pos)
-            if match and match.start() == match.end() == start_pos:
-                # 零宽匹配停在同一位置会让"查找下一个"无法前进
-                match = pattern.search(full_text, start_pos + 1)
-            if not match:
-                match = pattern.search(full_text, 0)
-                if not match:
-                    if self.last_find_direction == direction:
-                        self.find_count += 1
-                    else:
-                        self.find_count = 1
-                        self.last_find_direction = direction
-                    
-                    if self.find_count >= 6:
-                        self.find_count = 0
-                        self.last_find_direction = None
-                        self.on_find_replace_click(None, show_replace=False)
-                    else:
-                        if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
-                            self.Parent.vo_handler.speak_text(setting._('edd_search_not_found'))
-                    return False
+            match = search_next_match(pattern, full_text, self.text_ctrl.GetInsertionPoint())
         else:
             sel_start, sel_end = self.text_ctrl.GetSelection()
-            if sel_start == sel_end:
-                boundary = self.text_ctrl.GetInsertionPoint()
-            else:
-                # 有选区时以上一次匹配的起点为界，否则会反复停在当前匹配上
-                boundary = min(sel_start, sel_end)
-            matches = list(pattern.finditer(full_text))
-            if not matches:
-                if self.last_find_direction == direction:
-                    self.find_count += 1
-                else:
-                    self.find_count = 1
-                    self.last_find_direction = direction
-                
-                if self.find_count >= 6:
-                    self.find_count = 0
-                    self.last_find_direction = None
-                    self.on_find_replace_click(None, show_replace=False)
-                else:
-                    if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
-                        self.Parent.vo_handler.speak_text(setting._('edd_search_not_found'))
-                return False
-            match = None
-            for m in matches:
-                if m.start() < start_pos:
-                    match = m
-            if match is None:
-                match = matches[-1]
+            match = search_prev_match(pattern, full_text, self.text_ctrl.GetInsertionPoint(), sel_start, sel_end)
         
-        if match:
-            start, end = match.span()
-            self.text_ctrl.SetSelection(start, end)
-            self.text_ctrl.SetInsertionPoint(end)
-            self.last_find_pos = end if direction == 'next' else start
-            self.find_count = 0
-            self.last_find_direction = None
-            return True
-        return False
+        if match is None:
+            if self.last_find_direction == direction:
+                self.find_count += 1
+            else:
+                self.find_count = 1
+                self.last_find_direction = direction
+            
+            if self.find_count >= 6:
+                self.find_count = 0
+                self.last_find_direction = None
+                self.on_find_replace_click(None, show_replace=False)
+            else:
+                if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
+                    self.Parent.vo_handler.speak_text(setting._('edd_search_not_found'))
+            return False
+        
+        start, end = match.span()
+        self.text_ctrl.SetSelection(start, end)
+        self.text_ctrl.SetInsertionPoint(end)
+        self.last_find_pos = end if direction == 'next' else start
+        self.find_count = 0
+        self.last_find_direction = None
+        return True
     
     def _get_pattern_for_quick_find(self):
         search_text = self.last_find_text
