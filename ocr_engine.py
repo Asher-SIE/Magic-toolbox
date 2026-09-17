@@ -30,7 +30,7 @@ VNRequestTextRecognitionLevelAccurate = None
 
 if IS_MACOS:
     try:
-        from AppKit import NSPasteboard
+        from AppKit import NSBitmapImageFileTypePNG, NSBitmapImageRep, NSPasteboard
         from Foundation import NSURL
         from Vision import (
             VNImageRequestHandler,
@@ -44,6 +44,34 @@ if IS_MACOS:
         VNImageRequestHandler = None
         VNRecognizeTextRequest = None
         VNRequestTextRecognitionLevelAccurate = None
+
+# ImageIO（CGImageSource）绑定随 pyobjc 全家桶提供：仅供 VLM 引擎读取图片尺寸与大图降采样，
+# 不可用时 VLM 直接用原图识别，不影响 Apple OCR
+CGImageSourceCreateWithURL = None
+CGImageSourceCopyPropertiesAtIndex = None
+CGImageSourceCreateThumbnailAtIndex = None
+kCGImageSourceCreateThumbnailFromImageAlways = None
+kCGImageSourceCreateThumbnailWithTransform = None
+kCGImageSourceThumbnailMaxPixelSize = None
+
+if IS_MACOS:
+    try:
+        from Quartz import (
+            CGImageSourceCreateWithURL,
+            CGImageSourceCopyPropertiesAtIndex,
+            CGImageSourceCreateThumbnailAtIndex,
+            kCGImageSourceCreateThumbnailFromImageAlways,
+            kCGImageSourceCreateThumbnailWithTransform,
+            kCGImageSourceThumbnailMaxPixelSize,
+        )
+    except ImportError as exc:
+        logger.warning(f"Quartz 绑定导入失败，视觉模型大图降采样不可用: {exc}")
+        CGImageSourceCreateWithURL = None
+        CGImageSourceCopyPropertiesAtIndex = None
+        CGImageSourceCreateThumbnailAtIndex = None
+        kCGImageSourceCreateThumbnailFromImageAlways = None
+        kCGImageSourceCreateThumbnailWithTransform = None
+        kCGImageSourceThumbnailMaxPixelSize = None
 
 # llama_cpp 多模态按存在性守卫导入：通用 MTMDChatHandler 需 llama-cpp-python ≥ 0.3.26（支持 Qwen3-VL 等）
 Llama = None
@@ -149,11 +177,86 @@ class AppleOCREngine(OCREngine):
         return "\n".join(lines)
 
 
+# 视觉模型识别的图片面积上限：对齐 llama.cpp 对 Qwen-VL 系列的 1024×1024 输入封顶，
+# 避免视觉编码计算缓冲区随像素数瞬时膨胀（大截图可达数 GB），16GB 统一内存机器尤为关键
+VLM_IMAGE_MAX_PIXELS = 1024 * 1024
+
+
+def downscale_target_dimensions(width: int, height: int, max_pixels: int = VLM_IMAGE_MAX_PIXELS) -> Optional[Tuple[int, int]]:
+    """计算超限图片降采样后的目标尺寸；面积未超上限返回 None（原图直通）
+
+    按面积等比缩放并保持纵横比；Qwen-VL 约每 28×28 像素一个视觉 token，
+    封顶后 token 数与编码缓冲区均为可预期范围
+    """
+    if width <= 0 or height <= 0 or width * height <= max_pixels:
+        return None
+    scale = (max_pixels / (width * height)) ** 0.5
+    return max(1, round(width * scale)), max(1, round(height * scale))
+
+
+def _probe_image_size(image_path: str) -> Optional[Tuple[int, int]]:
+    """读取图片像素尺寸（仅读文件头元数据，不解码位图）"""
+    if not (CGImageSourceCreateWithURL and CGImageSourceCopyPropertiesAtIndex):
+        return None
+    try:
+        url = NSURL.fileURLWithPath_(image_path)
+        source = CGImageSourceCreateWithURL(url, None)
+        if source is None:
+            return None
+        props = CGImageSourceCopyPropertiesAtIndex(source, 0, None)
+        width = props and int(props["PixelWidth"])
+        height = props and int(props["PixelHeight"])
+        if not width or not height:
+            return None
+        return width, height
+    except Exception as exc:
+        logger.warning(f"读取图片尺寸失败: {exc}")
+        return None
+
+
+def _write_downscaled_image(image_path: str, target: Tuple[int, int]) -> Optional[str]:
+    """将图片按目标尺寸解码缩放后写为 PNG 临时文件；失败返回 None（调用方回退原图识别）"""
+    if not (CGImageSourceCreateWithURL and CGImageSourceCreateThumbnailAtIndex and NSBitmapImageRep):
+        return None
+    temp_path = ""
+    try:
+        url = NSURL.fileURLWithPath_(image_path)
+        source = CGImageSourceCreateWithURL(url, None)
+        if source is None:
+            return None
+        # 缩放在解码阶段同步完成（thumbnail 接口），不产生全尺寸位图的内存峰值
+        cgimage = CGImageSourceCreateThumbnailAtIndex(source, 0, {
+            kCGImageSourceCreateThumbnailFromImageAlways: True,
+            kCGImageSourceCreateThumbnailWithTransform: True,  # 遵循 EXIF 方向
+            kCGImageSourceThumbnailMaxPixelSize: float(max(target)),
+        })
+        if cgimage is None:
+            return None
+        rep = NSBitmapImageRep.alloc().initWithCGImage_(cgimage)
+        png_data = rep.representationUsingType_properties_(NSBitmapImageFileTypePNG, None)
+        if png_data is None:
+            return None
+        fd, temp_path = tempfile.mkstemp(suffix=".png", prefix="magic_ocr_scaled_")
+        os.close(fd)
+        if not png_data.writeToFile_atomically_(temp_path, True):
+            raise OSError(f"写入失败：{temp_path}")
+        return temp_path
+    except Exception as exc:
+        logger.warning(f"图片降采样失败: {exc}")
+        if temp_path:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+        return None
+
+
 class LocalVLMEngine(OCREngine):
     """本地视觉语言模型图像描述引擎：llama_cpp 加载 GGUF 多模态模型，输出约 100 字简短图片描述
 
     推荐模型与下载方式见 README；经通用 MTMDChatHandler 加载（需 llama-cpp-python ≥ 0.3.26）。
     模型仅在首次识别/预加载时加载，实例可跨引擎切换复用（MainFrame 缓存）。
+    面积超过 VLM_IMAGE_MAX_PIXELS 的大图先降采样再识别（Apple OCR 不做预处理，原图直通）。
     """
 
     key = "vlm"
@@ -239,16 +342,31 @@ class LocalVLMEngine(OCREngine):
         """卸载模型释放内存"""
         self._llm = None
 
+    def _downscale_if_needed(self, image_path: str) -> Tuple[str, bool]:
+        """图片面积超上限时先降采样再识别，否则原图直通（仅 VLM 引擎使用）
+
+        返回（识别用路径, 是否生成了临时文件）；降采样失败回退原图，不阻断识别
+        """
+        size = _probe_image_size(image_path)
+        target = downscale_target_dimensions(*size) if size else None
+        if target is None:
+            return image_path, False
+        scaled_path = _write_downscaled_image(image_path, target)
+        if scaled_path is None:
+            return image_path, False
+        return scaled_path, True
+
     def recognize(self, image_path: str) -> str:
         if not image_path or not os.path.isfile(image_path):
             raise OCRError(f"图片文件不存在：{image_path}")
         # 未加载时在此处同步加载：与预加载共用 _load_lock，加载中触发的识别会排队等待
         self.load_model()
 
+        source_path, is_scaled_temp = self._downscale_if_needed(image_path)
         try:
-            with open(image_path, "rb") as f:
+            with open(source_path, "rb") as f:
                 image_b64 = base64.b64encode(f.read()).decode("ascii")
-            ext = os.path.splitext(image_path)[1].lower()
+            ext = os.path.splitext(source_path)[1].lower()
             mime = self.IMAGE_MIME.get(ext, "image/png")
             output = self._llm.create_chat_completion(
                 messages=[{
@@ -267,6 +385,13 @@ class LocalVLMEngine(OCREngine):
             raise
         except Exception as exc:
             raise OCRError(f"本地视觉模型识别失败：{exc}") from exc
+        finally:
+            # 仅清理降采样产生的临时文件，原图/剪贴板临时文件归调用方管理
+            if is_scaled_temp:
+                try:
+                    os.remove(source_path)
+                except OSError:
+                    pass
 
 
 # 引擎注册表（key -> 引擎类）：新引擎在此登记后，UI 引擎列表、

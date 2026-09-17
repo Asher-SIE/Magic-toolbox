@@ -15,8 +15,10 @@ with mock.patch("os.path.expanduser", return_value=_test_home.name), mock.patch(
         LocalVLMEngine,
         OCREngine,
         OCRError,
+        VLM_IMAGE_MAX_PIXELS,
         available_engines,
         create_engine,
+        downscale_target_dimensions,
         engine_display,
         extract_clipboard_image,
         next_engine_key,
@@ -214,6 +216,94 @@ class LocalVLMEngineTests(unittest.TestCase):
                 mock.patch.object(ocr_engine, "_LLAMA_VL_HANDLER", mock.Mock()):
             with self.assertRaisesRegex(OCRError, "不存在"):
                 self.engine.load_model()
+
+
+class DownscaleTargetDimensionsTests(unittest.TestCase):
+    def test_small_image_passthrough(self):
+        # 几十万像素的小图不降采样：再缩只会丢细节，内存上没有收益
+        self.assertIsNone(downscale_target_dimensions(800, 600))
+
+    def test_at_cap_passthrough(self):
+        self.assertIsNone(downscale_target_dimensions(1024, 1024))
+
+    def test_oversized_image_scaled_within_cap(self):
+        # 2560×1440 等比缩到面积上限内，保持 16:9 纵横比
+        width, height = downscale_target_dimensions(2560, 1440)
+        self.assertLessEqual(width * height, VLM_IMAGE_MAX_PIXELS)
+        self.assertAlmostEqual(width / height, 2560 / 1440, delta=0.01)
+
+    def test_square_image_halves(self):
+        # 2000² 缩放系数恰为 0.512，落回 1024×1024（面积等于上限）
+        self.assertEqual(downscale_target_dimensions(2000, 2000), (1024, 1024))
+
+    def test_invalid_dimensions_passthrough(self):
+        self.assertIsNone(downscale_target_dimensions(0, 100))
+        self.assertIsNone(downscale_target_dimensions(-5, 100))
+
+
+class LocalVLMDownscaleTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = LocalVLMEngine(model_path="model.gguf", mmproj_path="mmproj.gguf")
+
+    def test_oversized_image_uses_scaled_temp(self):
+        with mock.patch.object(ocr_engine, "_probe_image_size", return_value=(2560, 1440)), \
+                mock.patch.object(ocr_engine, "_write_downscaled_image", return_value="/tmp/scaled.png") as writer:
+            path, is_temp = self.engine._downscale_if_needed("/tmp/big.png")
+        self.assertEqual((path, is_temp), ("/tmp/scaled.png", True))
+        writer.assert_called_once_with("/tmp/big.png", (1365, 768))
+
+    def test_small_image_not_scaled(self):
+        with mock.patch.object(ocr_engine, "_probe_image_size", return_value=(800, 600)), \
+                mock.patch.object(ocr_engine, "_write_downscaled_image") as writer:
+            path, is_temp = self.engine._downscale_if_needed("/tmp/small.png")
+        self.assertEqual((path, is_temp), ("/tmp/small.png", False))
+        writer.assert_not_called()
+
+    def test_probe_failure_falls_back_to_original(self):
+        with mock.patch.object(ocr_engine, "_probe_image_size", return_value=None), \
+                mock.patch.object(ocr_engine, "_write_downscaled_image") as writer:
+            path, is_temp = self.engine._downscale_if_needed("/tmp/odd.png")
+        self.assertEqual((path, is_temp), ("/tmp/odd.png", False))
+        writer.assert_not_called()
+
+    def test_write_failure_falls_back_to_original(self):
+        # 降采样失败不阻断识别：回退原图
+        with mock.patch.object(ocr_engine, "_probe_image_size", return_value=(2560, 1440)), \
+                mock.patch.object(ocr_engine, "_write_downscaled_image", return_value=None):
+            path, is_temp = self.engine._downscale_if_needed("/tmp/big.png")
+        self.assertEqual((path, is_temp), ("/tmp/big.png", False))
+
+    def test_recognize_removes_scaled_temp_file(self):
+        engine = self.engine
+        engine._llm = mock.Mock()
+        engine._llm.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": " 一张测试图片 "}}]}
+        fd, temp_path = tempfile.mkstemp(suffix=".png")
+        with os.fdopen(fd, "wb") as f:
+            f.write(b"fake-image-bytes")
+        try:
+            with mock.patch.object(engine, "_downscale_if_needed", return_value=(temp_path, True)):
+                self.assertEqual(engine.recognize(__file__), "一张测试图片")
+            self.assertFalse(os.path.exists(temp_path))  # 降采样临时文件用毕即删
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_recognize_keeps_original_file(self):
+        engine = self.engine
+        engine._llm = mock.Mock()
+        engine._llm.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": "描述"}}]}
+        fd, image_path = tempfile.mkstemp(suffix=".png")
+        with os.fdopen(fd, "wb") as f:
+            f.write(b"fake-image-bytes")
+        try:
+            with mock.patch.object(engine, "_downscale_if_needed", return_value=(image_path, False)):
+                engine.recognize(__file__)
+            self.assertTrue(os.path.exists(image_path))  # 原图不由引擎删除
+        finally:
+            if os.path.exists(image_path):
+                os.remove(image_path)
 
 
 class ExtractClipboardImageTests(unittest.TestCase):
