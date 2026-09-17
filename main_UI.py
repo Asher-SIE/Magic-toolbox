@@ -23,6 +23,16 @@ import ime_guard
 
 
 class MainFrame(wx.Frame):
+    # 长按跳转热键表：热键名 -> (macOS 物理键码, 跳转方法名)
+    LONG_PRESS_KEYS = {
+        "altshift7": (26, "_jump_clipboard_head"),   # kVK_ANSI_7
+        "altshift9": (25, "_jump_clipboard_tail"),   # kVK_ANSI_9
+        "altshift8": (28, "_jump_text_first_line"),  # kVK_ANSI_8
+        "altshiftk": (40, "_jump_text_last_line"),   # kVK_ANSI_K
+    }
+    LONG_PRESS_THRESHOLD = 0.4  # 长按判定阈值（秒），按住超过该时长直接跳到该方向尽头
+    LONG_PRESS_POLL_MS = 50     # 长按监测轮询间隔（毫秒）
+
     def __init__(self, parent, title):
         super(MainFrame, self).__init__(parent, title=title, size=(1024, 768))
         
@@ -111,7 +121,17 @@ class MainFrame(wx.Frame):
         self._paste_original_clipboard = None
         self._paste_restore_timer = None
         self._is_pasting = False
-        
+
+        # 长按监测：虚拟浏览器方向键按住超过阈值后直接跳到该方向尽头
+        self._long_press_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_long_press_timer, self._long_press_timer)
+        self._long_press_start = 0.0
+        self._long_press_keycode = 0
+        self._long_press_action = None
+
+        # 提示音缓存：wx 异步播放期间要求对象存活，统一持有引用
+        self._sounds = {}
+
         # 应用启动时检查VoiceOver状态，如果未运行则后台启动
         if not self.vo_handler.is_voiceover_running():
             logging.info("VoiceOver未运行，后台启动VoiceOver")
@@ -167,6 +187,9 @@ class MainFrame(wx.Frame):
         # 显示窗口
         self.Centre()
         self.Show(True)
+
+        # 程序就绪提示音（播报一次）
+        self.play_sound("start")
 
 
     def init_toolbar(self):
@@ -1743,11 +1766,16 @@ class MainFrame(wx.Frame):
         self.TB.set_text(selected_content)
         self.TB.browse("prev_line")
 
+        # 单步切换后开始长按监测，按住不放则快速跳到列表第一项
+        self._start_long_press("altshift7")
+
 
     def on_hotkey_altshift8(self, event):
         """alt+shift+8: 当前剪贴板上一行"""
         result_text = self.TB.browse("prev_line")
         self.vo_handler.speak_text(result_text)
+        # 单步移动后开始长按监测，按住不放则快速跳到第一行
+        self._start_long_press("altshift8")
 
 
     def on_hotkey_altshift9(self, event):
@@ -1775,6 +1803,8 @@ class MainFrame(wx.Frame):
         self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
         self.TB.set_text(selected_content)
         self.TB.browse("prev_line")
+        # 单步切换后开始长按监测，按住不放则快速跳到列表最后一项
+        self._start_long_press("altshift9")
 
 
     def on_hotkey_altshiftu(self, event):
@@ -1870,6 +1900,105 @@ class MainFrame(wx.Frame):
     def on_hotkey_altshiftk(self, event):
         """alt+shift+k: 当前剪贴板下一行"""
         result_text = self.TB.browse("next_line")
+        self.vo_handler.speak_text(result_text)
+        # 单步移动后开始长按监测，按住不放则快速跳到最后一行
+        self._start_long_press("altshiftk")
+
+
+    def play_sound(self, name: str) -> None:
+        """播放 resources/sound 下的提示音（异步，不阻塞界面）"""
+        try:
+            sound = self._sounds.get(name)
+            if sound is None:
+                sound_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "resources", "sound", f"{name}.wav")
+                sound = wx.adv.Sound(sound_path)
+                if not sound.IsOk():
+                    logging.warning(f"提示音文件不可用: {sound_path}")
+                    return
+                self._sounds[name] = sound
+            sound.Play(wx.adv.SOUND_ASYNC)
+        except Exception as e:
+            logging.warning(f"播放提示音'{name}'失败: {e}")
+
+
+    def _start_long_press(self, name: str) -> None:
+        """虚拟浏览器方向键单步执行后开始长按监测（依赖 macOS Quartz 查询物理键状态）"""
+        spec = self.LONG_PRESS_KEYS.get(name)
+        if not spec:
+            return
+        try:
+            import Quartz
+        except Exception:
+            return  # 非 macOS 环境无 Quartz，跳过长按监测
+        self._long_press_start = time.monotonic()
+        self._long_press_keycode = spec[0]
+        self._long_press_action = getattr(self, spec[1])
+        self._long_press_timer.Start(self.LONG_PRESS_POLL_MS)
+
+
+    def _on_long_press_timer(self, event):
+        """长按监测：按住超过阈值触发跳转，提前松开则结束监测"""
+        if self._long_press_action is None:
+            self._long_press_timer.Stop()
+            return
+        import Quartz
+        key_down = Quartz.CGEventSourceKeyState(
+            Quartz.kCGEventSourceStateCombinedSessionState, self._long_press_keycode)
+        if not key_down:
+            self._long_press_timer.Stop()
+            self._long_press_action = None
+        elif time.monotonic() - self._long_press_start >= self.LONG_PRESS_THRESHOLD:
+            self._long_press_timer.Stop()
+            action = self._long_press_action
+            self._long_press_action = None
+            action()
+
+
+    def _jump_clipboard_head(self):
+        """长按 alt+shift+7: 直接跳到剪贴板列表第一项"""
+        display_data = self._clipboard_filtered_data if self._clipboard_filtered_data is not None else self.clipboard_list_data
+        if not display_data:
+            return
+        self.current_clipboard_idx = 0
+        selected_content = display_data[0]
+        if self.current_module == 'clipboard':
+            self.list_Box.SetSelection(0)
+        self.update_clipboard_buttons_state()
+        self.TB.set_text(selected_content)
+        self.TB.browse("first_line")
+        self.play_sound("index")
+        self.vo_handler.speak_text(f"1, {selected_content[:1024]}")
+
+
+    def _jump_clipboard_tail(self):
+        """长按 alt+shift+9: 直接跳到剪贴板列表最后一项"""
+        display_data = self._clipboard_filtered_data if self._clipboard_filtered_data is not None else self.clipboard_list_data
+        if not display_data:
+            return
+        new_idx = len(display_data) - 1
+        self.current_clipboard_idx = new_idx
+        selected_content = display_data[new_idx]
+        if self.current_module == 'clipboard':
+            self.list_Box.SetSelection(new_idx)
+        self.update_clipboard_buttons_state()
+        self.TB.set_text(selected_content)
+        self.TB.browse("first_line")
+        self.play_sound("index")
+        self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
+
+
+    def _jump_text_first_line(self):
+        """长按 alt+shift+8: 直接跳到当前剪贴板第一行"""
+        result_text = self.TB.browse("first_line")
+        self.play_sound("index")
+        self.vo_handler.speak_text(result_text)
+
+
+    def _jump_text_last_line(self):
+        """长按 alt+shift+k: 直接跳到当前剪贴板最后一行"""
+        result_text = self.TB.browse("last_line")
+        self.play_sound("index")
         self.vo_handler.speak_text(result_text)
 
 

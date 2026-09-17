@@ -376,21 +376,21 @@ hotKeys = [
         "modifiers": ["ALT", "SHIFT"],
         "key": "7",
         "handler": "on_hotkey_altshift7",
-        "description": "alt+shift+7: 剪贴板列表上一条"
+        "description": "alt+shift+7: 剪贴板列表上一条，长按跳到第一项"
     },
     {
         "name": "altshift8",
         "modifiers": ["ALT", "SHIFT"],
         "key": "8",
         "handler": "on_hotkey_altshift8",
-        "description": "alt+shift+8: 当前剪贴板上一行"
+        "description": "alt+shift+8: 当前剪贴板上一行，长按跳到第一行"
     },
     {
         "name": "altshift9",
         "modifiers": ["ALT", "SHIFT"],
         "key": "9",
         "handler": "on_hotkey_altshift9",
-        "description": "alt+shift+9: 剪贴板列表下一条"
+        "description": "alt+shift+9: 剪贴板列表下一条，长按跳到最后一条"
     },
     {
         "name": "altshiftu",
@@ -425,7 +425,7 @@ hotKeys = [
         "modifiers": ["ALT", "SHIFT"],
         "key": "k",
         "handler": "on_hotkey_altshiftk",
-        "description": "a lt+shift+k: 当前剪贴板下一行"
+        "description": "alt+shift+k: 当前剪贴板下一行，长按跳到最后一行"
     },
     {
         "name": "altshiftm",

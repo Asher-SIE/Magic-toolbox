@@ -786,8 +786,9 @@ class TextBrowser:
             direction: 浏览方向
                 "prev_char": 前一个字, "next_char": 后一个字
                 "prev_line": 当前剪贴板上一行, "next_line": 当前剪贴板下一行
+                "first_line": 第一行, "last_line": 最后一行（长按跳转用）
                 - "explain_char": 返回焦点位置内容
-        
+
         返回:
             朗读的文本
         """
@@ -821,6 +822,25 @@ class TextBrowser:
             lines = self.current_text.split('\n')
             current_line = self._get_current_line(lines)
             target_line = min(len(lines) - 1, current_line + 1)
+            spoken_text = lines[target_line] if lines else ""
+            if not spoken_text:  # 手动处理空行
+                spoken_text = '\n'
+            self._current_line = spoken_text
+            self.focus_pos = self._get_line_start_index(lines, target_line)
+
+        # 第一行（长按跳转用）
+        elif direction == "first_line":
+            lines = self.current_text.split('\n')
+            spoken_text = lines[0] if lines else ""
+            if not spoken_text:  # 手动处理空行
+                spoken_text = '\n'
+            self._current_line = spoken_text
+            self.focus_pos = self._get_line_start_index(lines, 0)
+
+        # 最后一行（长按跳转用）
+        elif direction == "last_line":
+            lines = self.current_text.split('\n')
+            target_line = len(lines) - 1
             spoken_text = lines[target_line] if lines else ""
             if not spoken_text:  # 手动处理空行
                 spoken_text = '\n'
