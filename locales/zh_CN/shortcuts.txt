@@ -1,1 +1,43 @@
-#
+快捷键列表
+
+一、文本翻译/解释快捷键
+Option+C    当前字符解释
+Option+D    翻译 VoiceOver 最后朗读的文字
+Option+Shift+D    反向翻译
+Option+Enter    翻译翻译界面编辑框内的内容
+Option+Shift+Enter    反向翻译翻译界面编辑框内的内容
+Option+Shift+T    循环切换翻译引擎（播报引擎名）
+
+二、剪贴板编辑器快捷键
+Option+T    打开剪贴板编辑器
+Option+1    移除空白字符
+Option+2    合并多个空格
+Option+3    数字转中文
+Option+4    文本分行
+Option+F    查找下一个
+Option+Shift+F    查找上一个
+Option+H    打开替换对话框
+Command+Z    撤销操作
+Command+Shift+Z    重做操作
+Escape    退出编辑器
+Option+X    保存编辑内容并退出编辑器
+
+三、文字浏览快捷键
+Option+A    追加拷贝 VoiceOver 朗读的内容
+Option+Shift+7    切换至剪贴板列表上一条
+Option+Shift+8    切换至当前剪贴板内容上一行
+Option+Shift+9    切换至剪贴板列表下一条
+Option+Shift+U    切换至当前剪贴板内容前一个字
+Option+Shift+I    剪贴板浏览模式下查看当前字符解释
+Option+Shift+O    切换至当前剪贴板内容后一个字
+Option+Shift+J    将剪贴板内容同步至系统剪贴板
+Option+Shift+K    切换至当前剪贴板内容下一行
+Option+Shift+M    查看剪贴板综述（行列信息）
+Option+Shift+P    粘贴剪贴板当前行到输入框
+
+四、图片识别快捷键
+Option+Shift+R    按当前引擎识别剪贴板中的图片（Apple OCR 识别文字；本地视觉模型输出约100字图像描述。先在访达等应用中按 Command+C 复制图片），结果自动朗读
+Option+Shift+Q    循环切换识别引擎（播报引擎名）
+
+五、链接快捷键
+Option+Shift+E    提取 VoiceOver 最后朗读内容中的链接，并用默认浏览器打开；未找到时语音提示
