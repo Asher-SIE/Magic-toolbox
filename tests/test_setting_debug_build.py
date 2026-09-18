@@ -52,6 +52,21 @@ class DebugBuildConfigTests(unittest.TestCase):
         self._write("{broken json")
         self.assertFalse(self._load())
 
+    def test_internal_locked_without_debug(self):
+        with mock.patch.object(setting, "is_internal_device", return_value=True), \
+                mock.patch.object(setting, "DEBUG_BUILD", False):
+            self.assertTrue(setting.is_internal_locked())
+
+    def test_internal_unlocked_with_debug(self):
+        with mock.patch.object(setting, "is_internal_device", return_value=True), \
+                mock.patch.object(setting, "DEBUG_BUILD", True):
+            self.assertFalse(setting.is_internal_locked())
+
+    def test_external_never_locked(self):
+        with mock.patch.object(setting, "is_internal_device", return_value=False), \
+                mock.patch.object(setting, "DEBUG_BUILD", False):
+            self.assertFalse(setting.is_internal_locked())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -571,7 +571,7 @@ def get_locale_dir():
 
 def is_internal_device() -> bool:
     """检测是否为内部电脑（通过检测 Self Service.app 是否存在）
-    
+
     Returns:
         True: 内部电脑（存在 Self Service.app）
         False: 外部电脑（不存在 Self Service.app）
@@ -580,6 +580,15 @@ def is_internal_device() -> bool:
         return os.path.exists("/Applications/Self Service.app")
     except Exception:
         return True
+
+
+def is_internal_locked() -> bool:
+    """内部机生产限制判定：内部电脑且未通过 debug_config.json 开启调试标志
+
+    所有"内部机只开放 Apple"的入口（配置钳制、工具栏禁用、引擎切换热键等）
+    统一使用本判定，避免各处散写遗漏
+    """
+    return is_internal_device() and not DEBUG_BUILD
 
 
 def get_system_version() -> tuple:

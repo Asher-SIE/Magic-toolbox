@@ -2131,8 +2131,9 @@ class MainFrame(wx.Frame):
             try:
                 engine.load_model()
             except Exception as e:
-                # 预加载失败保持静默，识别时会给出具体错误播报
+                # 预加载失败立即播报具体原因（模型文件/llama_cpp 环境问题），不静默等识别时才发现
                 logging.warning(f"视觉模型预加载失败: {e}")
+                wx.CallAfter(self.vo_handler.speak_text, str(e))
                 return
             wx.CallAfter(self.vo_handler.speak_text, setting._('ocr_vlm_ready'))
 
@@ -2144,6 +2145,10 @@ class MainFrame(wx.Frame):
 
     def switch_translation_engine(self, step: int):
         """在翻译引擎（apple/llm）间循环切换，切换后经 VO 播报引擎名反馈"""
+        if setting.is_internal_locked():
+            # 内部机生产版锁定 Apple：不切换不写配置，播报当前引擎确认按键生效
+            self.vo_handler.speak_text(setting._('mode_apple'))
+            return
         if not setting.supports_apple_translation():
             # Apple 翻译不可用、仅 llm 可选：不切换，播报当前引擎确认按键生效
             self.vo_handler.speak_text(setting._('mode_llm'))
