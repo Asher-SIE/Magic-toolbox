@@ -511,6 +511,7 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
             'ocr_model_path': ocr_model_path,
             'ocr_mmproj_path': ocr_mmproj_path
         }
+        logging.info(f"保存配置: ocr_mode={ocr_mode}, ocr_model_path={ocr_model_path!r}, ocr_mmproj_path={ocr_mmproj_path!r}")
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
     except Exception as e:

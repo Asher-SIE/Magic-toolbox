@@ -651,10 +651,14 @@ class MainFrame(wx.Frame):
             style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
         )
 
-        if dialog.ShowModal() == wx.ID_OK:
+        result = dialog.ShowModal()
+        logging.info(f"OCR模型文件对话框关闭: result={result}, wx.ID_OK={wx.ID_OK}, 控件值={path_text.GetValue()!r}")
+        if result == wx.ID_OK:
             path = dialog.GetPath()
+            logging.info(f"OCR模型文件已选择: attr={attr_name}, path={path!r}")
             path_text.SetValue(path)
             setattr(self, attr_name, path)
+            logging.info(f"OCR模型路径保存前: getattr={getattr(self, attr_name, '')!r}")
             self.save_config()
             self.init_ocr_engine()
             self._preload_ocr_engine()
