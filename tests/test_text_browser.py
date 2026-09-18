@@ -1,32 +1,17 @@
 """TextBrowser 长按跳转方向（first_line/last_line）逻辑测试
 
-processer 依赖 llama_cpp/appscript，这里以桩模块替换后导入，任何环境可跑。
+processer 依赖 llama_cpp/appscript，任何环境可跑：
+复用 test_processer_unload 的同一套桩模块（避免两份桩在同进程互相覆盖）。
 """
+import os
 import sys
-import types
 import unittest
 
-# 桩替换 processer 顶层依赖（仅 TextBrowser 纯逻辑，无需真实依赖）；
-# Llama 属性必须存在，processer 类定义时的类型标注会求值
-_fake_llama_cpp = types.ModuleType("llama_cpp")
-_fake_llama_cpp.Llama = type("Llama", (), {})
-sys.modules.setdefault("appscript", types.ModuleType("appscript"))
-sys.modules.setdefault("llama_cpp", _fake_llama_cpp)
-_setting_injected = False
-if "setting" not in sys.modules:
-    try:
-        import setting  # noqa: F401
-    except Exception:
-        _fake_setting = types.ModuleType("setting")
-        _fake_setting.chars_dict = {"zh": {}, "en": {}}
-        _fake_setting.current_lang = "zh"
-        sys.modules["setting"] = _fake_setting
-        _setting_injected = True
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import tests.test_processer_unload  # noqa: F401,E402  导入即完成桩替换
 import processer  # noqa: E402
 from processer import TextBrowser  # noqa: E402
-
-if _setting_injected:
-    del sys.modules["setting"]
 
 
 class TextBrowserJumpTests(unittest.TestCase):

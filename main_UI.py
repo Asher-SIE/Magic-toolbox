@@ -283,71 +283,37 @@ class MainFrame(wx.Frame):
 
     def init_ui(self):
         """初始化用户界面"""
-        self.splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE | wx.SP_3DSASH)
-        
-        # 创建左侧导航容器
-        self.nav_container_panel = wx.Panel(self.splitter)
-
-        static_box = wx.StaticBox(self.nav_container_panel, label=setting._("nav_select_func")) 
-        static_box_sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
-
-        self.nav_list = wx.ListBox(self.nav_container_panel, choices=[
-            setting._('nav_translation'),
-            setting._('nav_clipboard'),
-            setting._('nav_recognition'),
-            setting._('nav_settings')
-        ])
-        self.nav_list.SetMinSize((150, -1)) # 设置最小宽度
-        self.nav_list.SetSelection(0)
-        self.nav_list.Bind(wx.EVT_LISTBOX, self.on_nav_selection_changed)
-
-        static_box_sizer.Add(self.nav_list, 1, wx.EXPAND | wx.ALL, 5) # 拉伸填充并添加边    距
-        self.nav_container_panel.SetSizer(static_box_sizer)
-
-
-        # 创建右侧内容面板容器
-        self.main_panel = wx.Panel(self.splitter)
-
-        # 创建一个 Sizer 来管理 main_panel 内部的内容
-        self.main_panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.main_panel.SetSizer(self.main_panel_sizer)
+        # 标准选项卡容器（参考 Win 属性对话框）：四个功能面板作为选项卡页，
+        # 等效替换原左侧 ListBox 导航，切换逻辑保持 switch_to_module 不变
+        self.notebook = wx.Notebook(self)
+        self.notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_nav_page_changed)
 
         # --- 初始化各功能模块的面板 ---
         # 翻译面板
-        self.translation_panel = wx.Panel(self.main_panel)
+        self.translation_panel = wx.Panel(self.notebook)
         self.setup_translation_panel()
-        self.translation_panel.Hide() # 默认隐藏
 
         # 剪贴板面板
-        self.clipboard_panel = wx.Panel(self.main_panel)
+        self.clipboard_panel = wx.Panel(self.notebook)
         self.setup_clipboard_panel()
-        self.clipboard_panel.Hide() # 默认隐藏
 
         # 识别面板
-        self.recognition_panel = wx.Panel(self.main_panel)
+        self.recognition_panel = wx.Panel(self.notebook)
         self.setup_recognition_panel()
-        self.recognition_panel.Hide() # 默认隐藏
 
         # 设置面板
-        self.settings_panel = wx.Panel(self.main_panel)
+        self.settings_panel = wx.Panel(self.notebook)
         self.setup_settings_panel()
-        self.settings_panel.Hide() # 默认隐藏
 
-        # 将各功能面板添加到 main_panel 的 Sizer 中
-        self.main_panel_sizer.Add(self.translation_panel, 1, wx.EXPAND)
-        self.main_panel_sizer.Add(self.clipboard_panel, 1, wx.EXPAND)
-        self.main_panel_sizer.Add(self.recognition_panel, 1, wx.EXPAND)
-        self.main_panel_sizer.Add(self.settings_panel, 1, wx.EXPAND)
+        # 选项卡页与标题，顺序与原导航列表一致
+        self.notebook.AddPage(self.translation_panel, setting._('nav_translation'))
+        self.notebook.AddPage(self.clipboard_panel, setting._('nav_clipboard'))
+        self.notebook.AddPage(self.recognition_panel, setting._('nav_recognition'))
+        self.notebook.AddPage(self.settings_panel, setting._('nav_settings'))
 
-        # 将左右两部分加入分割窗口
-        self.splitter.SplitVertically(self.nav_container_panel, self.main_panel)
-        self.splitter.SetSashGravity(0.2) # 设置分割线位置，左边占20%
-        self.splitter.SetMinimumPaneSize(100) # 设置最小窗格大小
-
-        # 创建一个顶级 Sizer 并将其设置给主框架
-        # 这样主框架就能管理分割窗口
+        # 顶级 Sizer 管理选项卡容器
         main_frame_sizer = wx.BoxSizer(wx.VERTICAL)
-        main_frame_sizer.Add(self.splitter, 1, wx.EXPAND)
+        main_frame_sizer.Add(self.notebook, 1, wx.EXPAND)
         self.SetSizer(main_frame_sizer)
 
         # 初始显示翻译面板
@@ -1157,50 +1123,52 @@ class MainFrame(wx.Frame):
 
 
 
-    def on_nav_selection_changed(self, event):
-        """导航选择事件：切换内容面板 + 更新工具栏"""
-        selection = event.GetString()
-        if selection == setting._('nav_translation'):
-            self.switch_to_module("translation")
-        elif selection == setting._('nav_clipboard'):
-            self.switch_to_module("clipboard")
-        elif selection == setting._('nav_recognition'):
-            self.switch_to_module("recognition")
-        elif selection == setting._('nav_settings'):
-            self.switch_to_module("settings")
+    def on_nav_page_changed(self, event):
+        """选项卡切换事件：切换内容模块 + 更新工具栏"""
+        module_by_panel = {
+            self.translation_panel: "translation",
+            self.clipboard_panel: "clipboard",
+            self.recognition_panel: "recognition",
+            self.settings_panel: "settings",
+        }
+        page = self.notebook.GetPage(event.GetSelection())
+        module_name = module_by_panel.get(page)
+        if module_name:
+            self.switch_to_module(module_name)
+        event.Skip()
 
 
     def switch_to_module(self, module_name: str):
-        """统一切换逻辑：更新面板显隐 + 工具栏 + 状态"""
-        # 隐藏所有面板
-        self.translation_panel.Hide()
-        self.clipboard_panel.Hide()
-        self.recognition_panel.Hide()
-        self.settings_panel.Hide()
+        """统一切换逻辑：更新选项卡选中页 + 工具栏 + 状态"""
+        # 定位目标选项卡页（与 init_ui 中 AddPage 顺序一致）
+        module_to_index = {
+            "translation": 0,
+            "clipboard": 1,
+            "recognition": 2,
+            "settings": 3,
+        }
+        page_index = module_to_index.get(module_name, 0)
+        # ChangeSelection 仅切换页不触发事件，避免与 on_nav_page_changed 互相递归
+        if self.notebook.GetSelection() != page_index:
+            self.notebook.ChangeSelection(page_index)
 
-        # 显示目标面板
+        # 目标页面的原有初始化逻辑（焦点、列表刷新）
         if module_name == "translation":
-            self.translation_panel.Show()
             self.text_ctrl.SetFocus()
         elif module_name == "clipboard":
-            self.clipboard_panel.Show()
             self.refresh_list_box()  # 刷新剪贴板列表
             self.list_Box.SetFocus()
         elif module_name == "recognition":
-            self.recognition_panel.Show()
             self.ocr_result_ctrl.SetFocus()
-        elif module_name == "settings":
-            self.settings_panel.Show()
-        
+
         # 切换到其他模块时清空搜索
         if module_name != "clipboard":
             self._clipboard_filter_keyword = ""
             self._clipboard_filtered_data = None
-        
+
         # 更新状态与工具栏
         self.current_module = module_name
         self.update_toolbar_for_module(module_name)
-        self.main_panel.Layout()
 
 
     def load_clipboard_data(self):
