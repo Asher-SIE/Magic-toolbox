@@ -461,6 +461,13 @@ hotKeys = [
         "key": "t",
         "handler": "on_hotkey_altshiftt",
         "description": "alt+shift+t: 循环切换翻译引擎"
+    },
+    {
+        "name": "altshifte",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": "e",
+        "handler": "on_hotkey_altshifte",
+        "description": "alt+shift+e: 提取VO最后朗读内容中的链接并用默认浏览器打开"
     }
 ]
 

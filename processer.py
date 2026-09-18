@@ -131,6 +131,25 @@ class BaseThreadedWorker:
             self.stop_worker()
 
 
+# URL匹配：http(s)或www.开头的连续URL字符（不含空白、中文及全角符号，URL路径中的中文按编码形式存在）
+_URL_PATTERN = re.compile(r'(?:https?://|www\.)[A-Za-z0-9\-._~:/?#@!$&()*+,;=%\[\]]+')
+# URL末尾需剥离的标点（中英文句读、括号引号等，多为朗读文本中URL后的自然语言内容）
+_URL_TRAILING_PUNCT = ".,;:!?)]}>\"'\u2026\u3002\uff0c\u3001\uff1b\uff1a\uff01\uff1f\uff09\u3011\u300b\u201d\u2019"
+
+
+def extract_url(text: Optional[str]) -> Optional[str]:
+    """从朗读文本中提取第一个URL；www.开头自动补全https://，无URL返回None"""
+    if not text:
+        return None
+    match = _URL_PATTERN.search(text)
+    if not match:
+        return None
+    url = match.group(0).rstrip(_URL_TRAILING_PUNCT)
+    if url.lower().startswith("www."):
+        url = "https://" + url
+    return url
+
+
 def split_text_by_punctuation(text: str, max_chars: int) -> List[str]:
     """按标点分割文本，确保每段不超过max_chars
 
@@ -558,6 +577,16 @@ class VoiceOverHandler(BaseThreadedWorker):
             if self._vo_err_count == 6:
                 reboot_VoiceOver(None)
                 self._vo_err_count = 0
+            return None
+
+
+    def get_last_spoken_text(self) -> Optional[str]:
+        """直接读取VO最后朗读的内容，不做重复判定、不改动轮询缓存（供热键即时读取）"""
+        try:
+            content = self.vo.last_phrase.content()
+            return content or None
+        except Exception as e:
+            self.logger.error(f"读取VO最后朗读内容失败：{str(e)}")
             return None
 
 

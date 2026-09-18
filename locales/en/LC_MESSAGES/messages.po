@@ -819,3 +819,6 @@ msgstr "Apple Translation Ready"
 msgid "apple_translation_not_available"
 msgstr "Apple Translation not available"
 
+#: main_UI.py
+msgid "no_url_found"
+msgstr "No link found"

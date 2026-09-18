@@ -15,7 +15,7 @@ import wx.adv
 from AppKit import NSApplication, NSApp, NSWindow
 from dialogs import FindReplaceDialog, EditDialog, AboutDialog
 from dictionary import Dictionary
-from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, split_text_by_punctuation
+from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, extract_url, split_text_by_punctuation
 from typing import Optional, Tuple
 
 import update
@@ -2161,6 +2161,16 @@ class MainFrame(wx.Frame):
                 self._translation_mode_choice.SetStringSelection(mode_display)
         # TTS 反馈：循环回原引擎同样播报，确认按键已生效；Apple 初始化失败回退时播报实际引擎
         self.vo_handler.speak_text(setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm'))
+
+    def on_hotkey_altshifte(self, event):
+        """alt+shift+e: 提取VO最后朗读内容中的URL并用默认浏览器打开"""
+        spoken_text = self.vo_handler.get_last_spoken_text()
+        url = extract_url(spoken_text)
+        if not url:
+            self.vo_handler.speak_text(setting._('no_url_found'))
+            return
+        import webbrowser
+        webbrowser.open(url)
 
     def on_hotkey_altshiftr(self, event):
         """alt+shift+r: 识别剪贴板中的图片（OCR），结果回写识别面板并朗读"""

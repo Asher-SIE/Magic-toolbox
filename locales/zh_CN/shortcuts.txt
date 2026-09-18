@@ -6,6 +6,7 @@ Option+D    翻译 VoiceOver 最后朗读的文字
 Option+Shift+D    反向翻译
 Option+Enter    翻译翻译界面编辑框内的内容
 Option+Shift+Enter    反向翻译翻译界面编辑框内的内容
+Option+Shift+T    循环切换翻译引擎（播报引擎名）
 
 二、剪贴板编辑器快捷键
 Option+T    打开剪贴板编辑器
@@ -37,3 +38,6 @@ Option+Shift+P    粘贴剪贴板当前行到输入框
 四、图片识别快捷键
 Option+Shift+R    按当前引擎识别剪贴板中的图片（Apple OCR 识别文字；本地视觉模型输出约100字图像描述。先在访达等应用中按 Command+C 复制图片），结果自动朗读
 Option+Shift+Q    循环切换识别引擎（播报引擎名）
+
+五、链接快捷键
+Option+Shift+E    提取 VoiceOver 最后朗读内容中的链接，并用默认浏览器打开；未找到时语音提示
