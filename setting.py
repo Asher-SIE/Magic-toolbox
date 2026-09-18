@@ -545,12 +545,33 @@ hotKeys = [
     }
 ]
 
+# 鼠标路标热键：opt+shift+数字 标记当前鼠标位置，再加 cmd 跳转回标记点
+# 槽位取 1-6 与 0；7/8/9 已被剪贴板导航占用，不得使用
+for _digit in ("1", "2", "3", "4", "5", "6", "0"):
+    hotKeys.append({
+        "name": f"mark_{_digit}",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": _digit,
+        "handler": "on_hotkey_mouse_mark",
+        "description": f"opt+shift+{_digit}: 标记当前鼠标位置为路标槽位{_digit}"
+    })
+    hotKeys.append({
+        "name": f"jump_{_digit}",
+        "modifiers": ["CMD", "ALT", "SHIFT"],
+        "key": _digit,
+        "handler": "on_hotkey_mouse_jump",
+        "description": f"cmd+opt+shift+{_digit}: 跳转到路标槽位{_digit}的位置"
+    })
+
 
 # 文本编辑器分句功能的默认标点（原硬编码值，可在设置面板自定义）
 DEFAULT_SENTENCE_PUNCTUATIONS = [',', '，', '.', '。', '!', '！', '?', '？', ';', '；', ':', '：', '"', '-']
 
 # 当前生效的分句标点：启动加载配置时刷新，TextProcessor 分句时实时读取
 sentence_punctuations = list(DEFAULT_SENTENCE_PUNCTUATIONS)
+
+# 鼠标路标：按前台应用持久ID分组记录各数字槽位的屏幕坐标，格式 {app_id: {"1": [x, y], ...}}
+mouse_landmarks = {}
 
 
 def _normalize_sentence_punctuations(value) -> list:
@@ -565,9 +586,29 @@ def _normalize_sentence_punctuations(value) -> list:
     return result if result else list(DEFAULT_SENTENCE_PUNCTUATIONS)
 
 
+def _normalize_mouse_landmarks(value) -> dict:
+    """清洗鼠标路标配置：仅保留 {app_id: {槽位: [x, y]}} 结构的合法项，非法整体丢弃"""
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    for app_id, slots in value.items():
+        if not isinstance(slots, dict):
+            continue
+        clean_slots = {}
+        for slot, pos in slots.items():
+            try:
+                x, y = float(pos[0]), float(pos[1])
+            except (TypeError, ValueError, IndexError):
+                continue
+            clean_slots[str(slot)] = [x, y]
+        if clean_slots:
+            result[str(app_id)] = clean_slots
+    return result
+
+
 def load_config():
     """加载配置"""
-    global sentence_punctuations
+    global sentence_punctuations, mouse_landmarks
     config = {
         'source_lang': 'English',
         'target_lang': 'Chinese',
@@ -579,7 +620,8 @@ def load_config():
         'ocr_mode': 'apple',
         'ocr_model_path': '',
         'ocr_mmproj_path': '',
-        'sentence_punctuations': list(DEFAULT_SENTENCE_PUNCTUATIONS)
+        'sentence_punctuations': list(DEFAULT_SENTENCE_PUNCTUATIONS),
+        'mouse_landmarks': {}
     }
     try:
         if os.path.exists(config_path):
@@ -589,16 +631,21 @@ def load_config():
     except Exception as e:
         logging.warning(f"加载配置失败: {e}")
     sentence_punctuations = _normalize_sentence_punctuations(config.get('sentence_punctuations'))
+    mouse_landmarks = _normalize_mouse_landmarks(config.get('mouse_landmarks'))
     return config
 
 
-def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple', ocr_model_path: str = '', ocr_mmproj_path: str = '', sentence_punctuations=None):
-    """保存配置；sentence_punctuations 未传入时保留当前生效值，避免其他配置项保存时覆盖自定义分句标点"""
+def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple', ocr_model_path: str = '', ocr_mmproj_path: str = '', sentence_punctuations=None, mouse_landmarks=None):
+    """保存配置；sentence_punctuations 与 mouse_landmarks 未传入时保留当前生效值，避免其他配置项保存时覆盖"""
     if sentence_punctuations is None:
         sentence_punctuations = globals()['sentence_punctuations']
     normalized = _normalize_sentence_punctuations(sentence_punctuations)
     # 保存的同时同步模块级生效值（分句功能实时读取），保持配置与内存一致
     globals()['sentence_punctuations'] = normalized
+    if mouse_landmarks is None:
+        mouse_landmarks = globals()['mouse_landmarks']
+    normalized_landmarks = _normalize_mouse_landmarks(mouse_landmarks)
+    globals()['mouse_landmarks'] = normalized_landmarks
     try:
         config = {
             'source_lang': source_lang,
@@ -611,13 +658,38 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
             'ocr_mode': ocr_mode,
             'ocr_model_path': ocr_model_path,
             'ocr_mmproj_path': ocr_mmproj_path,
-            'sentence_punctuations': normalized
+            'sentence_punctuations': normalized,
+            'mouse_landmarks': normalized_landmarks
         }
         logging.info(f"保存配置: ocr_mode={ocr_mode}, ocr_model_path={ocr_model_path!r}, ocr_mmproj_path={ocr_mmproj_path!r}")
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logging.warning(f"保存配置失败: {e}")
+
+
+def get_mouse_landmark(app_id: str, slot) -> list:
+    """读取指定应用某槽位的路标坐标，未标记返回 None"""
+    slots = globals()['mouse_landmarks'].get(app_id) or {}
+    pos = slots.get(str(slot))
+    return list(pos) if pos else None
+
+
+def set_mouse_landmark(app_id: str, slot, x: float, y: float) -> None:
+    """记录指定应用某槽位的路标坐标并立即持久化到配置文件"""
+    app_slots = globals()['mouse_landmarks'].setdefault(app_id, {})
+    app_slots[str(slot)] = [float(x), float(y)]
+    try:
+        config = {}
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        # 仅更新路标字段，保留配置文件中的其余配置项
+        config['mouse_landmarks'] = globals()['mouse_landmarks']
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.warning(f"保存鼠标路标失败: {e}")
 
 
 def _get_clipboard_data_path():

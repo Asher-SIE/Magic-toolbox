@@ -41,3 +41,7 @@ Option+Shift+Q    Cycle recognition engines (speaks the engine name)
 
 5. Link Shortcuts
 Option+Shift+E    Extract the link from the last text read aloud by VoiceOver and open it in the default browser; when multiple links are found a dialog opens for selection; a voice hint is given when no link is found
+
+6. Mouse Landmark Shortcuts
+Option+Shift+1 to 6, 0    Mark the current mouse position as a landmark slot for the current app (stored per app in the config file, persists across restarts)
+Command+Option+Shift+1 to 6, 0    Move the mouse to the landmark stored in that slot for the current app; the numeric coordinates are spoken

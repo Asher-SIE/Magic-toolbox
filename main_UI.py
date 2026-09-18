@@ -1340,7 +1340,8 @@ class MainFrame(wx.Frame):
         modifier_map = {
             "ALT": wx.MOD_ALT,
             "SHIFT": wx.MOD_SHIFT,
-            "CTRL": wx.MOD_CONTROL
+            "CTRL": wx.MOD_CONTROL,
+            "CMD": wx.MOD_CMD
         }
 
         #  遍历keys列表批量注册热键
@@ -2271,6 +2272,82 @@ class MainFrame(wx.Frame):
 
         image_path, is_temp = extracted
         self.run_ocr(image_path, temp_path=image_path if is_temp else None)
+
+    def _hotkey_name_of(self, event) -> str:
+        """通过事件ID反查热键名称，供通用热键处理器区分具体按键"""
+        for name, hid in self.hotkey_ids.items():
+            if hid == event.GetId():
+                return name
+        return ""
+
+    def _current_app_id(self) -> str:
+        """获取前台应用的持久化标识：bundle ID 优先，无 bundle 时退回可执行文件路径或应用名"""
+        try:
+            from AppKit import NSWorkspace
+            app = NSWorkspace.sharedWorkspace().frontmostApplication()
+            if app:
+                bundle_id = app.bundleIdentifier()
+                if bundle_id:
+                    return str(bundle_id)
+                executable = app.executableURL()
+                if executable and executable.path():
+                    return str(executable.path())
+                if app.localizedName():
+                    return str(app.localizedName())
+        except Exception as e:
+            logging.warning(f"获取前台应用标识失败: {e}")
+        return "unknown"
+
+    def _get_mouse_position(self):
+        """读取当前鼠标全局坐标（Quartz 左上原点），失败返回 None"""
+        try:
+            import Quartz
+            location = Quartz.CGEventCreate(None).location
+            return float(location.x), float(location.y)
+        except Exception as e:
+            logging.error(f"读取鼠标坐标失败: {e}")
+        return None
+
+    def _move_mouse_to(self, x, y) -> bool:
+        """将鼠标指针移动到全局坐标 (x, y)"""
+        try:
+            import Quartz
+            Quartz.CGWarpMouseCursorPosition((x, y))
+            return True
+        except Exception as e:
+            logging.error(f"移动鼠标失败: {e}")
+        return False
+
+    @staticmethod
+    def _format_landmark_pos(position) -> str:
+        """路标坐标播报：直接朗读整数坐标，不做冗余修饰"""
+        return f"{int(round(position[0]))}, {int(round(position[1]))}"
+
+    def on_hotkey_mouse_mark(self, event):
+        """opt+shift+数字: 将当前鼠标位置标记为当前应用的路标槽位"""
+        slot = self._hotkey_name_of(event).replace("mark_", "")
+        if not slot:
+            return
+        position = self._get_mouse_position()
+        if position is None:
+            self.vo_handler.speak_text("读取鼠标坐标失败")
+            return
+        setting.set_mouse_landmark(self._current_app_id(), slot, position[0], position[1])
+        self.vo_handler.speak_text(self._format_landmark_pos(position))
+
+    def on_hotkey_mouse_jump(self, event):
+        """cmd+opt+shift+数字: 将鼠标跳转到当前应用对应槽位标记的位置"""
+        slot = self._hotkey_name_of(event).replace("jump_", "")
+        if not slot:
+            return
+        position = setting.get_mouse_landmark(self._current_app_id(), slot)
+        if position is None:
+            self.vo_handler.speak_text("未标记")
+            return
+        if not self._move_mouse_to(position[0], position[1]):
+            self.vo_handler.speak_text("跳转失败")
+            return
+        self.vo_handler.speak_text(self._format_landmark_pos(position))
 
     def on_browse_ocr_image(self, event):
         """工具栏浏览图片文件并识别"""
