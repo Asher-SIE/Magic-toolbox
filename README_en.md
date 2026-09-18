@@ -36,7 +36,7 @@ The app uses a layout with a left navigation bar and a right content panel:
 - **Translation Panel**: Enter text to perform translation
 - **Clipboard Panel**: Browse and manage clipboard history
 - **Recognition Panel**: Perform text recognition (OCR) or image description on clipboard images or image files (according to the current engine)
-- **Settings Panel**: Configure the translation model path and the maximum number of saved clipboard records
+- **Settings Panel**: Configure the translation model path, the maximum number of saved clipboard records, and the editor sentence punctuation
 
 ### Keyboard Shortcuts
 | Shortcut | Function |

@@ -15,7 +15,7 @@ import wx.adv
 from AppKit import NSApplication, NSApp, NSWindow
 from dialogs import FindReplaceDialog, EditDialog, AboutDialog, UrlSelectDialog
 from dictionary import Dictionary
-from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, extract_urls, split_text_by_punctuation
+from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, extract_urls, insert_heading_dot, split_text_by_punctuation
 from typing import Optional, Tuple
 
 import update
@@ -457,6 +457,7 @@ class MainFrame(wx.Frame):
         self._ocr_mode = config.get('ocr_mode', 'apple')
         self._ocr_model_path = config.get('ocr_model_path', '')
         self._ocr_mmproj_path = config.get('ocr_mmproj_path', '')
+        self._sentence_punctuations = list(setting.sentence_punctuations)
 
         is_internal = setting.is_internal_device()
         supports_apple = setting.supports_apple_translation()
@@ -496,6 +497,9 @@ class MainFrame(wx.Frame):
             self.ocr_model_path_text.SetValue(self._ocr_model_path)
             self.ocr_mmproj_path_text.SetValue(self._ocr_mmproj_path)
 
+        if hasattr(self, 'sentence_punct_input') and self.sentence_punct_input:
+            self.sentence_punct_input.SetValue(self._format_sentence_punctuations(self._sentence_punctuations))
+
     def save_config(self):
         model_path = getattr(self, '_model_path', '') or ''
         clipboard_max_count = getattr(self, '_clipboard_max_count', 1000)
@@ -505,7 +509,8 @@ class MainFrame(wx.Frame):
         ocr_mode = getattr(self, '_ocr_mode', 'apple')
         ocr_model_path = getattr(self, '_ocr_model_path', '') or ''
         ocr_mmproj_path = getattr(self, '_ocr_mmproj_path', '') or ''
-        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode, ocr_model_path, ocr_mmproj_path)
+        sentence_punctuations = getattr(self, '_sentence_punctuations', None)
+        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode, ocr_model_path, ocr_mmproj_path, sentence_punctuations)
 
 
     def setup_clipboard_panel(self):
@@ -527,9 +532,12 @@ class MainFrame(wx.Frame):
 
     def setup_settings_panel(self):
         """设置功能面板的UI元素 """
+        # 分组较多，外层套可滚动容器，窗口高度不足时可滚动查看全部分组
+        settings_scroll = wx.ScrolledWindow(self.settings_panel)
+        settings_scroll.SetScrollRate(20, 20)
         main_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        browse_model_static_box = wx.StaticBox(self.settings_panel, label=setting._("browse_model"))
+        browse_model_static_box = wx.StaticBox(settings_scroll, label=setting._("browse_model"))
         browse_model_sizer = wx.StaticBoxSizer(browse_model_static_box, wx.VERTICAL)
 
         model_path_h_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -545,7 +553,7 @@ class MainFrame(wx.Frame):
         main_sizer.Add(browse_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # --- 图像识别模型分组 ---
-        ocr_model_static_box = wx.StaticBox(self.settings_panel, label=setting._("ocr_model_group"))
+        ocr_model_static_box = wx.StaticBox(settings_scroll, label=setting._("ocr_model_group"))
         ocr_model_sizer = wx.StaticBoxSizer(ocr_model_static_box, wx.VERTICAL)
 
         ocr_model_row = wx.BoxSizer(wx.HORIZONTAL)
@@ -569,7 +577,7 @@ class MainFrame(wx.Frame):
         main_sizer.Add(ocr_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # --- 2. 剪贴板最大条数分组 ---
-        clipboard_count_static_box = wx.StaticBox(self.settings_panel, label=setting._("clipboard_max_count"))
+        clipboard_count_static_box = wx.StaticBox(settings_scroll, label=setting._("clipboard_max_count"))
         clipboard_count_sizer = wx.StaticBoxSizer(clipboard_count_static_box, wx.VERTICAL)
 
         self.clipboard_count_input = wx.TextCtrl(clipboard_count_static_box, value=str(getattr(self, '_clipboard_max_count', 1000)), style=wx.TE_RIGHT)
@@ -580,7 +588,7 @@ class MainFrame(wx.Frame):
 
         main_sizer.Add(clipboard_count_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
-        volume_control_static_box = wx.StaticBox(self.settings_panel, label=setting._("volume_control"))
+        volume_control_static_box = wx.StaticBox(settings_scroll, label=setting._("volume_control"))
         volume_control_sizer = wx.StaticBoxSizer(volume_control_static_box, wx.VERTICAL)
 
         volume_limit_row = wx.BoxSizer(wx.HORIZONTAL)
@@ -604,7 +612,64 @@ class MainFrame(wx.Frame):
 
         main_sizer.Add(volume_control_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
-        self.settings_panel.SetSizer(main_sizer)
+        # --- 编辑器分句符号分组：一行一个标点，失焦解析保存，分句功能实时生效 ---
+        sentence_punct_static_box = wx.StaticBox(settings_scroll, label=setting._("sentence_punct_group"))
+        sentence_punct_sizer = wx.StaticBoxSizer(sentence_punct_static_box, wx.VERTICAL)
+
+        sentence_punct_hint = wx.StaticText(sentence_punct_static_box, label=setting._("sentence_punct_hint"))
+        sentence_punct_sizer.Add(sentence_punct_hint, 0, wx.ALL, 5)
+
+        self.sentence_punct_input = wx.TextCtrl(sentence_punct_static_box, style=wx.TE_MULTILINE, size=(-1, 90))
+        self.sentence_punct_input.SetValue(self._format_sentence_punctuations(getattr(self, '_sentence_punctuations', None)))
+        self.sentence_punct_input.Bind(wx.EVT_KILL_FOCUS, self.on_sentence_punct_focus_lost)
+        sentence_punct_sizer.Add(self.sentence_punct_input, 0, wx.EXPAND | wx.ALL, 5)
+
+        main_sizer.Add(sentence_punct_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        settings_scroll.SetSizer(main_sizer)
+        settings_scroll.FitInside()  # 虚拟尺寸随内容扩展，内容超出窗口时出现滚动条
+        scroll_outer_sizer = wx.BoxSizer(wx.VERTICAL)
+        scroll_outer_sizer.Add(settings_scroll, 1, wx.EXPAND)
+        self.settings_panel.SetSizer(scroll_outer_sizer)
+
+
+    @staticmethod
+    def _format_sentence_punctuations(punctuations) -> str:
+        """分句符号列表转多行文本（一行一个符号）"""
+        if not punctuations:
+            punctuations = setting.sentence_punctuations
+        return "\n".join(punctuations)
+
+    @staticmethod
+    def _parse_sentence_punctuations(text: str) -> list:
+        """多行文本解析为分句符号列表：去空白、仅保留单字符、去重"""
+        result = []
+        for line in text.split('\n'):
+            symbol = line.strip()
+            if len(symbol) == 1 and symbol not in result:
+                result.append(symbol)
+        return result
+
+    def on_sentence_punct_focus_lost(self, event):
+        """分句符号编辑框失去焦点：解析保存并即时生效，无有效符号时还原显示"""
+        if getattr(self, '_processing_sentence_punct', False):
+            event.Skip()
+            return
+
+        self._processing_sentence_punct = True
+        try:
+            parsed = self._parse_sentence_punctuations(self.sentence_punct_input.GetValue())
+            if not parsed:
+                # 全部无效（含清空）时按无效输入处理，还原为当前生效值
+                self.sentence_punct_input.SetValue(self._format_sentence_punctuations(self._sentence_punctuations))
+                return
+            if parsed != list(self._sentence_punctuations):
+                self._sentence_punctuations = parsed
+                setting.sentence_punctuations[:] = parsed
+                self.save_config()
+        finally:
+            self._processing_sentence_punct = False
+        event.Skip()
 
 
     def on_browse_model_click(self, event):
@@ -1745,7 +1810,8 @@ class MainFrame(wx.Frame):
     def on_hotkey_altshift8(self, event):
         """alt+shift+8: 当前剪贴板上一行"""
         result_text = self.TB.browse("prev_line")
-        self.vo_handler.speak_text(result_text)
+        # markdown标题行（# 数字）在井号右侧补句点后朗读，仅作用于朗读拼接、不改原数据
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
         # 单步移动后开始长按监测，按住不放则快速跳到第一行
         self._start_long_press("altshift8")
 
@@ -1787,19 +1853,19 @@ class MainFrame(wx.Frame):
 
     def on_hotkey_altshifti(self, event):
         """alt+shift+i: 当前字符解释"""
+        # browse 返回值已含符号库解释（含未收录符号的 unicodedata 兜底），与焦点原字符比对判断是否命中
+        focus_pos = self.TB.focus_pos
+        raw_char = self.TB.current_text[focus_pos:focus_pos + 1]
         result_text = self.TB.browse("explain_char")
 
-        if result_text:
-            explained_text = self.TB.get_char_explanation(result_text)
-            # 若解释存在（与原文本不同），则使用解释结果；否则用原文本
-            if explained_text != result_text:
-                self.vo_handler.speak_text(explained_text)
-                return
-
-        # 注：保持取首字符的既有行为（剪贴板浏览定位的是单字符）
-        if result_text:
-            result_text = self._lookup_dictionary(result_text[0])
+        if result_text and result_text != raw_char:
             self.vo_handler.speak_text(result_text)
+            return
+
+        # 未命中解释（字母数字等旁白可直接朗读的字符）：走词典，查无词条时回退朗读原字符
+        if result_text:
+            dictionary_result = self._lookup_dictionary(result_text[0])
+            self.vo_handler.speak_text(dictionary_result or result_text)
 
 
     def on_hotkey_altshifto(self, event):
@@ -1872,7 +1938,7 @@ class MainFrame(wx.Frame):
     def on_hotkey_altshiftk(self, event):
         """alt+shift+k: 当前剪贴板下一行"""
         result_text = self.TB.browse("next_line")
-        self.vo_handler.speak_text(result_text)
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
         # 单步移动后开始长按监测，按住不放则快速跳到最后一行
         self._start_long_press("altshiftk")
 
@@ -1964,14 +2030,14 @@ class MainFrame(wx.Frame):
         """长按 alt+shift+8: 直接跳到当前剪贴板第一行"""
         result_text = self.TB.browse("first_line")
         self.play_sound("index")
-        self.vo_handler.speak_text(result_text)
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
 
 
     def _jump_text_last_line(self):
         """长按 alt+shift+k: 直接跳到当前剪贴板最后一行"""
         result_text = self.TB.browse("last_line")
         self.play_sound("index")
-        self.vo_handler.speak_text(result_text)
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
 
 
     def on_hotkey_altshiftm(self, event):

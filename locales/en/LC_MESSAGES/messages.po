@@ -826,3 +826,11 @@ msgstr "No link found"
 #: dialogs.py
 msgid "url_select_title"
 msgstr "Choose a Link to Open"
+
+#: main_UI.py
+msgid "sentence_punct_group"
+msgstr "Editor Sentence Punctuation"
+
+#: main_UI.py
+msgid "sentence_punct_hint"
+msgstr "One punctuation per line. Changes are saved and applied automatically."

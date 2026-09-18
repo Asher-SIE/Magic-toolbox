@@ -826,3 +826,11 @@ msgstr "未找到链接"
 #: dialogs.py
 msgid "url_select_title"
 msgstr "选择要打开的链接"
+
+#: main_UI.py
+msgid "sentence_punct_group"
+msgstr "编辑器分句符号"
+
+#: main_UI.py
+msgid "sentence_punct_hint"
+msgstr "一行一个标点符号，修改后自动保存并生效"

@@ -10,6 +10,7 @@ import setting
 import sys
 import threading
 import time
+import unicodedata
 
 from ctypes import POINTER, c_uint32, c_float, c_bool, Structure, byref, c_void_p
 from typing import Callable, Dict, List, Optional, Tuple
@@ -141,6 +142,33 @@ _URL_PATTERN = re.compile(
 )
 # URL末尾需剥离的标点（中英文句读、括号引号等，多为朗读文本中URL后的自然语言内容）
 _URL_TRAILING_PUNCT = ".,;:!?)]}>\"'\u2026\u3002\uff0c\u3001\uff1b\uff1a\uff01\uff1f\uff09\u3011\u300b\u201d\u2019"
+
+# markdown标题行朗读加工：行首井号串（1-6个）后允许空白但必须紧跟数字才补句点
+_HEADING_DOT_PATTERN = re.compile(r'^(#{1,6})(?=\s*\d)')
+
+
+def insert_heading_dot(text: str) -> str:
+    """markdown标题行朗读加工：行首井号（如“# 1 绪论”“##2.3 概述”）右侧插入一个句点再朗读
+
+    仅作用于输出给VO的朗读文本拼接，不改动剪贴板原数据，逐字浏览不会看到该句点；
+    井号后非数字开头的标题不做处理。
+    """
+    if not text:
+        return text
+    return _HEADING_DOT_PATTERN.sub(r'\1.', text)
+
+
+def unicode_char_name(char: str) -> Optional[str]:
+    """未收录符号的兜底朗读描述：取 unicodedata 官方名称并转为可自然朗读的小写词串
+
+    无正式名称的字符（控制符等，符号库已覆盖常规项）返回None，由调用方回退原样输出。
+    """
+    try:
+        name = unicodedata.name(char)
+    except (ValueError, TypeError):
+        return None
+    # 连字符转空格并转小写，避免旁白逐字母拼读
+    return name.replace('-', ' ').lower() if name else None
 
 
 def extract_urls(text: Optional[str]) -> List[str]:
@@ -926,8 +954,16 @@ class TextBrowser:
 
 
     def get_char_explanation(self, char: str) -> str:
-        #  特定字符解释
-        return setting.chars_dict[setting.current_lang].get(char, char)
+        # 特定字符解释：优先取符号库；未收录的符号用 unicodedata 名称兜底，避免旁白无输出
+        if not char or len(char) != 1:
+            return char
+        explained = setting.chars_dict[setting.current_lang].get(char)
+        if explained:
+            return explained
+        # 字母数字汉字旁白可直接朗读，原样返回
+        if char.isalnum():
+            return char
+        return unicode_char_name(char) or char
 
 
 def is_voiceover_running():
@@ -1022,14 +1058,11 @@ class TextProcessor:
         return re.sub(r'[ \t]+', ' ', text)
 
 
-    #  分行
+    #  分句
     def replace_punctuation_with_newline(self) -> str:
-        common_punctuations = [
-            ',', '，', '.', '。', '!', '！', '?', '？', ';', '；',
-            ':', '：', '"', 
-            '-'
-        ]
-        trans_table = str.maketrans({punc: '\n' for punc in common_punctuations})
+        # 分句标点可在设置面板自定义（配置项 sentence_punctuations），实时读取当前生效值
+        punctuations = getattr(setting, 'sentence_punctuations', None) or setting.DEFAULT_SENTENCE_PUNCTUATIONS
+        trans_table = str.maketrans({punc: '\n' for punc in punctuations if punc and len(punc) == 1})
         return self.text.translate(trans_table)
 
 

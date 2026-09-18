@@ -116,6 +116,43 @@ chars_dict = {
         '！': '全角感叹号',
         '：': '全角冒号',
         '；': '全角分号',
+        '.': '句点',
+        ',': '逗号',
+        ':': '冒号',
+        ';': '分号',
+        '?': '问号',
+        '!': '感叹号',
+        '(': '左圆括号',
+        ')': '右圆括号',
+        '{': '左大括号',
+        '}': '右大括号',
+        '<': '小于号',
+        '>': '大于号',
+        '-': '连字符',
+        '_': '下划线',
+        '=': '等号',
+        '+': '加号',
+        '*': '星号',
+        '&': '与符号',
+        '%': '百分号',
+        '$': '美元符号',
+        '@': '艾特符号',
+        '|': '竖线',
+        '~': '波浪号',
+        '^': '脱字符',
+        '`': '反引号',
+        '、': '顿号',
+        '（': '全角左圆括号',
+        '）': '全角右圆括号',
+        '《': '左书名号',
+        '》': '右书名号',
+        '【': '左方头括号',
+        '】': '右方头括号',
+        '·': '间隔号',
+        '—': '破折号',
+        '…': '省略号',
+        '～': '全角波浪号',
+        '￥': '人民币符号',
         'ā': '一声阿',
         'á': '二声嗄',
         'ǎ': '三声啊',
@@ -211,6 +248,43 @@ chars_dict = {
         '！': 'full-width exclamation mark',
         '：': 'full-width colon',
         '；': 'full-width semicolon',
+        '.': 'period',
+        ',': 'comma',
+        ':': 'colon',
+        ';': 'semicolon',
+        '?': 'question mark',
+        '!': 'exclamation mark',
+        '(': 'left parenthesis',
+        ')': 'right parenthesis',
+        '{': 'left brace',
+        '}': 'right brace',
+        '<': 'less than sign',
+        '>': 'greater than sign',
+        '-': 'hyphen',
+        '_': 'underscore',
+        '=': 'equals sign',
+        '+': 'plus sign',
+        '*': 'asterisk',
+        '&': 'ampersand',
+        '%': 'percent sign',
+        '$': 'dollar sign',
+        '@': 'at sign',
+        '|': 'vertical bar',
+        '~': 'tilde',
+        '^': 'circumflex accent',
+        '`': 'backtick',
+        '、': 'enumeration comma',
+        '（': 'full-width left parenthesis',
+        '）': 'full-width right parenthesis',
+        '《': 'left double angle bracket',
+        '》': 'right double angle bracket',
+        '【': 'left black lenticular bracket',
+        '】': 'right black lenticular bracket',
+        '·': 'middle dot',
+        '—': 'em dash',
+        '…': 'ellipsis',
+        '～': 'full-width tilde',
+        '￥': 'yen sign',
         'ā': 'first tone a',
         'á': 'second tone a',
         'ǎ': 'third tone a',
@@ -472,8 +546,28 @@ hotKeys = [
 ]
 
 
+# 文本编辑器分句功能的默认标点（原硬编码值，可在设置面板自定义）
+DEFAULT_SENTENCE_PUNCTUATIONS = [',', '，', '.', '。', '!', '！', '?', '？', ';', '；', ':', '：', '"', '-']
+
+# 当前生效的分句标点：启动加载配置时刷新，TextProcessor 分句时实时读取
+sentence_punctuations = list(DEFAULT_SENTENCE_PUNCTUATIONS)
+
+
+def _normalize_sentence_punctuations(value) -> list:
+    """清洗分句标点配置：仅保留单字符项，去空去重，非法输入回退默认值"""
+    if not isinstance(value, list):
+        return list(DEFAULT_SENTENCE_PUNCTUATIONS)
+    result = []
+    for item in value:
+        symbol = str(item).strip() if item is not None else ''
+        if len(symbol) == 1 and symbol not in result:
+            result.append(symbol)
+    return result if result else list(DEFAULT_SENTENCE_PUNCTUATIONS)
+
+
 def load_config():
     """加载配置"""
+    global sentence_punctuations
     config = {
         'source_lang': 'English',
         'target_lang': 'Chinese',
@@ -484,7 +578,8 @@ def load_config():
         'translation_mode': 'llm',
         'ocr_mode': 'apple',
         'ocr_model_path': '',
-        'ocr_mmproj_path': ''
+        'ocr_mmproj_path': '',
+        'sentence_punctuations': list(DEFAULT_SENTENCE_PUNCTUATIONS)
     }
     try:
         if os.path.exists(config_path):
@@ -493,11 +588,17 @@ def load_config():
                 config.update(saved_config)
     except Exception as e:
         logging.warning(f"加载配置失败: {e}")
+    sentence_punctuations = _normalize_sentence_punctuations(config.get('sentence_punctuations'))
     return config
 
 
-def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple', ocr_model_path: str = '', ocr_mmproj_path: str = ''):
-    """保存配置"""
+def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple', ocr_model_path: str = '', ocr_mmproj_path: str = '', sentence_punctuations=None):
+    """保存配置；sentence_punctuations 未传入时保留当前生效值，避免其他配置项保存时覆盖自定义分句标点"""
+    if sentence_punctuations is None:
+        sentence_punctuations = globals()['sentence_punctuations']
+    normalized = _normalize_sentence_punctuations(sentence_punctuations)
+    # 保存的同时同步模块级生效值（分句功能实时读取），保持配置与内存一致
+    globals()['sentence_punctuations'] = normalized
     try:
         config = {
             'source_lang': source_lang,
@@ -509,7 +610,8 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
             'translation_mode': translation_mode,
             'ocr_mode': ocr_mode,
             'ocr_model_path': ocr_model_path,
-            'ocr_mmproj_path': ocr_mmproj_path
+            'ocr_mmproj_path': ocr_mmproj_path,
+            'sentence_punctuations': normalized
         }
         logging.info(f"保存配置: ocr_mode={ocr_mode}, ocr_model_path={ocr_model_path!r}, ocr_mmproj_path={ocr_mmproj_path!r}")
         with open(config_path, 'w', encoding='utf-8') as f:
