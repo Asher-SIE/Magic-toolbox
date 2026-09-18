@@ -198,6 +198,24 @@ class LocalVLMEngineTests(unittest.TestCase):
         self.engine.configure(model_path="model.gguf", mmproj_path="mmproj.gguf")
         self.assertTrue(self.engine.is_loaded())
 
+    def test_load_model_discards_stale_model_when_reconfigured_midway(self):
+        # 加载构造耗时期间用户另选模型文件：旧路径模型不得"复活"，
+        # 否则 is_loaded 为真会让后续预加载直接返回、新模型永远不被加载
+        with tempfile.NamedTemporaryFile(suffix=".gguf") as model, \
+                tempfile.NamedTemporaryFile(suffix=".gguf") as mmproj:
+            engine = LocalVLMEngine(model_path=model.name, mmproj_path=mmproj.name)
+
+            def fake_llama(*args, **kwargs):
+                # 模拟构造期间主线程换模型：路径更新并卸载（此刻 _llm 仍为 None）
+                engine.configure(model_path="new.gguf", mmproj_path="new-mmproj.gguf")
+                return mock.Mock()
+
+            with mock.patch.object(ocr_engine, "Llama", side_effect=fake_llama), \
+                    mock.patch.object(ocr_engine, "_LLAMA_VL_HANDLER"):
+                engine.load_model()
+
+            self.assertFalse(engine.is_loaded())  # 旧模型被丢弃，等待按新路径加载
+
     def test_needs_load_states(self):
         engine = LocalVLMEngine()
         self.assertFalse(engine.needs_load())  # 未配置谈不上加载

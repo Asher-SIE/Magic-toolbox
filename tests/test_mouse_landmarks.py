@@ -69,9 +69,28 @@ class MouseLandmarkTests(unittest.TestCase):
         self.assertEqual(setting._normalize_mouse_landmarks("bad"), {})
         self.assertEqual(setting._normalize_mouse_landmarks({"app": "bad"}), {})
         self.assertEqual(
-            setting._normalize_mouse_landmarks({"app": {"1": [1, 2], "2": "x", "3": [1]}}),
+            setting._normalize_mouse_landmarks(
+                # 字典坐标会触发 KeyError、两字符数字串 "12" 会被误收为 [1.0, 2.0]，均应丢弃
+                {"app": {"1": [1, 2], "2": "x", "3": [1], "4": {"x": 1, "y": 2}, "5": "12"}}
+            ),
             {"app": {"1": [1.0, 2.0]}},
         )
+
+    def test_set_landmark_merges_file_landmarks(self):
+        # 模拟另一实例已写入文件的路标：本进程标记时按槽位合并，不冲掉文件中的其他应用/槽位
+        with open(self._config_path, "w", encoding="utf-8") as f:
+            json.dump({"mouse_landmarks": {"other.App": {"5": [9, 9]}, "com.apple.Safari": {"4": [8, 8]}}}, f)
+        setting.mouse_landmarks = {"com.apple.Safari": {"1": [1.0, 1.0]}}
+        self.assertTrue(setting.set_mouse_landmark("com.apple.Safari", "2", 3, 4))
+        self.assertEqual(setting.get_mouse_landmark("other.App", "5"), [9.0, 9.0])
+        self.assertEqual(setting.get_mouse_landmark("com.apple.Safari", "4"), [8.0, 8.0])
+        self.assertEqual(setting.get_mouse_landmark("com.apple.Safari", "2"), [3.0, 4.0])
+        self.assertEqual(setting.get_mouse_landmark("com.apple.Safari", "1"), [1.0, 1.0])
+
+    def test_set_landmark_reports_write_failure(self):
+        # 写盘失败时返回 False，供热键处理器播报"保存失败"
+        with mock.patch("builtins.open", side_effect=OSError("disk full")):
+            self.assertFalse(setting.set_mouse_landmark("com.apple.Safari", "1", 1, 2))
 
     def test_hotkey_slots_avoid_clipboard_nav(self):
         # 标记/跳转槽位为 1-6 与 0，不得占用剪贴板导航的 7/8/9

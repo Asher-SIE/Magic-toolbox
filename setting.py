@@ -27,7 +27,12 @@ def _load_debug_build() -> bool:
     try:
         if os.path.exists(path):
             with open(path, 'r', encoding='utf-8') as f:
-                return bool(json.load(f).get('debug_build', False))
+                value = json.load(f).get('debug_build', False)
+                if isinstance(value, str):
+                    # 手写配置常见把 false 写成字符串：bool("false") 为真会静默放开内部机限制，
+                    # 只认明确的真值写法
+                    return value.strip().lower() in ("true", "1", "yes")
+                return bool(value)
     except Exception as e:
         logging.warning(f"加载调试配置失败: {e}")
     return False
@@ -596,9 +601,12 @@ def _normalize_mouse_landmarks(value) -> dict:
             continue
         clean_slots = {}
         for slot, pos in slots.items():
+            # 坐标只接受列表/元组：字符串与字典下标取值会分别误收或抛 KeyError
+            if not isinstance(pos, (list, tuple)) or len(pos) < 2:
+                continue
             try:
                 x, y = float(pos[0]), float(pos[1])
-            except (TypeError, ValueError, IndexError):
+            except (TypeError, ValueError):
                 continue
             clean_slots[str(slot)] = [x, y]
         if clean_slots:
@@ -675,21 +683,27 @@ def get_mouse_landmark(app_id: str, slot) -> list:
     return list(pos) if pos else None
 
 
-def set_mouse_landmark(app_id: str, slot, x: float, y: float) -> None:
-    """记录指定应用某槽位的路标坐标并立即持久化到配置文件"""
-    app_slots = globals()['mouse_landmarks'].setdefault(app_id, {})
-    app_slots[str(slot)] = [float(x), float(y)]
+def set_mouse_landmark(app_id: str, slot, x: float, y: float) -> bool:
+    """记录指定应用某槽位的路标坐标并立即持久化到配置文件，返回是否写入成功"""
     try:
         config = {}
         if os.path.exists(config_path):
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
+        # 以文件中的路标为基线做槽位级合并，保留其他实例写入的数据，再用本进程内存覆盖
+        merged = _normalize_mouse_landmarks(config.get('mouse_landmarks'))
+        for cur_app, cur_slots in globals()['mouse_landmarks'].items():
+            merged.setdefault(cur_app, {}).update(cur_slots)
+        merged.setdefault(app_id, {})[str(slot)] = [float(x), float(y)]
+        globals()['mouse_landmarks'] = merged
         # 仅更新路标字段，保留配置文件中的其余配置项
-        config['mouse_landmarks'] = globals()['mouse_landmarks']
+        config['mouse_landmarks'] = merged
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
+        return True
     except Exception as e:
         logging.warning(f"保存鼠标路标失败: {e}")
+        return False
 
 
 def _get_clipboard_data_path():

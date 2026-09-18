@@ -323,10 +323,14 @@ class LocalVLMEngine(OCREngine):
             for label, path in (("视觉模型", self.model_path), ("视觉编码器", self.mmproj_path)):
                 if not os.path.isfile(path):
                     raise OCRError(f"{label}文件不存在：{path}")
+            # 构造耗时长且 configure 不持锁（持锁会让主线程换模型时等待推理）：
+            # 记录构造前路径，完成后若已被 configure 更新则丢弃，避免旧路径模型
+            # "复活"后 is_loaded 为真、新模型永远不被加载
+            model_path, mmproj_path = self.model_path, self.mmproj_path
             try:
-                chat_handler = _LLAMA_VL_HANDLER(clip_model_path=self.mmproj_path)
-                self._llm = Llama(
-                    model_path=self.model_path,
+                chat_handler = _LLAMA_VL_HANDLER(clip_model_path=mmproj_path)
+                llm = Llama(
+                    model_path=model_path,
                     chat_handler=chat_handler,
                     n_ctx=4096,        # 需容纳图像 embedding
                     n_gpu_layers=-1,   # macOS Metal 全量 GPU
@@ -335,8 +339,9 @@ class LocalVLMEngine(OCREngine):
             except OCRError:
                 raise
             except Exception as exc:
-                self._llm = None
                 raise OCRError(f"视觉模型加载失败：{exc}") from exc
+            if (model_path, mmproj_path) == (self.model_path, self.mmproj_path):
+                self._llm = llm
 
     def unload(self):
         """卸载模型释放内存"""
@@ -361,6 +366,11 @@ class LocalVLMEngine(OCREngine):
             raise OCRError(f"图片文件不存在：{image_path}")
         # 未加载时在此处同步加载：与预加载共用 _load_lock，加载中触发的识别会排队等待
         self.load_model()
+        # 取局部引用推理：加载后到推理前模型可能被 configure/unload 置空（None 报错），
+        # 推理中置空时局部引用保活底层对象，避免指针悬空
+        llm = self._llm
+        if llm is None:
+            raise OCRError("视觉模型已被卸载，请重试")
 
         source_path, is_scaled_temp = self._downscale_if_needed(image_path)
         try:
@@ -368,7 +378,7 @@ class LocalVLMEngine(OCREngine):
                 image_b64 = base64.b64encode(f.read()).decode("ascii")
             ext = os.path.splitext(source_path)[1].lower()
             mime = self.IMAGE_MIME.get(ext, "image/png")
-            output = self._llm.create_chat_completion(
+            output = llm.create_chat_completion(
                 messages=[{
                     "role": "user",
                     "content": [

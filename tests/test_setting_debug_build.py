@@ -52,6 +52,17 @@ class DebugBuildConfigTests(unittest.TestCase):
         self._write("{broken json")
         self.assertFalse(self._load())
 
+    def test_string_false_keeps_disabled(self):
+        # 手写配置把 false 写成字符串时不得按 bool("false") 判真放开内部机限制
+        self._write('{"debug_build": "false"}')
+        self.assertFalse(self._load())
+        self._write('{"debug_build": "0"}')
+        self.assertFalse(self._load())
+
+    def test_string_true_enables_debug(self):
+        self._write('{"debug_build": "true"}')
+        self.assertTrue(self._load())
+
     def test_internal_locked_without_debug(self):
         with mock.patch.object(setting, "is_internal_device", return_value=True), \
                 mock.patch.object(setting, "DEBUG_BUILD", False):

@@ -1625,7 +1625,8 @@ class MainFrame(wx.Frame):
 
             # 注：保持取首字符的既有行为（与 _translate_last_phrase 传整串不一致，疑似历史遗留）
             result_text = self._lookup_dictionary(vo_text[0])
-            self.vo_handler.speak_text(result_text)
+            # 词典未命中时回退朗读原字符，避免 speak_text(None) 静默无反馈
+            self.vo_handler.speak_text(result_text or vo_text[0])
 
 
     def on_hotkey_altd(self, event):
@@ -2312,8 +2313,8 @@ class MainFrame(wx.Frame):
         """将鼠标指针移动到全局坐标 (x, y)"""
         try:
             import Quartz
-            Quartz.CGWarpMouseCursorPosition((x, y))
-            return True
+            # pyobjc 不把非零 CGError 转成异常，必须显式判断返回值（0 为 kCGErrorSuccess）
+            return Quartz.CGWarpMouseCursorPosition((x, y)) == 0
         except Exception as e:
             logging.error(f"移动鼠标失败: {e}")
         return False
@@ -2332,7 +2333,9 @@ class MainFrame(wx.Frame):
         if position is None:
             self.vo_handler.speak_text("读取鼠标坐标失败")
             return
-        setting.set_mouse_landmark(self._current_app_id(), slot, position[0], position[1])
+        if not setting.set_mouse_landmark(self._current_app_id(), slot, position[0], position[1]):
+            self.vo_handler.speak_text("保存失败")
+            return
         self.vo_handler.speak_text(self._format_landmark_pos(position))
 
     def on_hotkey_mouse_jump(self, event):
@@ -2390,33 +2393,42 @@ class MainFrame(wx.Frame):
 
     def run_ocr(self, image_path: str, temp_path: str = None):
         """在后台线程执行 OCR，结果覆盖写入识别面板并经 VO 朗读"""
-        if not self.ocr_engine:
+        # 入口固化引擎引用：worker 内热键切换引擎时不应改用新引擎，播报与实际引擎保持一致
+        engine = self.ocr_engine
+        if not engine:
             self.vo_handler.speak_text(setting._('ocr_engine_unavailable'))
+            self._remove_ocr_temp_file(temp_path)
             return
         self._unload_llm_for_vlm_ocr()
         if not self._ocr_lock.acquire(blocking=False):
             self.vo_handler.speak_text(setting._('ocr_in_progress'))
+            self._remove_ocr_temp_file(temp_path)
             return
 
         def ocr_worker():
             try:
-                needs_load = getattr(self.ocr_engine, "needs_load", None)
+                needs_load = getattr(engine, "needs_load", None)
                 if callable(needs_load) and needs_load():
                     wx.CallAfter(self.vo_handler.speak_text, setting._('ocr_vlm_loading'))
-                text = self.ocr_engine.recognize(image_path)
+                text = engine.recognize(image_path)
                 wx.CallAfter(self._on_ocr_result, text)
             except Exception as e:
                 logging.warning(f"OCR 识别失败: {e}")
                 wx.CallAfter(self._on_ocr_error, str(e))
             finally:
-                if temp_path:
-                    try:
-                        os.remove(temp_path)
-                    except OSError:
-                        pass
+                self._remove_ocr_temp_file(temp_path)
                 self._ocr_lock.release()
 
         threading.Thread(target=ocr_worker, daemon=True).start()
+
+    @staticmethod
+    def _remove_ocr_temp_file(temp_path: str) -> None:
+        """删除识别用临时文件（剪贴板图片/降采样产物），失败仅忽略"""
+        if temp_path:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
     def _on_ocr_result(self, text: str):
         """识别完成：结果覆盖写入编辑框并朗读（新内容覆盖模式）"""

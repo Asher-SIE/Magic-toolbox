@@ -1,14 +1,24 @@
 """extract_urls 提取与 VoiceOverHandler.get_last_spoken_text 即时读取逻辑测试
 
-processer 依赖 llama_cpp/appscript，这里以桩模块替换后导入，任何环境可跑。
+processer 依赖 llama_cpp/appscript，任何环境可跑：
+复用 test_processer_unload 的同一套桩模块（避免多份桩在同进程互相覆盖；
+旧写法自造 Llama=object 的简化桩残留 sys.modules，字母序先跑时会把
+test_processer_unload 的 _FakeLlama 顶掉，导致其全量运行必挂）。
 """
+import os
 import sys
 import types
 import unittest
 
-# 桩替换 processer 顶层依赖（仅 processer 消费，保证无依赖环境可跑）；
-# setting 仅在导入 processer 期间临时注入桩（其余测试需要真实 setting），导入后还原
-_fake_appscript = types.ModuleType("appscript")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 导入即完成 llama_cpp/appscript/setting 桩替换，setting 桩导入后由其自行还原
+import tests.test_processer_unload  # noqa: F401,E402
+import processer  # noqa: E402
+from processer import VoiceOverHandler, extract_urls  # noqa: E402
+
+# VoiceOver 桩挂到共享的 appscript 桩模块上（processer 以 appscript.app 运行时取用）
+_fake_appscript = tests.test_processer_unload._fake_appscript
 _vo_content = {"text": None}
 
 
@@ -27,27 +37,6 @@ class _FakeVoiceOver:
 
 
 _fake_appscript.app = _FakeVoiceOver
-
-_fake_llama_cpp = types.ModuleType("llama_cpp")
-_fake_llama_cpp.Llama = object
-
-sys.modules.setdefault("appscript", _fake_appscript)
-sys.modules.setdefault("llama_cpp", _fake_llama_cpp)
-_setting_injected = False
-if "setting" not in sys.modules:
-    try:
-        import setting  # noqa: F401
-    except Exception:
-        _fake_setting = types.ModuleType("setting")
-        _fake_setting.chars_dict = {"zh": {}, "en": {}}
-        _fake_setting.current_lang = "zh"
-        sys.modules["setting"] = _fake_setting
-        _setting_injected = True
-import processer  # noqa: E402
-from processer import VoiceOverHandler, extract_urls  # noqa: E402
-
-if _setting_injected:
-    del sys.modules["setting"]
 
 
 class ExtractUrlsTests(unittest.TestCase):

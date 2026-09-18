@@ -69,16 +69,34 @@ class AppleTranslatorTests(unittest.TestCase):
 
     @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
     @mock.patch("apple_translator.subprocess.run")
-    def test_missing_language_pack_blocks_translation(self, run, _supports):
-        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_SUPPORTED}))
+    def test_missing_language_pack_fails_fast_via_helper(self, run, _supports):
+        """缓存状态为"未安装"时不再短路：语言包可能在启动预检后才装好，
+        交给实际调用验证，确实未装时由 Swift 侧快速失败返回 language_not_installed"""
+        run.side_effect = [
+            self._completed(json.dumps({"ok": True, "status": STATUS_SUPPORTED})),
+            self._completed(json.dumps({"ok": False, "code": "language_not_installed"})),
+        ]
 
         with self.assertRaisesRegex(AppleTranslationError, LANGUAGE_DOWNLOAD_HINT):
             self.translator.translate("hello", "English", "Chinese")
 
-        # 只发生 status 预检，绝不进入可能挂起的翻译调用
+        self.assertEqual(run.call_count, 2)
+        payload = json.loads(run.call_args_list[1].kwargs["input"])
+        self.assertEqual(payload["action"], "translate")
+
+    @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
+    @mock.patch("apple_translator.subprocess.run")
+    def test_install_after_cache_recovers_without_restart(self, run, _supports):
+        """启动预检缓存"未安装"后用户装好语言包：无需重启应用，重试即翻译成功"""
+        self.translator._language_status_cache[("en", "zh-Hans")] = STATUS_SUPPORTED
+        run.return_value = self._completed(json.dumps({"ok": True, "translatedText": "你好"}))
+
+        result = self.translator.translate("hello", "English", "Chinese")
+
+        self.assertEqual(result, "你好")
         self.assertEqual(run.call_count, 1)
         payload = json.loads(run.call_args.kwargs["input"])
-        self.assertEqual(payload["action"], "status")
+        self.assertEqual(payload["action"], "translate")
 
     @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
     @mock.patch("apple_translator.subprocess.run")
