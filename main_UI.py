@@ -2681,10 +2681,10 @@ class MainFrame(wx.Frame):
 
 
 def main():
-    # 日志配置
+    # 日志配置（含 PID：用于区分多个实例交错写配置的情况）
     logging.basicConfig(
         level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - PID%(process)d - %(name)s - %(levelname)s - %(message)s'
     )
 
     app = wx.App(False)
