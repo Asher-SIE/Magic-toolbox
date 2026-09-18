@@ -40,4 +40,4 @@ Option+Shift+R    按当前引擎识别剪贴板中的图片（Apple OCR 识别�
 Option+Shift+Q    循环切换识别引擎（播报引擎名）
 
 五、链接快捷键
-Option+Shift+E    提取 VoiceOver 最后朗读内容中的链接，并用默认浏览器打开；未找到时语音提示
+Option+Shift+E    提取 VoiceOver 最后朗读内容中的链接，并用默认浏览器打开；多个链接时弹窗选择，未找到时语音提示

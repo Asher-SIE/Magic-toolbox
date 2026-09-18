@@ -1,4 +1,4 @@
-"""extract_url 提取与 VoiceOverHandler.get_last_spoken_text 即时读取逻辑测试
+"""extract_urls 提取与 VoiceOverHandler.get_last_spoken_text 即时读取逻辑测试
 
 processer 依赖 llama_cpp/appscript，这里以桩模块替换后导入，任何环境可跑。
 """
@@ -44,42 +44,67 @@ if "setting" not in sys.modules:
         sys.modules["setting"] = _fake_setting
         _setting_injected = True
 import processer  # noqa: E402
-from processer import VoiceOverHandler, extract_url  # noqa: E402
+from processer import VoiceOverHandler, extract_urls  # noqa: E402
 
 if _setting_injected:
     del sys.modules["setting"]
 
 
-class ExtractUrlTests(unittest.TestCase):
+class ExtractUrlsTests(unittest.TestCase):
     def test_plain_https_url(self):
-        self.assertEqual(extract_url("https://example.com/a?b=1"), "https://example.com/a?b=1")
+        self.assertEqual(extract_urls("https://example.com/a?b=1"), ["https://example.com/a?b=1"])
 
     def test_url_with_chinese_context(self):
         # 中文紧贴URL无空格时按非URL字符截断
-        self.assertEqual(extract_url("详情见https://example.com/path，谢谢"), "https://example.com/path")
+        self.assertEqual(extract_urls("详情见https://example.com/path，谢谢"), ["https://example.com/path"])
 
     def test_www_url_adds_scheme(self):
-        self.assertEqual(extract_url("访问www.example.com查看"), "https://www.example.com")
+        self.assertEqual(extract_urls("访问www.example.com查看"), ["https://www.example.com"])
+
+    def test_bare_domain_adds_scheme(self):
+        # 无协议头大小写裸域名
+        self.assertEqual(extract_urls("搜索GOOGLE.COM就有了"), ["https://GOOGLE.COM"])
+        self.assertEqual(extract_urls("打开 example.com。"), ["https://example.com"])
+
+    def test_bare_domain_with_path_and_port(self):
+        self.assertEqual(
+            extract_urls("访问example.com/path?q=1查看"),
+            ["https://example.com/path?q=1"])
+        self.assertEqual(
+            extract_urls("本地服务 example.com:8080/x 已启动"),
+            ["https://example.com:8080/x"])
+
+    def test_scheme_url_with_dotless_host(self):
+        # localhost 无点主机仅带协议头分支可匹配，两分支并存防回归
+        self.assertEqual(extract_urls("http://localhost:8080/x"), ["http://localhost:8080/x"])
 
     def test_trailing_punctuation_stripped(self):
-        self.assertEqual(extract_url("打开 https://example.com。"), "https://example.com")
-        self.assertEqual(extract_url("(https://example.com/foo)"), "https://example.com/foo")
-        self.assertEqual(extract_url("链接是 https://example.com，点击打开"), "https://example.com")
+        self.assertEqual(extract_urls("打开 https://example.com。"), ["https://example.com"])
+        self.assertEqual(extract_urls("(https://example.com/foo)"), ["https://example.com/foo"])
+        self.assertEqual(extract_urls("链接是 https://example.com，点击打开"), ["https://example.com"])
 
     def test_port_query_fragment_kept(self):
         self.assertEqual(
-            extract_url("https://example.com:8080/a?x=1&y=2#f"),
-            "https://example.com:8080/a?x=1&y=2#f")
+            extract_urls("https://example.com:8080/a?x=1&y=2#f"),
+            ["https://example.com:8080/a?x=1&y=2#f"])
 
-    def test_first_url_wins(self):
+    def test_multiple_urls_in_order(self):
         self.assertEqual(
-            extract_url("见 https://a.com 和 https://b.com"),
-            "https://a.com")
+            extract_urls("见 https://a.com 和 b.cn，或 www.c.org/xyz"),
+            ["https://a.com", "https://b.cn", "https://www.c.org/xyz"])
 
-    def test_no_url_returns_none(self):
-        self.assertIsNone(extract_url("这里没有链接，只有文字"))
-        self.assertIsNone(extract_url(""))
-        self.assertIsNone(extract_url(None))
+    def test_duplicate_urls_deduped(self):
+        # 裸域名与带协议头的同一地址归并
+        self.assertEqual(extract_urls("google.com 和 https://google.com"), ["https://google.com"])
+
+    def test_no_url_returns_empty(self):
+        self.assertEqual(extract_urls("这里没有链接，只有文字"), [])
+        self.assertEqual(extract_urls(""), [])
+        self.assertEqual(extract_urls(None), [])
+
+    def test_number_and_version_not_url(self):
+        # 版本号/小数（末段非字母）不误判
+        self.assertEqual(extract_urls("升级到版本 15.6.1 试试"), [])
 
 
 class GetLastSpokenTextTests(unittest.TestCase):

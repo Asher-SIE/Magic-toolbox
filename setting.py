@@ -467,7 +467,7 @@ hotKeys = [
         "modifiers": ["ALT", "SHIFT"],
         "key": "e",
         "handler": "on_hotkey_altshifte",
-        "description": "alt+shift+e: 提取VO最后朗读内容中的链接并用默认浏览器打开"
+        "description": "alt+shift+e: 提取VO最后朗读内容中的链接并用默认浏览器打开，多个时弹窗选择"
     }
 ]
 

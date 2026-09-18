@@ -822,3 +822,7 @@ msgstr "Apple 翻译不可用"
 #: main_UI.py
 msgid "no_url_found"
 msgstr "未找到链接"
+
+#: dialogs.py
+msgid "url_select_title"
+msgstr "选择要打开的链接"

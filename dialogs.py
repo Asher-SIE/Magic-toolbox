@@ -720,3 +720,58 @@ class EditDialog(wx.Dialog):
         self.text_processor.set_text(self.text_ctrl.GetValue())
         result = self.text_processor.replace_punctuation_with_newline()
         self.text_ctrl.SetValue(result)
+
+
+class UrlSelectDialog(wx.Dialog):
+    """多URL候选选择对话框：列表展示全部提取结果，选中一条或双击后确认打开"""
+
+    def __init__(self, parent, urls):
+        super().__init__(parent, title=setting._('url_select_title'), size=(460, 320))
+
+        self.urls = urls
+
+        panel = wx.Panel(self)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        self.url_list = wx.ListBox(panel, choices=urls, style=wx.LB_SINGLE)
+        if urls:
+            self.url_list.SetSelection(0)
+        sizer.Add(self.url_list, 1, wx.EXPAND | wx.ALL, 10)
+
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.ok_btn = wx.Button(panel, label=setting._('confirm_btn'))
+        self.cancel_btn = wx.Button(panel, label=setting._('cancel_btn'))
+        self.ok_btn.SetDefault()
+        btn_sizer.Add(self.ok_btn, 0, wx.RIGHT, 10)
+        btn_sizer.Add(self.cancel_btn, 0)
+        sizer.Add(btn_sizer, 0, wx.ALIGN_CENTER | wx.BOTTOM, 10)
+
+        panel.SetSizer(sizer)
+
+        self.ok_btn.Bind(wx.EVT_BUTTON, self.on_ok)
+        self.cancel_btn.Bind(wx.EVT_BUTTON, lambda e: self.EndModal(wx.ID_CANCEL))
+        self.url_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_ok)
+        panel.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
+
+        self.Centre()
+        self.url_list.SetFocus()
+        ime_guard.install(self)
+
+    def on_key_down(self, event):
+        if ime_guard.guard_key_event(event):
+            # 输入法组合中的 ESC（取消组合/候选），不关闭对话框
+            return
+        if event.GetKeyCode() == wx.WXK_ESCAPE:
+            self.EndModal(wx.ID_CANCEL)
+        else:
+            event.Skip()
+
+    def on_ok(self, event):
+        self.EndModal(wx.ID_OK)
+
+    def get_selected(self):
+        """返回选中项的URL，未选中返回None"""
+        index = self.url_list.GetSelection()
+        if index == wx.NOT_FOUND:
+            return None
+        return self.urls[index]

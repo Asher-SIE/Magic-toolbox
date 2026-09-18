@@ -40,4 +40,4 @@ Option+Shift+R    Recognize the image in the clipboard with the current engine (
 Option+Shift+Q    Cycle recognition engines (speaks the engine name)
 
 5. Link Shortcuts
-Option+Shift+E    Extract the link from the last text read aloud by VoiceOver and open it in the default browser; a voice hint is given when no link is found
+Option+Shift+E    Extract the link from the last text read aloud by VoiceOver and open it in the default browser; when multiple links are found a dialog opens for selection; a voice hint is given when no link is found

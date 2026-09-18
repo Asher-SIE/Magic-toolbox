@@ -13,9 +13,9 @@ import wx
 import wx.adv
 
 from AppKit import NSApplication, NSApp, NSWindow
-from dialogs import FindReplaceDialog, EditDialog, AboutDialog
+from dialogs import FindReplaceDialog, EditDialog, AboutDialog, UrlSelectDialog
 from dictionary import Dictionary
-from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, extract_url, split_text_by_punctuation
+from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, extract_urls, split_text_by_punctuation
 from typing import Optional, Tuple
 
 import update
@@ -2168,12 +2168,21 @@ class MainFrame(wx.Frame):
         self.vo_handler.speak_text(setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm'))
 
     def on_hotkey_altshifte(self, event):
-        """alt+shift+e: 提取VO最后朗读内容中的URL并用默认浏览器打开"""
+        """alt+shift+e: 提取VO最后朗读内容中的URL并用默认浏览器打开，多个时弹窗选择"""
         spoken_text = self.vo_handler.get_last_spoken_text()
-        url = extract_url(spoken_text)
-        if not url:
+        urls = extract_urls(spoken_text)
+        if not urls:
             self.vo_handler.speak_text(setting._('no_url_found'))
             return
+        # 单个直接打开，多个弹窗让用户选择；取消或未选中则不打开
+        url = urls[0]
+        if len(urls) > 1:
+            dialog = UrlSelectDialog(self, urls)
+            result = dialog.ShowModal()
+            url = dialog.get_selected() if result == wx.ID_OK else None
+            dialog.Destroy()
+            if not url:
+                return
         import webbrowser
         webbrowser.open(url)
 

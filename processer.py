@@ -131,23 +131,29 @@ class BaseThreadedWorker:
             self.stop_worker()
 
 
-# URL匹配：http(s)或www.开头的连续URL字符（不含空白、中文及全角符号，URL路径中的中文按编码形式存在）
-_URL_PATTERN = re.compile(r'(?:https?://|www\.)[A-Za-z0-9\-._~:/?#@!$&()*+,;=%\[\]]+')
+# URL匹配（finditer全量提取），两个分支：
+# 1. 带协议头/www的URL，字符集宽松，可含端口、路径、查询、锚点（localhost这类无点主机仅此分支可匹配）
+# 2. 裸域名（如 GOOGLE.COM），以"末段为2个以上字母"近似判断TLD，会把 readme.md 这类文件名一并
+#    视作URL，属可接受误报；路径中不含空白、中文及全角符号
+_URL_PATTERN = re.compile(
+    r'(?:https?://|www\.)[A-Za-z0-9\-._~:/?#@!$&()*+,;=%\[\]]+'
+    r'|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?::\d{1,5})?(?:/[A-Za-z0-9\-._~:/?#@!$&()*+,;=%\[\]]*)?'
+)
 # URL末尾需剥离的标点（中英文句读、括号引号等，多为朗读文本中URL后的自然语言内容）
 _URL_TRAILING_PUNCT = ".,;:!?)]}>\"'\u2026\u3002\uff0c\u3001\uff1b\uff1a\uff01\uff1f\uff09\u3011\u300b\u201d\u2019"
 
 
-def extract_url(text: Optional[str]) -> Optional[str]:
-    """从朗读文本中提取第一个URL；www.开头自动补全https://，无URL返回None"""
+def extract_urls(text: Optional[str]) -> List[str]:
+    """提取朗读文本中按出现顺序的全部URL并去重；无协议头的裸域名自动补全https://"""
     if not text:
-        return None
-    match = _URL_PATTERN.search(text)
-    if not match:
-        return None
-    url = match.group(0).rstrip(_URL_TRAILING_PUNCT)
-    if url.lower().startswith("www."):
-        url = "https://" + url
-    return url
+        return []
+    urls = []
+    for match in _URL_PATTERN.finditer(text):
+        url = match.group(0).rstrip(_URL_TRAILING_PUNCT)
+        if not url.lower().startswith(("http://", "https://")):
+            url = "https://" + url
+        urls.append(url)
+    return list(dict.fromkeys(urls))
 
 
 def split_text_by_punctuation(text: str, max_chars: int) -> List[str]:
