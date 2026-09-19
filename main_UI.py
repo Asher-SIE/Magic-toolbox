@@ -236,6 +236,17 @@ class MainFrame(wx.Frame):
         # 添加到菜单栏
         menubar.Append(app_menu, setting._('menubar_opt'))
 
+        # 鼠标路标菜单：热键同名动作的菜单入口，槽位定义与热键共用 MOUSE_LANDMARK_SLOTS
+        mouse_menu = wx.Menu()
+        for slot in setting.MOUSE_LANDMARK_SLOTS:
+            item = mouse_menu.Append(wx.NewId(), setting._('mouse_mark_slot_label').format(slot=slot))
+            self.Bind(wx.EVT_MENU, lambda e, s=slot: self.mouse_mark_slot(s), item)
+        mouse_menu.AppendSeparator()
+        for slot in setting.MOUSE_LANDMARK_SLOTS:
+            item = mouse_menu.Append(wx.NewId(), setting._('mouse_jump_slot_label').format(slot=slot))
+            self.Bind(wx.EVT_MENU, lambda e, s=slot: self.mouse_jump_slot(s), item)
+        menubar.Append(mouse_menu, setting._('menubar_mouse'))
+
         # 帮助菜单
         help_menu = wx.Menu()
         program_help = help_menu.Append(wx.NewId(), setting._('menu_help_program'))
@@ -2321,11 +2332,8 @@ class MainFrame(wx.Frame):
         """路标坐标播报：直接朗读整数坐标，不做冗余修饰"""
         return f"{int(round(position[0]))}, {int(round(position[1]))}"
 
-    def on_hotkey_mouse_mark(self, event):
-        """opt+shift+数字: 将当前鼠标位置标记为当前应用的路标槽位"""
-        slot = self._hotkey_name_of(event).replace("mark_", "")
-        if not slot:
-            return
+    def mouse_mark_slot(self, slot: str):
+        """标记当前鼠标位置为当前应用的路标槽位（热键与菜单共用入口）"""
         position = self._get_mouse_position()
         if position is None:
             self.vo_handler.speak_text("读取鼠标坐标失败")
@@ -2335,11 +2343,8 @@ class MainFrame(wx.Frame):
             return
         self.vo_handler.speak_text(self._format_landmark_pos(position))
 
-    def on_hotkey_mouse_jump(self, event):
-        """cmd+opt+shift+数字: 将鼠标跳转到当前应用对应槽位标记的位置"""
-        slot = self._hotkey_name_of(event).replace("jump_", "")
-        if not slot:
-            return
+    def mouse_jump_slot(self, slot: str):
+        """将鼠标跳转到当前应用对应槽位标记的位置（热键与菜单共用入口）"""
         position = setting.get_mouse_landmark(self._current_app_id(), slot)
         if position is None:
             self.vo_handler.speak_text("未标记")
@@ -2348,6 +2353,18 @@ class MainFrame(wx.Frame):
             self.vo_handler.speak_text("跳转失败")
             return
         self.vo_handler.speak_text(self._format_landmark_pos(position))
+
+    def on_hotkey_mouse_mark(self, event):
+        """opt+shift+数字: 将当前鼠标位置标记为当前应用的路标槽位"""
+        slot = self._hotkey_name_of(event).replace("mark_", "")
+        if slot:
+            self.mouse_mark_slot(slot)
+
+    def on_hotkey_mouse_jump(self, event):
+        """cmd+opt+shift+数字: 将鼠标跳转到当前应用对应槽位标记的位置"""
+        slot = self._hotkey_name_of(event).replace("jump_", "")
+        if slot:
+            self.mouse_jump_slot(slot)
 
     def on_browse_ocr_image(self, event):
         """工具栏浏览图片文件并识别"""

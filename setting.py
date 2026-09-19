@@ -550,9 +550,11 @@ hotKeys = [
     }
 ]
 
+# 鼠标路标槽位键：1-6 与 0；7/8/9 已被剪贴板导航占用，不得使用（菜单栏入口同用此定义）
+MOUSE_LANDMARK_SLOTS = ("1", "2", "3", "4", "5", "6", "0")
+
 # 鼠标路标热键：opt+shift+数字 标记当前鼠标位置，再加 cmd 跳转回标记点
-# 槽位取 1-6 与 0；7/8/9 已被剪贴板导航占用，不得使用
-for _digit in ("1", "2", "3", "4", "5", "6", "0"):
+for _digit in MOUSE_LANDMARK_SLOTS:
     hotKeys.append({
         "name": f"mark_{_digit}",
         "modifiers": ["ALT", "SHIFT"],

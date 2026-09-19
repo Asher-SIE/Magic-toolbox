@@ -93,11 +93,13 @@ class MouseLandmarkTests(unittest.TestCase):
             self.assertFalse(setting.set_mouse_landmark("com.apple.Safari", "1", 1, 2))
 
     def test_hotkey_slots_avoid_clipboard_nav(self):
-        # 标记/跳转槽位为 1-6 与 0，不得占用剪贴板导航的 7/8/9
+        # 标记/跳转槽位为 1-6 与 0，不得占用剪贴板导航的 7/8/9；热键与菜单共用该定义
+        slots = set(setting.MOUSE_LANDMARK_SLOTS)
+        self.assertEqual(slots, {"1", "2", "3", "4", "5", "6", "0"})
         mark_keys = {h["key"] for h in setting.hotKeys if h["name"].startswith("mark_")}
         jump_keys = {h["key"] for h in setting.hotKeys if h["name"].startswith("jump_")}
-        self.assertEqual(mark_keys, {"1", "2", "3", "4", "5", "6", "0"})
-        self.assertEqual(jump_keys, {"1", "2", "3", "4", "5", "6", "0"})
+        self.assertEqual(mark_keys, slots)
+        self.assertEqual(jump_keys, slots)
         self.assertEqual(mark_keys & {"7", "8", "9"}, set())
 
 

@@ -100,6 +100,18 @@ msgid "menu_opt_clean_list"
 msgstr "清空剪贴板列表"
 
 #: main_UI.py
+msgid "menubar_mouse"
+msgstr "鼠标路标"
+
+#: main_UI.py
+msgid "mouse_mark_slot_label"
+msgstr "标记当前位置到槽位{slot}"
+
+#: main_UI.py
+msgid "mouse_jump_slot_label"
+msgstr "跳转到槽位{slot}"
+
+#: main_UI.py
 msgid "menubar_help"
 msgstr "帮助"
 
