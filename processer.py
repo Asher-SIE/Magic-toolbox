@@ -362,30 +362,6 @@ class Translator(BaseThreadedWorker):
             self._model = None
             self.model_available = False
 
-    def _load_model(self) -> Optional[llama_cpp.Llama]:
-        """加载模型"""
-        if not self.model_path:
-            self.model_available = False
-            self.logger.warning("模型路径未设置，请通过浏览按钮选择翻译模型")
-            return None
-
-        if not os.path.exists(self.model_path):
-            self.model_available = False
-            self.logger.warning(f"模型文件未找到：{self.model_path}")
-            return None
-
-        try:
-            self.model_available = True
-            self._model = llama_cpp.Llama(
-                model_path=self.model_path,
-                **self.DEFAULT_CONFIG
-            )
-            return self._model
-        except Exception as e:
-            self.model_available = False
-            self.logger.error(f"模型加载失败：{str(e)}")
-            return None
-
     def translate(self, original_text, source_lang, target_lang):
         """公有方法：翻译接口"""
         if not self.model_available or not self._model:

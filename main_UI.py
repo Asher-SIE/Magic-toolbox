@@ -61,7 +61,6 @@ class MainFrame(wx.Frame):
         self._clipboard_filter_keyword = ""  # 搜索关键词
         self._clipboard_filtered_data = None  # 筛选后的数据
         
-        self._is_translating = False
         self._translation_lock = threading.Lock()
 
         # 识别（OCR）：当前引擎模式、引擎实例、虚拟引擎列表（循环切换用）、实例缓存与防重入锁
@@ -249,7 +248,7 @@ class MainFrame(wx.Frame):
         vlm_model_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_model'))
         vlm_mmproj_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_mmproj'))
         vlm_home_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_home'))
-        download_vlm = help_menu.AppendSubMenu(download_vlm_menu, setting._('menu_help_download_vlm'))
+        help_menu.AppendSubMenu(download_vlm_menu, setting._('menu_help_download_vlm'))
 
         self.Bind(wx.EVT_MENU, self.on_help_program, program_help)
         self.Bind(wx.EVT_MENU, self.on_help_shortcuts, shortcuts_help)
@@ -1681,10 +1680,8 @@ class MainFrame(wx.Frame):
                 logging.warning(f"翻译失败: {e}")
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
-                self._is_translating = False
                 self._translation_lock.release()
 
-        self._is_translating = True
         threading.Thread(target=translate_worker, daemon=True).start()
 
 
@@ -2517,7 +2514,6 @@ class MainFrame(wx.Frame):
                 wx.CallAfter(self.text_ctrl.SetValue, f"[{setting._('translation_failed')}: {e}]")
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
-                self._is_translating = False
                 self._translation_lock.release()
         
         thread = threading.Thread(target=translate_worker, daemon=True)
@@ -2550,7 +2546,6 @@ class MainFrame(wx.Frame):
                 wx.CallAfter(self.text_ctrl.SetValue, f"{partial}\n\n{error_line}" if partial else error_line)
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
-                self._is_translating = False
                 self._translation_lock.release()
         
         thread = threading.Thread(target=translate_worker, daemon=True)
