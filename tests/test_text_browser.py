@@ -61,10 +61,13 @@ class TextBrowserJumpTests(unittest.TestCase):
         self.assertEqual(self.tb.focus_pos, 0)
 
     def test_trailing_empty_line(self):
-        # 末尾连续空行：最后一行内容为空，朗读文本回退为换行占位
+        # 末尾连续空行：最后一行内容为空，内部占位为换行符，焦点落在该空行行首；
+        # browse 返回值统一经 get_char_explanation 解释（符号库读作"换行"/"new line"），
+        # 断言与解释结果比对，不随 locale 或同进程 setting 导入顺序波动
         self.tb.set_text("第一行\n\n")
-        self.assertEqual(self.tb.browse("last_line"), "\n")
+        self.assertEqual(self.tb.browse("last_line"), self.tb.get_char_explanation("\n"))
         self.assertEqual(self.tb._current_line, "\n")
+        self.assertEqual(self.tb.focus_pos, self.tb.current_text.rfind("\n") + 1)
 
     def test_empty_text_returns_empty(self):
         self.tb.set_text("")
