@@ -127,4 +127,21 @@ echo "正在清理 .dist-info 目录..."
 find "$APP_BUNDLE" -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null
 echo "清理完成"
 
+# 使用自签名证书签名（同一证书 → 签名身份稳定，TCC 权限不随重打包丢失）
+SIGN_CERT="MagicToolbox Dev"
+if security find-identity -v -p codesigning | grep -q "$SIGN_CERT"; then
+    echo "正在签名应用（证书：$SIGN_CERT）..."
+    codesign --force --deep --sign "$SIGN_CERT" "$APP_BUNDLE"
+    if [ $? -eq 0 ]; then
+        codesign --verify --verbose "$APP_BUNDLE"
+        echo "签名成功"
+    else
+        echo "错误：签名失败！"
+        exit 1
+    fi
+else
+    echo "警告：未找到自签名证书 \"$SIGN_CERT\"，跳过签名（重打包后系统权限会失效）"
+    echo "创建方法（一次性）：钥匙串访问 → 证书助理 → 创建证书，类型选\"代码签名\"，名称填 \"$SIGN_CERT\""
+fi
+
 echo "打包流程完成"
