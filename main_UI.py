@@ -252,22 +252,26 @@ class MainFrame(wx.Frame):
         program_help = help_menu.Append(wx.NewId(), setting._('menu_help_program'))
         shortcuts_help = help_menu.Append(wx.NewId(), setting._('menu_help_shortcuts'))
         changelog_help = help_menu.Append(wx.NewId(), setting._('menu_help_changelog'))
-        download_model = help_menu.Append(wx.NewId(), setting._('menu_help_download_model'))
-
-        # 视觉模型下载子菜单：需分别下载主模型与视觉编码器两个文件，故分列直链与首页
-        download_vlm_menu = wx.Menu()
-        vlm_model_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_model'))
-        vlm_mmproj_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_mmproj'))
-        vlm_home_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_home'))
-        help_menu.AppendSubMenu(download_vlm_menu, setting._('menu_help_download_vlm'))
 
         self.Bind(wx.EVT_MENU, self.on_help_program, program_help)
         self.Bind(wx.EVT_MENU, self.on_help_shortcuts, shortcuts_help)
         self.Bind(wx.EVT_MENU, self.on_help_changelog, changelog_help)
-        self.Bind(wx.EVT_MENU, self.on_download_model, download_model)
-        self.Bind(wx.EVT_MENU, self.on_download_vlm_model, vlm_model_item)
-        self.Bind(wx.EVT_MENU, self.on_download_vlm_mmproj, vlm_mmproj_item)
-        self.Bind(wx.EVT_MENU, self.on_download_vlm_home, vlm_home_item)
+
+        # 内部机生产限制（debug 标志未开启）下本地模型不可用，两个模型下载入口不展示
+        if not setting.is_internal_locked():
+            download_model = help_menu.Append(wx.NewId(), setting._('menu_help_download_model'))
+
+            # 视觉模型下载子菜单：需分别下载主模型与视觉编码器两个文件，故分列直链与首页
+            download_vlm_menu = wx.Menu()
+            vlm_model_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_model'))
+            vlm_mmproj_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_mmproj'))
+            vlm_home_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_home'))
+            help_menu.AppendSubMenu(download_vlm_menu, setting._('menu_help_download_vlm'))
+
+            self.Bind(wx.EVT_MENU, self.on_download_model, download_model)
+            self.Bind(wx.EVT_MENU, self.on_download_vlm_model, vlm_model_item)
+            self.Bind(wx.EVT_MENU, self.on_download_vlm_mmproj, vlm_mmproj_item)
+            self.Bind(wx.EVT_MENU, self.on_download_vlm_home, vlm_home_item)
 
         # 检查更新菜单
         check_update = help_menu.Append(wx.NewId(), setting._('menu_help_check_update'))
