@@ -11,7 +11,12 @@ if os.path.exists('AppleTranslateTool.app'):
 a = Analysis(
     ['main_UI.py'],
     pathex=[],
-    binaries=[('venv/lib/python3.13/site-packages/llama_cpp/lib', '.')],
+    # llama_cpp（0.3.26+）运行时按「包目录/lib」搜索 libllama/libmtmd 等全部动态库，
+    # 故须将整个 lib 目录拷入包内 llama_cpp/lib；另拷一份到 Frameworks 根目录兜底 @rpath 依赖解析
+    binaries=[
+        ('venv/lib/python3.13/site-packages/llama_cpp/lib', '.'),
+        ('venv/lib/python3.13/site-packages/llama_cpp/lib', 'llama_cpp/lib'),
+    ],
     datas=[('resources', 'resources'), ('locales', 'locales')] + apple_tool_datas,
     hiddenimports=[],
     hookspath=[],
@@ -57,6 +62,6 @@ app = BUNDLE(
     info_plist={
         'CFBundleDevelopmentRegion': 'zh_CN',
         'CFBundleLocalizations': ['zh_CN', 'en'],
-        'CFBundleShortVersionString': '1.2.0',
+        'CFBundleShortVersionString': '1.2.1',
     },
 )

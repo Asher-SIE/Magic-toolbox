@@ -1,11 +1,11 @@
 # MagicToolbox
-MagicToolbox is an assistive tool designed exclusively for macOS VoiceOver visually impaired users, integrating core features including real-time translation, clipboard management, and one-click text processing.
+MagicToolbox is an assistive tool designed for macOS VoiceOver visually impaired users, integrating core features such as real-time translation, clipboard management, and one-click text processing.
 
 ## Features
 ### Translation Features
 - **Real-time Translation**: Supports instant translation of content read aloud by VoiceOver
 - **Multi-language Support**: Supports over 38 languages, including English, Chinese, French, Japanese, Korean, Spanish, etc.
-- **Offline Translation**: Powered by the Tencent Hunyuan Large Language Model (model file must be downloaded separately), works without an internet connection
+- **Offline Translation**: Integrates Apple Translation and the Tencent Hunyuan Large Language Model (model file must be downloaded separately); works without an internet connection
 
 ### Clipboard Management
 - **History Records**: Automatically saves clipboard content and supports browsing history
@@ -13,17 +13,30 @@ MagicToolbox is an assistive tool designed exclusively for macOS VoiceOver visua
 - **Editing Function**: Built-in text editor with undo and redo functionality
 - **Quick Processing**: Provides handy features including removing blank spaces, merging spaces, converting numbers to Chinese characters, and text splitting
 
+### Image Recognition (OCR & Image Description)
+- **Dual-engine Switching**: Apple system OCR (Vision framework, requires macOS 26+) extracts text, while the local vision model outputs a ~100-character image description (the vision model must be downloaded separately); cycle with Option+Shift+Q
+- **Multiple Image Sources**: Supports recognizing clipboard images and local image files
+- **Local Vision Model**: Based on llama.cpp loading a GGUF multimodal model, generating image descriptions offline via mmproj visual projection (the model must be downloaded separately, see Installation Steps)
+
 ### Voice Enhancement
 - **VoiceOver Integration**: Optimized for VoiceOver, works seamlessly with the screen reader
+- **Volume Limit**: Built-in hearing protection mechanism, automatically limits volume to a safe range
 - **Character Explanation**: Supports viewing detailed explanations of individual characters
 - **Content Appending**: Supports appending and copying text read aloud by VoiceOver
+
+## Permission Requirements
+On first use, grant the following permissions:
+
+1. Open VoiceOver Utility -> General -> Check the "Allow AppleScript to control VoiceOver" checkbox
+2. Open System Settings -> Privacy & Security -> Accessibility -> "Allow the apps below to control your computer" -> Add MagicToolbox to the list
 
 ## Usage
 ### Interface Navigation
 The app uses a layout with a left navigation bar and a right content panel:
 - **Translation Panel**: Enter text to perform translation
 - **Clipboard Panel**: Browse and manage clipboard history
-- **Settings Panel**: Configure the translation model path and the maximum number of saved clipboard records
+- **Recognition Panel**: Perform text recognition (OCR) or image description on clipboard images or image files (according to the current engine)
+- **Settings Panel**: Configure the translation model path, the maximum number of saved clipboard records, and the editor sentence punctuation
 
 ### Keyboard Shortcuts
 | Shortcut | Function |
@@ -51,21 +64,25 @@ The app uses a layout with a left navigation bar and a right content panel:
 
 ### 3. Text Browsing Shortcuts
 | Option+A | Append and copy content read aloud by VoiceOver |
-| Option+Shift+7 | Previous item in clipboard list |
-| Option+Shift+8 | Previous line of current clipboard content |
-| Option+Shift+9 | Next item in clipboard list |
-| Option+Shift+U | Previous character of current clipboard content |
-| Option+Shift+I | Explain current character in clipboard browsing mode |
-| Option+Shift+O | Next character of current clipboard content |
-| Option+Shift+J | Sync clipboard content to system clipboard |
-| Option+Shift+K | Next line of current clipboard content |
-| Option+Shift+M | View clipboard summary (row and column information) |
-| Option+Shift+P | Paste the current line into the frontmost app's input box (system clipboard is restored about 1 second after the last paste) |
+| Option+Shift+7 | Switch to the previous item in the clipboard list (long-press to jump to the first item) |
+| Option+Shift+8 | Switch to the previous line of the current clipboard content (long-press to jump to the first line) |
+| Option+Shift+9 | Switch to the next item in the clipboard list (long-press to jump to the last item) |
+| Option+Shift+U | Switch to the previous character of the current clipboard content |
+| Option+Shift+I | Explain the current character in clipboard browsing mode |
+| Option+Shift+O | Switch to the next character of the current clipboard content |
+| Option+Shift+J | Sync clipboard content to the system clipboard |
+| Option+Shift+K | Switch to the next line of the current clipboard content (long-press to jump to the last line) |
+| Option+Shift+M | View the clipboard summary (row and column information) |
+| Option+Shift+P | Paste the current line into the frontmost app's input box |
+Option+Shift+E    Extract the link from the last text read aloud by VoiceOver and open it in the default browser; a voice hint is given when no link is found
+
+### 4. Image Recognition Shortcuts
+| Option+Shift+R | Recognize the clipboard image with the current engine (Apple OCR extracts text / the local vision model outputs a ~100-character description) |
+| Option+Shift+Q | Switch recognition engines |
 
 ## System Requirements
-- macOS 12.0 or later
+- macOS 26.0 or later
 - Python 3.10 or later
-- Homebrew (for installing project dependencies)
 
 ## Installation Steps
 ### 1. Clone the Repository
@@ -85,16 +102,19 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Download the Translation Model
+### 4. Download the Translation Model (Optional)
 The translation function requires the Tencent Hunyuan Large Language Model (GGUF format):
 1. Visit the Hugging Face platform to download the model file
 2. Save the model file to any local directory
 3. On the first run, select the model file path via the built-in Settings panel
 
-### 5. Run the Application
-```bash
-python main_UI.py
-```
+### 5. Download the Vision Model (Optional)
+Image description requires the recommended model Qwen/Qwen3-VL-4B-Instruct-GGUF (two files in total; you can also reach the download links via the app menu "Help" -> "Download Vision Model"):
+1. Main model: [Qwen3VL-4B-Instruct-Q4_K_M.gguf](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/Qwen3VL-4B-Instruct-Q4_K_M.gguf?download=true) (~2.33GB)
+2. Vision encoder: [mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf?download=true) (~434MB)
+3. Save both files to any local directory and select their paths in the Recognition group of the Settings panel
+
+Apple system OCR requires no model download; skip this step if you don't use image description. Note: image description requires llama-cpp-python >= 0.3.26.
 
 ## Build & Package
 ### Using the Build Script
@@ -105,17 +125,34 @@ chmod +x build.command
 After packaging, the application file will be generated in the `dist/MagicToolbox.app` directory.
 
 ### Notes
-- Ensure the `resources` folder exists in the project root directory and contains all necessary resource files
+- Ensure the `resources` folder exists in the project root directory and contains all the necessary resource files
 - Before the first packaging, install the packaging tool: `pip install pyinstaller`
+- For the build and manual verification of the Apple Translation tool, see `AppleTranslateTool/README.md` (requires macOS 26+ and the Xcode 26 toolchain)
+
+## Development & Testing
+### Run Unit Tests
+```bash
+python -m unittest discover -s tests -t . -v
+```
+Some test cases (e.g., clipboard and VoiceOver related) only run on macOS and are automatically skipped on other platforms.
+
+### Build the Apple Translation Tool Separately
+```bash
+./build_apple_translator.sh
+```
 
 ## Project Structure
 ```
 Magic-toolbox/
 ├── main_UI.py          # Main interface code
 ├── processer.py        # Core processor (translation, clipboard, VoiceOver functions)
+├── dictionary.py       # Local dictionary (query layer shared by all translation modes)
+├── apple_translator.py # Apple translation bridge (calls the headless Swift CLI, requires macOS 26+)
+├── ocr_engine.py       # Recognition engines (Apple Vision OCR and local vision model image description)
 ├── setting.py          # Configuration and internationalization module
 ├── resources/          # Resource files directory
 │   └── dict.txt        # Local dictionary file
+├── tests/              # Unit tests
 ├── locales/            # Internationalization language files
 │   ├── zh_CN/          # Chinese language pack
 │   └── en/             # English language pack
@@ -127,6 +164,7 @@ Magic-toolbox/
 ## Tech Stack
 - **GUI Framework**: wxPython 4.2
 - **Translation Model**: llama.cpp + Tencent Hunyuan Large Language Model
+- **Image Recognition**: Apple Vision (via PyObjC) + llama.cpp + Qwen3-VL multimodal model (image description)
 - **System Integration**: appscript, PyObjC
 - **Packaging Tool**: PyInstaller
 

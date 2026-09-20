@@ -13,9 +13,9 @@ import wx
 import wx.adv
 
 from AppKit import NSApplication, NSApp, NSWindow
-from dialogs import FindReplaceDialog, EditDialog, AboutDialog
+from dialogs import FindReplaceDialog, EditDialog, AboutDialog, UrlSelectDialog
 from dictionary import Dictionary
-from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, split_text_by_punctuation
+from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, extract_urls, insert_heading_dot, split_text_by_punctuation
 from typing import Optional, Tuple
 
 import update
@@ -23,6 +23,16 @@ import ime_guard
 
 
 class MainFrame(wx.Frame):
+    # 长按跳转热键表：热键名 -> (macOS 物理键码, 跳转方法名)
+    LONG_PRESS_KEYS = {
+        "altshift7": (26, "_jump_clipboard_head"),   # kVK_ANSI_7
+        "altshift9": (25, "_jump_clipboard_tail"),   # kVK_ANSI_9
+        "altshift8": (28, "_jump_text_first_line"),  # kVK_ANSI_8
+        "altshiftk": (40, "_jump_text_last_line"),   # kVK_ANSI_K
+    }
+    LONG_PRESS_THRESHOLD = 0.4  # 长按判定阈值（秒），按住超过该时长直接跳到该方向尽头
+    LONG_PRESS_POLL_MS = 50     # 长按监测轮询间隔（毫秒）
+
     def __init__(self, parent, title):
         super(MainFrame, self).__init__(parent, title=title, size=(1024, 768))
         
@@ -51,8 +61,14 @@ class MainFrame(wx.Frame):
         self._clipboard_filter_keyword = ""  # 搜索关键词
         self._clipboard_filtered_data = None  # 筛选后的数据
         
-        self._is_translating = False
         self._translation_lock = threading.Lock()
+
+        # 识别（OCR）：当前引擎模式、引擎实例、虚拟引擎列表（循环切换用）、实例缓存与防重入锁
+        self._ocr_mode = 'apple'
+        self.ocr_engine = None
+        self._ocr_engine_keys = []
+        self._ocr_engine_cache = {}
+        self._ocr_lock = threading.Lock()
         
         self.edit_dialog = None
         
@@ -77,6 +93,8 @@ class MainFrame(wx.Frame):
         
         self._toolbar_source_choice = None
         self._toolbar_target_choice = None
+        self._ocr_engine_choice = None
+        self._ocr_engine_key_by_display = {}
         
         self.init_ui()
         self.create_menu_bar()
@@ -102,7 +120,17 @@ class MainFrame(wx.Frame):
         self._paste_original_clipboard = None
         self._paste_restore_timer = None
         self._is_pasting = False
-        
+
+        # 长按监测：虚拟浏览器方向键按住超过阈值后直接跳到该方向尽头
+        self._long_press_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_long_press_timer, self._long_press_timer)
+        self._long_press_start = 0.0
+        self._long_press_keycode = 0
+        self._long_press_action = None
+
+        # 提示音缓存：wx 异步播放期间要求对象存活，统一持有引用
+        self._sounds = {}
+
         # 应用启动时检查VoiceOver状态，如果未运行则后台启动
         if not self.vo_handler.is_voiceover_running():
             logging.info("VoiceOver未运行，后台启动VoiceOver")
@@ -138,6 +166,13 @@ class MainFrame(wx.Frame):
         # 初始化翻译器
         self.init_translator()
 
+        # 初始化 OCR 引擎（先构建虚拟引擎列表，供 Option+Shift+Q 循环切换）
+        from ocr_engine import available_engines
+        self._ocr_engine_keys = [engine.key for engine in available_engines(setting.is_internal_device())]
+        if self._ocr_engine_keys and self._ocr_mode not in self._ocr_engine_keys:
+            self._ocr_mode = self._ocr_engine_keys[0]
+        self.init_ocr_engine()
+
         #启动处理器
         self.clipboard_monitor.start_worker(callback=self.on_new_clipboard_content)
 
@@ -152,6 +187,9 @@ class MainFrame(wx.Frame):
         self.Centre()
         self.Show(True)
 
+        # 程序就绪提示音（播报一次）
+        self.play_sound("start")
+
 
     def init_toolbar(self):
         """工具栏"""
@@ -160,6 +198,7 @@ class MainFrame(wx.Frame):
         self.copy_btn_id = wx.NewIdRef()
         self.edit_btn_id = wx.NewIdRef()
         self.delete_btn_id = wx.NewIdRef()
+        self.browse_ocr_btn_id = wx.NewIdRef()
 
         self.toolbar.Realize()
 
@@ -197,17 +236,42 @@ class MainFrame(wx.Frame):
         # 添加到菜单栏
         menubar.Append(app_menu, setting._('menubar_opt'))
 
+        # 鼠标路标菜单：热键同名动作的菜单入口，槽位定义与热键共用 MOUSE_LANDMARK_SLOTS
+        mouse_menu = wx.Menu()
+        for slot in setting.MOUSE_LANDMARK_SLOTS:
+            item = mouse_menu.Append(wx.NewId(), setting._('mouse_mark_slot_label').format(slot=slot))
+            self.Bind(wx.EVT_MENU, lambda e, s=slot: self.mouse_mark_slot(s), item)
+        mouse_menu.AppendSeparator()
+        for slot in setting.MOUSE_LANDMARK_SLOTS:
+            item = mouse_menu.Append(wx.NewId(), setting._('mouse_jump_slot_label').format(slot=slot))
+            self.Bind(wx.EVT_MENU, lambda e, s=slot: self.mouse_jump_slot(s), item)
+        menubar.Append(mouse_menu, setting._('menubar_mouse'))
+
         # 帮助菜单
         help_menu = wx.Menu()
         program_help = help_menu.Append(wx.NewId(), setting._('menu_help_program'))
         shortcuts_help = help_menu.Append(wx.NewId(), setting._('menu_help_shortcuts'))
         changelog_help = help_menu.Append(wx.NewId(), setting._('menu_help_changelog'))
-        download_model = help_menu.Append(wx.NewId(), setting._('menu_help_download_model'))
 
         self.Bind(wx.EVT_MENU, self.on_help_program, program_help)
         self.Bind(wx.EVT_MENU, self.on_help_shortcuts, shortcuts_help)
         self.Bind(wx.EVT_MENU, self.on_help_changelog, changelog_help)
-        self.Bind(wx.EVT_MENU, self.on_download_model, download_model)
+
+        # 内部机生产限制（debug 标志未开启）下本地模型不可用，两个模型下载入口不展示
+        if not setting.is_internal_locked():
+            download_model = help_menu.Append(wx.NewId(), setting._('menu_help_download_model'))
+
+            # 视觉模型下载子菜单：需分别下载主模型与视觉编码器两个文件，故分列直链与首页
+            download_vlm_menu = wx.Menu()
+            vlm_model_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_model'))
+            vlm_mmproj_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_mmproj'))
+            vlm_home_item = download_vlm_menu.Append(wx.NewId(), setting._('ocr_vlm_download_home'))
+            help_menu.AppendSubMenu(download_vlm_menu, setting._('menu_help_download_vlm'))
+
+            self.Bind(wx.EVT_MENU, self.on_download_model, download_model)
+            self.Bind(wx.EVT_MENU, self.on_download_vlm_model, vlm_model_item)
+            self.Bind(wx.EVT_MENU, self.on_download_vlm_mmproj, vlm_mmproj_item)
+            self.Bind(wx.EVT_MENU, self.on_download_vlm_home, vlm_home_item)
 
         # 检查更新菜单
         check_update = help_menu.Append(wx.NewId(), setting._('menu_help_check_update'))
@@ -233,64 +297,37 @@ class MainFrame(wx.Frame):
 
     def init_ui(self):
         """初始化用户界面"""
-        self.splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE | wx.SP_3DSASH)
-        
-        # 创建左侧导航容器
-        self.nav_container_panel = wx.Panel(self.splitter)
-
-        static_box = wx.StaticBox(self.nav_container_panel, label=setting._("nav_select_func")) 
-        static_box_sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
-
-        self.nav_list = wx.ListBox(self.nav_container_panel, choices=[
-            setting._('nav_translation'),
-            setting._('nav_clipboard'),
-            setting._('nav_settings')
-        ])
-        self.nav_list.SetMinSize((150, -1)) # 设置最小宽度
-        self.nav_list.SetSelection(0)
-        self.nav_list.Bind(wx.EVT_LISTBOX, self.on_nav_selection_changed)
-
-        static_box_sizer.Add(self.nav_list, 1, wx.EXPAND | wx.ALL, 5) # 拉伸填充并添加边    距
-        self.nav_container_panel.SetSizer(static_box_sizer)
-
-
-        # 创建右侧内容面板容器
-        self.main_panel = wx.Panel(self.splitter)
-
-        # 创建一个 Sizer 来管理 main_panel 内部的内容
-        self.main_panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.main_panel.SetSizer(self.main_panel_sizer)
+        # 标准选项卡容器（参考 Win 属性对话框）：四个功能面板作为选项卡页，
+        # 等效替换原左侧 ListBox 导航，切换逻辑保持 switch_to_module 不变
+        self.notebook = wx.Notebook(self)
+        self.notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_nav_page_changed)
 
         # --- 初始化各功能模块的面板 ---
         # 翻译面板
-        self.translation_panel = wx.Panel(self.main_panel)
+        self.translation_panel = wx.Panel(self.notebook)
         self.setup_translation_panel()
-        self.translation_panel.Hide() # 默认隐藏
 
         # 剪贴板面板
-        self.clipboard_panel = wx.Panel(self.main_panel)
+        self.clipboard_panel = wx.Panel(self.notebook)
         self.setup_clipboard_panel()
-        self.clipboard_panel.Hide() # 默认隐藏
+
+        # 识别面板
+        self.recognition_panel = wx.Panel(self.notebook)
+        self.setup_recognition_panel()
 
         # 设置面板
-        self.settings_panel = wx.Panel(self.main_panel)
+        self.settings_panel = wx.Panel(self.notebook)
         self.setup_settings_panel()
-        self.settings_panel.Hide() # 默认隐藏
 
-        # 将各功能面板添加到 main_panel 的 Sizer 中
-        self.main_panel_sizer.Add(self.translation_panel, 1, wx.EXPAND)
-        self.main_panel_sizer.Add(self.clipboard_panel, 1, wx.EXPAND)
-        self.main_panel_sizer.Add(self.settings_panel, 1, wx.EXPAND)
+        # 选项卡页与标题，顺序与原导航列表一致
+        self.notebook.AddPage(self.translation_panel, setting._('nav_translation'))
+        self.notebook.AddPage(self.clipboard_panel, setting._('nav_clipboard'))
+        self.notebook.AddPage(self.recognition_panel, setting._('nav_recognition'))
+        self.notebook.AddPage(self.settings_panel, setting._('nav_settings'))
 
-        # 将左右两部分加入分割窗口
-        self.splitter.SplitVertically(self.nav_container_panel, self.main_panel)
-        self.splitter.SetSashGravity(0.2) # 设置分割线位置，左边占20%
-        self.splitter.SetMinimumPaneSize(100) # 设置最小窗格大小
-
-        # 创建一个顶级 Sizer 并将其设置给主框架
-        # 这样主框架就能管理分割窗口
+        # 顶级 Sizer 管理选项卡容器
         main_frame_sizer = wx.BoxSizer(wx.VERTICAL)
-        main_frame_sizer.Add(self.splitter, 1, wx.EXPAND)
+        main_frame_sizer.Add(self.notebook, 1, wx.EXPAND)
         self.SetSizer(main_frame_sizer)
 
         # 初始显示翻译面板
@@ -299,15 +336,26 @@ class MainFrame(wx.Frame):
 
     def setup_translation_panel(self):
         """设置翻译功能面板的UI元素"""
-        static_box = wx.StaticBox(self.translation_panel, label=setting._("trans_input_placeholder")) 
-        sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL) 
-        
+        static_box = wx.StaticBox(self.translation_panel, label=setting._("trans_input_placeholder"))
+        sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL)
+
         self.text_ctrl = wx.TextCtrl(self.translation_panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
         self.text_ctrl.Bind(wx.EVT_CHAR_HOOK, self.on_key_to_translate)
-        
+
         sizer.Add(self.text_ctrl, 1, wx.EXPAND | wx.ALL, 5)
-        
+
         self.translation_panel.SetSizer(sizer)
+
+    def setup_recognition_panel(self):
+        """设置识别（OCR）功能面板的UI元素，布局与翻译面板一致"""
+        static_box = wx.StaticBox(self.recognition_panel, label=setting._("recognition_hint"))
+        sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL)
+
+        self.ocr_result_ctrl = wx.TextCtrl(self.recognition_panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER)
+
+        sizer.Add(self.ocr_result_ctrl, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.recognition_panel.SetSizer(sizer)
     
     def on_toolbar_source_lang_changed(self, event):
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice:
@@ -370,6 +418,11 @@ class MainFrame(wx.Frame):
             else:
                 raise RuntimeError(setting._('apple_translation_not_available'))
         else:
+            if not self.translator.model_available:
+                # 模型可能因视觉识别被异步卸载：按配置路径重新加载（后台线程中执行，不阻塞界面）
+                model_path = getattr(self, '_model_path', '') or ''
+                if model_path and os.path.exists(model_path):
+                    self.translator.load_model(model_path)
             return self.translator.translate_with_streaming(text, source_lang, target_lang, callback)
 
     APPLE_TRANSLATION_SEGMENT_CHARS = 1000
@@ -415,15 +468,21 @@ class MainFrame(wx.Frame):
         self._volume_limit = config.get('volume_limit', 100)
         self._volume_target = config.get('volume_target', 80)
         self._translation_mode = config.get('translation_mode', 'llm')
-        
+        self._ocr_mode = config.get('ocr_mode', 'apple')
+        self._ocr_model_path = config.get('ocr_model_path', '')
+        self._ocr_mmproj_path = config.get('ocr_mmproj_path', '')
+        self._sentence_punctuations = list(setting.sentence_punctuations)
+
         is_internal = setting.is_internal_device()
         supports_apple = setting.supports_apple_translation()
-        
-        if is_internal:
+
+        # 内部机只开放 Apple（翻译/OCR 一致）；开发内部版本（DEBUG_BUILD）放开限制、开放全部能力
+        if is_internal and not setting.DEBUG_BUILD:
             self._translation_mode = 'apple'
+            self._ocr_mode = 'apple'
         elif not supports_apple:
             self._translation_mode = 'llm'
-        
+
         if hasattr(self, '_toolbar_source_choice') and self._toolbar_source_choice and hasattr(self, '_toolbar_target_choice') and self._toolbar_target_choice:
             source_display = setting.get_lang_display(self._source_lang)
             target_display = setting.get_lang_display(self._target_lang)
@@ -441,14 +500,31 @@ class MainFrame(wx.Frame):
             mode_display = setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm')
             self._translation_mode_choice.SetStringSelection(mode_display)
             self._translation_mode_choice.Enable(self._translation_mode != 'apple' or is_internal)
-    
+
+        if hasattr(self, '_ocr_engine_choice') and self._ocr_engine_choice:
+            for display, key in self._ocr_engine_key_by_display.items():
+                if key == self._ocr_mode:
+                    self._ocr_engine_choice.SetStringSelection(display)
+                    break
+
+        if hasattr(self, 'ocr_model_path_text') and self.ocr_model_path_text:
+            self.ocr_model_path_text.SetValue(self._ocr_model_path)
+            self.ocr_mmproj_path_text.SetValue(self._ocr_mmproj_path)
+
+        if hasattr(self, 'sentence_punct_input') and self.sentence_punct_input:
+            self.sentence_punct_input.SetValue(self._format_sentence_punctuations(self._sentence_punctuations))
+
     def save_config(self):
         model_path = getattr(self, '_model_path', '') or ''
         clipboard_max_count = getattr(self, '_clipboard_max_count', 1000)
         volume_limit = getattr(self, '_volume_limit', 100)
         volume_target = getattr(self, '_volume_target', 80)
         translation_mode = getattr(self, '_translation_mode', 'llm')
-        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode)
+        ocr_mode = getattr(self, '_ocr_mode', 'apple')
+        ocr_model_path = getattr(self, '_ocr_model_path', '') or ''
+        ocr_mmproj_path = getattr(self, '_ocr_mmproj_path', '') or ''
+        sentence_punctuations = getattr(self, '_sentence_punctuations', None)
+        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode, ocr_model_path, ocr_mmproj_path, sentence_punctuations)
 
 
     def setup_clipboard_panel(self):
@@ -470,9 +546,12 @@ class MainFrame(wx.Frame):
 
     def setup_settings_panel(self):
         """设置功能面板的UI元素 """
+        # 分组较多，外层套可滚动容器，窗口高度不足时可滚动查看全部分组
+        settings_scroll = wx.ScrolledWindow(self.settings_panel)
+        settings_scroll.SetScrollRate(20, 20)
         main_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        browse_model_static_box = wx.StaticBox(self.settings_panel, label=setting._("browse_model"))
+        browse_model_static_box = wx.StaticBox(settings_scroll, label=setting._("browse_model"))
         browse_model_sizer = wx.StaticBoxSizer(browse_model_static_box, wx.VERTICAL)
 
         model_path_h_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -487,8 +566,32 @@ class MainFrame(wx.Frame):
 
         main_sizer.Add(browse_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
+        # --- 图像识别模型分组 ---
+        ocr_model_static_box = wx.StaticBox(settings_scroll, label=setting._("ocr_model_group"))
+        ocr_model_sizer = wx.StaticBoxSizer(ocr_model_static_box, wx.VERTICAL)
+
+        ocr_model_row = wx.BoxSizer(wx.HORIZONTAL)
+        self.ocr_model_path_text = wx.TextCtrl(ocr_model_static_box, style=wx.TE_READONLY)
+        self.ocr_model_path_text.SetValue(getattr(self, '_ocr_model_path', ''))
+        ocr_model_row.Add(self.ocr_model_path_text, 1, wx.EXPAND | wx.RIGHT, 5)
+        self.browse_ocr_model_button = wx.Button(ocr_model_static_box, label=setting._("browse_ocr_model"))
+        self.browse_ocr_model_button.Bind(wx.EVT_BUTTON, self.on_browse_ocr_model_click)
+        ocr_model_row.Add(self.browse_ocr_model_button, 0)
+        ocr_model_sizer.Add(ocr_model_row, 0, wx.EXPAND | wx.ALL, 5)
+
+        ocr_mmproj_row = wx.BoxSizer(wx.HORIZONTAL)
+        self.ocr_mmproj_path_text = wx.TextCtrl(ocr_model_static_box, style=wx.TE_READONLY)
+        self.ocr_mmproj_path_text.SetValue(getattr(self, '_ocr_mmproj_path', ''))
+        ocr_mmproj_row.Add(self.ocr_mmproj_path_text, 1, wx.EXPAND | wx.RIGHT, 5)
+        self.browse_ocr_mmproj_button = wx.Button(ocr_model_static_box, label=setting._("browse_ocr_mmproj"))
+        self.browse_ocr_mmproj_button.Bind(wx.EVT_BUTTON, self.on_browse_ocr_mmproj_click)
+        ocr_mmproj_row.Add(self.browse_ocr_mmproj_button, 0)
+        ocr_model_sizer.Add(ocr_mmproj_row, 0, wx.EXPAND | wx.ALL, 5)
+
+        main_sizer.Add(ocr_model_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
         # --- 2. 剪贴板最大条数分组 ---
-        clipboard_count_static_box = wx.StaticBox(self.settings_panel, label=setting._("clipboard_max_count"))
+        clipboard_count_static_box = wx.StaticBox(settings_scroll, label=setting._("clipboard_max_count"))
         clipboard_count_sizer = wx.StaticBoxSizer(clipboard_count_static_box, wx.VERTICAL)
 
         self.clipboard_count_input = wx.TextCtrl(clipboard_count_static_box, value=str(getattr(self, '_clipboard_max_count', 1000)), style=wx.TE_RIGHT)
@@ -499,7 +602,7 @@ class MainFrame(wx.Frame):
 
         main_sizer.Add(clipboard_count_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
-        volume_control_static_box = wx.StaticBox(self.settings_panel, label=setting._("volume_control"))
+        volume_control_static_box = wx.StaticBox(settings_scroll, label=setting._("volume_control"))
         volume_control_sizer = wx.StaticBoxSizer(volume_control_static_box, wx.VERTICAL)
 
         volume_limit_row = wx.BoxSizer(wx.HORIZONTAL)
@@ -523,7 +626,64 @@ class MainFrame(wx.Frame):
 
         main_sizer.Add(volume_control_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
-        self.settings_panel.SetSizer(main_sizer)
+        # --- 编辑器分句符号分组：一行一个标点，失焦解析保存，分句功能实时生效 ---
+        sentence_punct_static_box = wx.StaticBox(settings_scroll, label=setting._("sentence_punct_group"))
+        sentence_punct_sizer = wx.StaticBoxSizer(sentence_punct_static_box, wx.VERTICAL)
+
+        sentence_punct_hint = wx.StaticText(sentence_punct_static_box, label=setting._("sentence_punct_hint"))
+        sentence_punct_sizer.Add(sentence_punct_hint, 0, wx.ALL, 5)
+
+        self.sentence_punct_input = wx.TextCtrl(sentence_punct_static_box, style=wx.TE_MULTILINE, size=(-1, 90))
+        self.sentence_punct_input.SetValue(self._format_sentence_punctuations(getattr(self, '_sentence_punctuations', None)))
+        self.sentence_punct_input.Bind(wx.EVT_KILL_FOCUS, self.on_sentence_punct_focus_lost)
+        sentence_punct_sizer.Add(self.sentence_punct_input, 0, wx.EXPAND | wx.ALL, 5)
+
+        main_sizer.Add(sentence_punct_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        settings_scroll.SetSizer(main_sizer)
+        settings_scroll.FitInside()  # 虚拟尺寸随内容扩展，内容超出窗口时出现滚动条
+        scroll_outer_sizer = wx.BoxSizer(wx.VERTICAL)
+        scroll_outer_sizer.Add(settings_scroll, 1, wx.EXPAND)
+        self.settings_panel.SetSizer(scroll_outer_sizer)
+
+
+    @staticmethod
+    def _format_sentence_punctuations(punctuations) -> str:
+        """分句符号列表转多行文本（一行一个符号）"""
+        if not punctuations:
+            punctuations = setting.sentence_punctuations
+        return "\n".join(punctuations)
+
+    @staticmethod
+    def _parse_sentence_punctuations(text: str) -> list:
+        """多行文本解析为分句符号列表：去空白、仅保留单字符、去重"""
+        result = []
+        for line in text.split('\n'):
+            symbol = line.strip()
+            if len(symbol) == 1 and symbol not in result:
+                result.append(symbol)
+        return result
+
+    def on_sentence_punct_focus_lost(self, event):
+        """分句符号编辑框失去焦点：解析保存并即时生效，无有效符号时还原显示"""
+        if getattr(self, '_processing_sentence_punct', False):
+            event.Skip()
+            return
+
+        self._processing_sentence_punct = True
+        try:
+            parsed = self._parse_sentence_punctuations(self.sentence_punct_input.GetValue())
+            if not parsed:
+                # 全部无效（含清空）时按无效输入处理，还原为当前生效值
+                self.sentence_punct_input.SetValue(self._format_sentence_punctuations(self._sentence_punctuations))
+                return
+            if parsed != list(self._sentence_punctuations):
+                self._sentence_punctuations = parsed
+                setting.sentence_punctuations[:] = parsed
+                self.save_config()
+        finally:
+            self._processing_sentence_punct = False
+        event.Skip()
 
 
     def on_browse_model_click(self, event):
@@ -539,7 +699,7 @@ class MainFrame(wx.Frame):
         if dialog.ShowModal() == wx.ID_OK:
             model_path = dialog.GetPath()
             self.model_path_text.SetValue(model_path)
-            
+
             if self.translator:
                 success = self.translator.load_model(model_path)
                 if success:
@@ -549,7 +709,39 @@ class MainFrame(wx.Frame):
                     self.text_ctrl.SetValue("")
                 else:
                     wx.MessageBox(setting._("model_load_failed"), setting._("error"), wx.OK | wx.ICON_WARNING)
-        
+
+        dialog.Destroy()
+
+    def on_browse_ocr_model_click(self, event):
+        """浏览并选择图像识别的视觉模型 GGUF 文件"""
+        self._browse_ocr_model_file(self.ocr_model_path_text, 'select_ocr_model_file', '_ocr_model_path')
+
+    def on_browse_ocr_mmproj_click(self, event):
+        """浏览并选择图像识别的视觉编码器 mmproj 文件"""
+        self._browse_ocr_model_file(self.ocr_mmproj_path_text, 'select_ocr_mmproj_file', '_ocr_mmproj_path')
+
+    def _browse_ocr_model_file(self, path_text, message_key: str, attr_name: str):
+        """图像识别模型文件选择的公共流程：选择后立即保存配置并重新初始化引擎预加载"""
+        wildcard = "GGUF Model (*.gguf)|*.gguf|All Files (*.*)|*.*"
+        dialog = wx.FileDialog(
+            self,
+            message=setting._(message_key),
+            wildcard=wildcard,
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+        )
+
+        result = dialog.ShowModal()
+        logging.info(f"OCR模型文件对话框关闭: result={result}, wx.ID_OK={wx.ID_OK}, 控件值={path_text.GetValue()!r}")
+        if result == wx.ID_OK:
+            path = dialog.GetPath()
+            logging.info(f"OCR模型文件已选择: attr={attr_name}, path={path!r}")
+            path_text.SetValue(path)
+            setattr(self, attr_name, path)
+            logging.info(f"OCR模型路径保存前: getattr={getattr(self, attr_name, '')!r}")
+            self.save_config()
+            self.init_ocr_engine()
+            self._preload_ocr_engine()
+
         dialog.Destroy()
 
 
@@ -829,6 +1021,27 @@ class MainFrame(wx.Frame):
             webbrowser.open('https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF')
 
 
+    # 本地视觉模型推荐下载地址（Qwen/Qwen3-VL-4B-Instruct-GGUF，模型说明见 README）
+    VLM_HOME_URL = 'https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF'
+    VLM_MODEL_URL = VLM_HOME_URL + '/resolve/main/Qwen3VL-4B-Instruct-Q4_K_M.gguf?download=true'
+    VLM_MMPROJ_URL = VLM_HOME_URL + '/resolve/main/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf?download=true'
+
+    def on_download_vlm_model(self, event):
+        """打开主模型直链"""
+        import webbrowser
+        webbrowser.open(self.VLM_MODEL_URL)
+
+    def on_download_vlm_mmproj(self, event):
+        """打开视觉编码器直链"""
+        import webbrowser
+        webbrowser.open(self.VLM_MMPROJ_URL)
+
+    def on_download_vlm_home(self, event):
+        """打开模型仓库首页"""
+        import webbrowser
+        webbrowser.open(self.VLM_HOME_URL)
+
+
     def on_help_changelog(self, event):
         import os as os_module
         current_dir = os_module.path.dirname(os_module.path.abspath(__file__))
@@ -948,55 +1161,97 @@ class MainFrame(wx.Frame):
                 self._translation_mode_choice.SetStringSelection(setting._('mode_llm'))
             
             self._translation_mode_choice.Bind(wx.EVT_CHOICE, self.on_translation_mode_changed)
-            
-            if is_internal or not supports_apple:
+
+            if (is_internal and not setting.DEBUG_BUILD) or not supports_apple:
                 self._translation_mode_choice.Enable(False)
-            
+
             self.toolbar.AddControl(self._translation_mode_choice)
-        
+
+        elif module_name == "recognition":
+            if hasattr(self, '_ocr_engine_choice') and self._ocr_engine_choice:
+                self._ocr_engine_choice.Destroy()
+
+            engine_label = wx.StaticText(self.toolbar, label=setting._('ocr_engine_label'))
+            self.toolbar.AddControl(engine_label)
+
+            from ocr_engine import engine_display
+            self._ocr_engine_key_by_display = {
+                engine_display(key): key for key in self._ocr_engine_keys
+            }
+            self._ocr_engine_choice = wx.Choice(self.toolbar, choices=list(self._ocr_engine_key_by_display))
+            for display, key in self._ocr_engine_key_by_display.items():
+                if key == self._ocr_mode:
+                    self._ocr_engine_choice.SetStringSelection(display)
+                    break
+            self._ocr_engine_choice.Bind(wx.EVT_CHOICE, self.on_ocr_engine_changed)
+
+            # 仅一个可用引擎时禁用切换（当前内部机/公开版均只有 Apple OCR）
+            if len(self._ocr_engine_key_by_display) <= 1:
+                self._ocr_engine_choice.Enable(False)
+
+            self.toolbar.AddControl(self._ocr_engine_choice)
+
+            self.toolbar.AddSeparator()
+
+            self.toolbar.AddTool(
+                self.browse_ocr_btn_id,
+                setting._('browse_ocr_image'),
+                wx.NullBitmap,
+                setting._('browse_ocr_image_tips')
+            )
+            self.Bind(wx.EVT_TOOL, self.on_browse_ocr_image, id=self.browse_ocr_btn_id)
+
         self.toolbar.Realize()
 
 
 
 
-    def on_nav_selection_changed(self, event):
-        """导航选择事件：切换内容面板 + 更新工具栏"""
-        selection = event.GetString()
-        if selection == setting._('nav_translation'):
-            self.switch_to_module("translation")
-        elif selection == setting._('nav_clipboard'):
-            self.switch_to_module("clipboard")
-        elif selection == setting._('nav_settings'):
-            self.switch_to_module("settings")
+    def on_nav_page_changed(self, event):
+        """选项卡切换事件：切换内容模块 + 更新工具栏"""
+        module_by_panel = {
+            self.translation_panel: "translation",
+            self.clipboard_panel: "clipboard",
+            self.recognition_panel: "recognition",
+            self.settings_panel: "settings",
+        }
+        page = self.notebook.GetPage(event.GetSelection())
+        module_name = module_by_panel.get(page)
+        if module_name:
+            self.switch_to_module(module_name)
+        event.Skip()
 
 
     def switch_to_module(self, module_name: str):
-        """统一切换逻辑：更新面板显隐 + 工具栏 + 状态"""
-        # 隐藏所有面板
-        self.translation_panel.Hide()
-        self.clipboard_panel.Hide()
-        self.settings_panel.Hide()
-        
-        # 显示目标面板
+        """统一切换逻辑：更新选项卡选中页 + 工具栏 + 状态"""
+        # 定位目标选项卡页（与 init_ui 中 AddPage 顺序一致）
+        module_to_index = {
+            "translation": 0,
+            "clipboard": 1,
+            "recognition": 2,
+            "settings": 3,
+        }
+        page_index = module_to_index.get(module_name, 0)
+        # ChangeSelection 仅切换页不触发事件，避免与 on_nav_page_changed 互相递归
+        if self.notebook.GetSelection() != page_index:
+            self.notebook.ChangeSelection(page_index)
+
+        # 目标页面的原有初始化逻辑（焦点、列表刷新）
         if module_name == "translation":
-            self.translation_panel.Show()
             self.text_ctrl.SetFocus()
         elif module_name == "clipboard":
-            self.clipboard_panel.Show()
             self.refresh_list_box()  # 刷新剪贴板列表
             self.list_Box.SetFocus()
-        elif module_name == "settings":
-            self.settings_panel.Show()
-        
+        elif module_name == "recognition":
+            self.ocr_result_ctrl.SetFocus()
+
         # 切换到其他模块时清空搜索
         if module_name != "clipboard":
             self._clipboard_filter_keyword = ""
             self._clipboard_filtered_data = None
-        
+
         # 更新状态与工具栏
         self.current_module = module_name
         self.update_toolbar_for_module(module_name)
-        self.main_panel.Layout()
 
 
     def load_clipboard_data(self):
@@ -1099,7 +1354,8 @@ class MainFrame(wx.Frame):
         modifier_map = {
             "ALT": wx.MOD_ALT,
             "SHIFT": wx.MOD_SHIFT,
-            "CTRL": wx.MOD_CONTROL
+            "CTRL": wx.MOD_CONTROL,
+            "CMD": wx.MOD_CMD
         }
 
         #  遍历keys列表批量注册热键
@@ -1383,7 +1639,8 @@ class MainFrame(wx.Frame):
 
             # 注：保持取首字符的既有行为（与 _translate_last_phrase 传整串不一致，疑似历史遗留）
             result_text = self._lookup_dictionary(vo_text[0])
-            self.vo_handler.speak_text(result_text)
+            # 词典未命中时回退朗读原字符，避免 speak_text(None) 静默无反馈
+            self.vo_handler.speak_text(result_text or vo_text[0])
 
 
     def on_hotkey_altd(self, event):
@@ -1420,9 +1677,12 @@ class MainFrame(wx.Frame):
             self.vo_handler.speak_text(setting._('translation_in_progress'))
             return
         if self._translation_mode == 'llm' and (not self.translator or not self.translator.model_available):
-            self._translation_lock.release()
-            self.vo_handler.speak_text(setting._("model_unavailable"))
-            return
+            model_path = getattr(self, '_model_path', '') or ''
+            # 模型可能因视觉识别被卸载：配置路径仍有效时放行，由翻译线程重新加载
+            if not (model_path and os.path.exists(model_path)):
+                self._translation_lock.release()
+                self.vo_handler.speak_text(setting._("model_unavailable"))
+                return
 
         def translate_worker():
             try:
@@ -1435,10 +1695,8 @@ class MainFrame(wx.Frame):
                 logging.warning(f"翻译失败: {e}")
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
-                self._is_translating = False
                 self._translation_lock.release()
 
-        self._is_translating = True
         threading.Thread(target=translate_worker, daemon=True).start()
 
 
@@ -1553,17 +1811,24 @@ class MainFrame(wx.Frame):
         print(f"切换到索引 {new_idx}，内容：{selected_content[:20]}...")
         if self.current_module == 'clipboard':
             self.list_Box.SetSelection(new_idx)
-        self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
+        # 朗读文案为「序号, 内容」结构，仅对内容段做标题补句点（首行井号后紧跟数字才处理）
+        self.vo_handler.speak_text(f"{new_idx + 1}, {insert_heading_dot(selected_content[:1024])}")
         self.update_clipboard_buttons_state()
 
         self.TB.set_text(selected_content)
         self.TB.browse("prev_line")
 
+        # 单步切换后开始长按监测，按住不放则快速跳到列表第一项
+        self._start_long_press("altshift7")
+
 
     def on_hotkey_altshift8(self, event):
         """alt+shift+8: 当前剪贴板上一行"""
         result_text = self.TB.browse("prev_line")
-        self.vo_handler.speak_text(result_text)
+        # markdown标题行（# 数字）在井号右侧补句点后朗读，仅作用于朗读拼接、不改原数据
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
+        # 单步移动后开始长按监测，按住不放则快速跳到第一行
+        self._start_long_press("altshift8")
 
 
     def on_hotkey_altshift9(self, event):
@@ -1588,9 +1853,11 @@ class MainFrame(wx.Frame):
         if self.current_module == 'clipboard':
             self.list_Box.SetSelection(new_idx)
         
-        self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
+        self.vo_handler.speak_text(f"{new_idx + 1}, {insert_heading_dot(selected_content[:1024])}")
         self.TB.set_text(selected_content)
         self.TB.browse("prev_line")
+        # 单步切换后开始长按监测，按住不放则快速跳到列表最后一项
+        self._start_long_press("altshift9")
 
 
     def on_hotkey_altshiftu(self, event):
@@ -1601,19 +1868,19 @@ class MainFrame(wx.Frame):
 
     def on_hotkey_altshifti(self, event):
         """alt+shift+i: 当前字符解释"""
+        # browse 返回值已含符号库解释（含未收录符号的 unicodedata 兜底），与焦点原字符比对判断是否命中
+        focus_pos = self.TB.focus_pos
+        raw_char = self.TB.current_text[focus_pos:focus_pos + 1]
         result_text = self.TB.browse("explain_char")
 
-        if result_text:
-            explained_text = self.TB.get_char_explanation(result_text)
-            # 若解释存在（与原文本不同），则使用解释结果；否则用原文本
-            if explained_text != result_text:
-                self.vo_handler.speak_text(explained_text)
-                return
-
-        # 注：保持取首字符的既有行为（剪贴板浏览定位的是单字符）
-        if result_text:
-            result_text = self._lookup_dictionary(result_text[0])
+        if result_text and result_text != raw_char:
             self.vo_handler.speak_text(result_text)
+            return
+
+        # 未命中解释（字母数字等旁白可直接朗读的字符）：走词典，查无词条时回退朗读原字符
+        if result_text:
+            dictionary_result = self._lookup_dictionary(result_text[0])
+            self.vo_handler.speak_text(dictionary_result or result_text)
 
 
     def on_hotkey_altshifto(self, event):
@@ -1686,7 +1953,106 @@ class MainFrame(wx.Frame):
     def on_hotkey_altshiftk(self, event):
         """alt+shift+k: 当前剪贴板下一行"""
         result_text = self.TB.browse("next_line")
-        self.vo_handler.speak_text(result_text)
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
+        # 单步移动后开始长按监测，按住不放则快速跳到最后一行
+        self._start_long_press("altshiftk")
+
+
+    def play_sound(self, name: str) -> None:
+        """播放 resources/sound 下的提示音（异步，不阻塞界面）"""
+        try:
+            sound = self._sounds.get(name)
+            if sound is None:
+                sound_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "resources", "sound", f"{name}.wav")
+                sound = wx.adv.Sound(sound_path)
+                if not sound.IsOk():
+                    logging.warning(f"提示音文件不可用: {sound_path}")
+                    return
+                self._sounds[name] = sound
+            sound.Play(wx.adv.SOUND_ASYNC)
+        except Exception as e:
+            logging.warning(f"播放提示音'{name}'失败: {e}")
+
+
+    def _start_long_press(self, name: str) -> None:
+        """虚拟浏览器方向键单步执行后开始长按监测（依赖 macOS Quartz 查询物理键状态）"""
+        spec = self.LONG_PRESS_KEYS.get(name)
+        if not spec:
+            return
+        try:
+            import Quartz
+        except Exception:
+            return  # 非 macOS 环境无 Quartz，跳过长按监测
+        self._long_press_start = time.monotonic()
+        self._long_press_keycode = spec[0]
+        self._long_press_action = getattr(self, spec[1])
+        self._long_press_timer.Start(self.LONG_PRESS_POLL_MS)
+
+
+    def _on_long_press_timer(self, event):
+        """长按监测：按住超过阈值触发跳转，提前松开则结束监测"""
+        if self._long_press_action is None:
+            self._long_press_timer.Stop()
+            return
+        import Quartz
+        key_down = Quartz.CGEventSourceKeyState(
+            Quartz.kCGEventSourceStateCombinedSessionState, self._long_press_keycode)
+        if not key_down:
+            self._long_press_timer.Stop()
+            self._long_press_action = None
+        elif time.monotonic() - self._long_press_start >= self.LONG_PRESS_THRESHOLD:
+            self._long_press_timer.Stop()
+            action = self._long_press_action
+            self._long_press_action = None
+            action()
+
+
+    def _jump_clipboard_head(self):
+        """长按 alt+shift+7: 直接跳到剪贴板列表第一项"""
+        display_data = self._clipboard_filtered_data if self._clipboard_filtered_data is not None else self.clipboard_list_data
+        if not display_data:
+            return
+        self.current_clipboard_idx = 0
+        selected_content = display_data[0]
+        if self.current_module == 'clipboard':
+            self.list_Box.SetSelection(0)
+        self.update_clipboard_buttons_state()
+        self.TB.set_text(selected_content)
+        self.TB.browse("first_line")
+        self.play_sound("index")
+        self.vo_handler.speak_text(f"1, {insert_heading_dot(selected_content[:1024])}")
+
+
+    def _jump_clipboard_tail(self):
+        """长按 alt+shift+9: 直接跳到剪贴板列表最后一项"""
+        display_data = self._clipboard_filtered_data if self._clipboard_filtered_data is not None else self.clipboard_list_data
+        if not display_data:
+            return
+        new_idx = len(display_data) - 1
+        self.current_clipboard_idx = new_idx
+        selected_content = display_data[new_idx]
+        if self.current_module == 'clipboard':
+            self.list_Box.SetSelection(new_idx)
+        self.update_clipboard_buttons_state()
+        self.TB.set_text(selected_content)
+        self.TB.browse("first_line")
+        self.play_sound("index")
+        self.vo_handler.speak_text(f"{new_idx + 1}, {insert_heading_dot(selected_content[:1024])}")
+
+
+    def _jump_text_first_line(self):
+        """长按 alt+shift+8: 直接跳到当前剪贴板第一行"""
+        result_text = self.TB.browse("first_line")
+        self.play_sound("index")
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
+
+
+    def _jump_text_last_line(self):
+        """长按 alt+shift+k: 直接跳到当前剪贴板最后一行"""
+        result_text = self.TB.browse("last_line")
+        self.play_sound("index")
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
 
 
     def on_hotkey_altshiftm(self, event):
@@ -1784,6 +2150,320 @@ class MainFrame(wx.Frame):
             self._is_pasting = False
 
 
+    def init_ocr_engine(self):
+        """按当前 OCR 模式初始化引擎；本地视觉模型复用缓存实例，避免切换往返时重复加载模型"""
+        try:
+            from ocr_engine import create_engine
+            config = {}
+            if self._ocr_mode == 'vlm':
+                config = {
+                    'model_path': getattr(self, '_ocr_model_path', ''),
+                    'mmproj_path': getattr(self, '_ocr_mmproj_path', ''),
+                }
+            cached = self._ocr_engine_cache.get(self._ocr_mode)
+            if cached is not None:
+                cached.configure(**config)
+                self.ocr_engine = cached
+            else:
+                self.ocr_engine = create_engine(self._ocr_mode, **config)
+                self._ocr_engine_cache[self._ocr_mode] = self.ocr_engine
+        except Exception as e:
+            logging.warning(f"OCR 引擎初始化失败: {e}")
+            self.ocr_engine = None
+
+    def on_ocr_engine_changed(self, event):
+        """工具栏切换 OCR 引擎"""
+        if hasattr(self, '_ocr_engine_choice') and self._ocr_engine_choice:
+            display_text = self._ocr_engine_choice.GetStringSelection()
+            engine_key = self._ocr_engine_key_by_display.get(display_text)
+            if engine_key and engine_key != self._ocr_mode:
+                self._ocr_mode = engine_key
+                self.save_config()
+                self.init_ocr_engine()
+
+    def on_hotkey_altshiftq(self, event):
+        """alt+shift+q: 循环切换识别引擎（当前两引擎间往返）"""
+        self.switch_ocr_engine(1)
+
+    def switch_ocr_engine(self, step: int):
+        """在虚拟引擎列表中循环切换识别引擎，切换后经 VO 播报引擎名反馈"""
+        from ocr_engine import engine_display, next_engine_key
+
+        if not self._ocr_engine_keys:
+            return
+        new_key = next_engine_key(self._ocr_engine_keys, self._ocr_mode, step)
+        if new_key != self._ocr_mode:
+            self._ocr_mode = new_key
+            self.save_config()
+            self.init_ocr_engine()
+            if hasattr(self, '_ocr_engine_choice') and self._ocr_engine_choice:
+                self._ocr_engine_choice.SetStringSelection(engine_display(new_key))
+        # TTS 反馈：循环回原引擎同样播报，确认按键已生效
+        self.vo_handler.speak_text(engine_display(new_key))
+        self._preload_ocr_engine()
+
+    def _preload_ocr_engine(self):
+        """本地视觉模型已配置未加载时后台预加载，完成后播报就绪"""
+        engine = self.ocr_engine
+        is_configured = getattr(engine, "is_configured", None)
+        is_loaded = getattr(engine, "is_loaded", None)
+        if not (callable(is_configured) and callable(is_loaded)):
+            return
+        if not is_configured() or is_loaded():
+            return
+
+        def preload_worker():
+            try:
+                engine.load_model()
+            except Exception as e:
+                # 预加载失败立即播报具体原因（模型文件/llama_cpp 环境问题），不静默等识别时才发现
+                logging.warning(f"视觉模型预加载失败: {e}")
+                wx.CallAfter(self.vo_handler.speak_text, str(e))
+                return
+            wx.CallAfter(self.vo_handler.speak_text, setting._('ocr_vlm_ready'))
+
+        threading.Thread(target=preload_worker, daemon=True).start()
+
+    def on_hotkey_altshiftt(self, event):
+        """alt+shift+t: 循环切换翻译引擎（当前两引擎间往返）"""
+        self.switch_translation_engine(1)
+
+    def switch_translation_engine(self, step: int):
+        """在翻译引擎（apple/llm）间循环切换，切换后经 VO 播报引擎名反馈"""
+        if setting.is_internal_locked():
+            # 内部机生产版锁定 Apple：不切换不写配置，播报当前引擎确认按键生效
+            self.vo_handler.speak_text(setting._('mode_apple'))
+            return
+        if not setting.supports_apple_translation():
+            # Apple 翻译不可用、仅 llm 可选：不切换，播报当前引擎确认按键生效
+            self.vo_handler.speak_text(setting._('mode_llm'))
+            return
+        modes = ["apple", "llm"]
+        if self._translation_mode not in modes:
+            self._translation_mode = modes[0]
+        new_mode = modes[(modes.index(self._translation_mode) + step) % len(modes)]
+        if new_mode != self._translation_mode:
+            self._translation_mode = new_mode
+            self.save_config()
+            self._update_translator_for_mode()
+            mode_display = setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm')
+            if hasattr(self, '_translation_mode_choice') and self._translation_mode_choice:
+                self._translation_mode_choice.SetStringSelection(mode_display)
+        # TTS 反馈：循环回原引擎同样播报，确认按键已生效；Apple 初始化失败回退时播报实际引擎
+        self.vo_handler.speak_text(setting._('mode_apple') if self._translation_mode == 'apple' else setting._('mode_llm'))
+
+    def on_hotkey_altshifte(self, event):
+        """alt+shift+e: 提取VO最后朗读内容中的URL并用默认浏览器打开，多个时弹窗选择"""
+        spoken_text = self.vo_handler.get_last_spoken_text()
+        urls = extract_urls(spoken_text)
+        if not urls:
+            self.vo_handler.speak_text(setting._('no_url_found'))
+            return
+        # 单个直接打开，多个弹窗让用户选择；取消或未选中则不打开
+        url = urls[0]
+        if len(urls) > 1:
+            dialog = UrlSelectDialog(self, urls)
+            result = dialog.ShowModal()
+            url = dialog.get_selected() if result == wx.ID_OK else None
+            dialog.Destroy()
+            if not url:
+                return
+        import webbrowser
+        webbrowser.open(url)
+
+    def on_hotkey_altshiftr(self, event):
+        """alt+shift+r: 识别剪贴板中的图片（OCR），结果回写识别面板并朗读"""
+        try:
+            from ocr_engine import extract_clipboard_image
+            extracted = extract_clipboard_image()
+        except Exception as e:
+            logging.warning(f"读取剪贴板图片失败: {e}")
+            extracted = None
+
+        if not extracted:
+            self.vo_handler.speak_text(setting._('ocr_no_image'))
+            return
+
+        image_path, is_temp = extracted
+        self.run_ocr(image_path, temp_path=image_path if is_temp else None)
+
+    def _hotkey_name_of(self, event) -> str:
+        """通过事件ID反查热键名称，供通用热键处理器区分具体按键"""
+        for name, hid in self.hotkey_ids.items():
+            if hid == event.GetId():
+                return name
+        return ""
+
+    def _current_app_id(self) -> str:
+        """获取前台应用的持久化标识：bundle ID 优先，无 bundle 时退回可执行文件路径或应用名"""
+        try:
+            from AppKit import NSWorkspace
+            app = NSWorkspace.sharedWorkspace().frontmostApplication()
+            if app:
+                bundle_id = app.bundleIdentifier()
+                if bundle_id:
+                    return str(bundle_id)
+                executable = app.executableURL()
+                if executable and executable.path():
+                    return str(executable.path())
+                if app.localizedName():
+                    return str(app.localizedName())
+        except Exception as e:
+            logging.warning(f"获取前台应用标识失败: {e}")
+        return "unknown"
+
+    def _get_mouse_position(self):
+        """读取当前鼠标全局坐标（Quartz 左上原点），失败返回 None"""
+        try:
+            import Quartz
+            # CGEventRef 是 pyobjc 不透明对象，无 location 属性，必须用 CGEventGetLocation 取 CGPoint
+            location = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
+            return float(location.x), float(location.y)
+        except Exception as e:
+            logging.error(f"读取鼠标坐标失败: {e}")
+        return None
+
+    def _move_mouse_to(self, x, y) -> bool:
+        """将鼠标指针移动到全局坐标 (x, y)"""
+        try:
+            import Quartz
+            # pyobjc 不把非零 CGError 转成异常，必须显式判断返回值（0 为 kCGErrorSuccess）
+            return Quartz.CGWarpMouseCursorPosition((x, y)) == 0
+        except Exception as e:
+            logging.error(f"移动鼠标失败: {e}")
+        return False
+
+    @staticmethod
+    def _format_landmark_pos(position) -> str:
+        """路标坐标播报：直接朗读整数坐标，不做冗余修饰"""
+        return f"{int(round(position[0]))}, {int(round(position[1]))}"
+
+    def mouse_mark_slot(self, slot: str):
+        """标记当前鼠标位置为当前应用的路标槽位（热键与菜单共用入口）"""
+        position = self._get_mouse_position()
+        if position is None:
+            self.vo_handler.speak_text("读取鼠标坐标失败")
+            return
+        if not setting.set_mouse_landmark(self._current_app_id(), slot, position[0], position[1]):
+            self.vo_handler.speak_text("保存失败")
+            return
+        self.vo_handler.speak_text(self._format_landmark_pos(position))
+
+    def mouse_jump_slot(self, slot: str):
+        """将鼠标跳转到当前应用对应槽位标记的位置（热键与菜单共用入口）"""
+        position = setting.get_mouse_landmark(self._current_app_id(), slot)
+        if position is None:
+            self.vo_handler.speak_text("未标记")
+            return
+        if not self._move_mouse_to(position[0], position[1]):
+            self.vo_handler.speak_text("跳转失败")
+            return
+        self.vo_handler.speak_text(self._format_landmark_pos(position))
+
+    def on_hotkey_mouse_mark(self, event):
+        """opt+shift+数字: 将当前鼠标位置标记为当前应用的路标槽位"""
+        slot = self._hotkey_name_of(event).replace("mark_", "")
+        if slot:
+            self.mouse_mark_slot(slot)
+
+    def on_hotkey_mouse_jump(self, event):
+        """cmd+opt+shift+数字: 将鼠标跳转到当前应用对应槽位标记的位置"""
+        slot = self._hotkey_name_of(event).replace("jump_", "")
+        if slot:
+            self.mouse_jump_slot(slot)
+
+    def on_browse_ocr_image(self, event):
+        """工具栏浏览图片文件并识别"""
+        wildcard = ("Image Files (*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.heic;*.bmp;*.gif;*.webp)"
+                    "|*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.heic;*.bmp;*.gif;*.webp"
+                    "|All Files (*.*)|*.*")
+        dialog = wx.FileDialog(
+            self,
+            message=setting._("ocr_select_image"),
+            wildcard=wildcard,
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+        )
+
+        if dialog.ShowModal() == wx.ID_OK:
+            image_path = dialog.GetPath()
+            dialog.Destroy()
+            self.run_ocr(image_path)
+        else:
+            dialog.Destroy()
+
+    def _unload_llm_for_vlm_ocr(self):
+        """视觉模型识别内存开销大：VLM 识别触发时异步卸载已加载的翻译模型腾出统一内存
+
+        卸载在后台线程执行（模型与推理互斥，翻译进行中会等待完成后再卸载）；
+        下次翻译时由 _do_translate 按配置路径自动重新加载
+        """
+        if self._ocr_mode != 'vlm':
+            return
+        translator = getattr(self, 'translator', None)
+        if not translator or not translator.model_available:
+            return
+
+        def unload_worker():
+            try:
+                translator.unload_model()
+            except Exception as e:
+                logging.warning(f"卸载翻译模型失败: {e}")
+
+        threading.Thread(target=unload_worker, daemon=True).start()
+
+    def run_ocr(self, image_path: str, temp_path: str = None):
+        """在后台线程执行 OCR，结果覆盖写入识别面板并经 VO 朗读"""
+        # 入口固化引擎引用：worker 内热键切换引擎时不应改用新引擎，播报与实际引擎保持一致
+        engine = self.ocr_engine
+        if not engine:
+            self.vo_handler.speak_text(setting._('ocr_engine_unavailable'))
+            self._remove_ocr_temp_file(temp_path)
+            return
+        self._unload_llm_for_vlm_ocr()
+        if not self._ocr_lock.acquire(blocking=False):
+            self.vo_handler.speak_text(setting._('ocr_in_progress'))
+            self._remove_ocr_temp_file(temp_path)
+            return
+
+        def ocr_worker():
+            try:
+                needs_load = getattr(engine, "needs_load", None)
+                if callable(needs_load) and needs_load():
+                    wx.CallAfter(self.vo_handler.speak_text, setting._('ocr_vlm_loading'))
+                text = engine.recognize(image_path)
+                wx.CallAfter(self._on_ocr_result, text)
+            except Exception as e:
+                logging.warning(f"OCR 识别失败: {e}")
+                wx.CallAfter(self._on_ocr_error, str(e))
+            finally:
+                self._remove_ocr_temp_file(temp_path)
+                self._ocr_lock.release()
+
+        threading.Thread(target=ocr_worker, daemon=True).start()
+
+    @staticmethod
+    def _remove_ocr_temp_file(temp_path: str) -> None:
+        """删除识别用临时文件（剪贴板图片/降采样产物），失败仅忽略"""
+        if temp_path:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+    def _on_ocr_result(self, text: str):
+        """识别完成：结果覆盖写入编辑框并朗读（新内容覆盖模式）"""
+        self.ocr_result_ctrl.SetValue(text)
+        if text.strip():
+            self.vo_handler.speak_text(text)
+        else:
+            self.vo_handler.speak_text(setting._('ocr_empty_result'))
+
+    def _on_ocr_error(self, message: str):
+        """识别失败：错误回写编辑框并朗读，避免界面表现为无响应"""
+        self.ocr_result_ctrl.SetValue(f"[{setting._('ocr_failed')}: {message}]")
+        self.vo_handler.speak_text(setting._('ocr_failed'))
+
+
     def on_to_translate(self, event, langType: str = None):
         """Option + 回车键：翻译文本"""
         apple_selected = (
@@ -1827,10 +2507,13 @@ class MainFrame(wx.Frame):
             return
         
         if self._translation_mode == 'llm' and not self.translator.model_available:
-            self._translation_lock.release()
-            self.vo_handler.speak_text(setting._("model_unavailable"))
-            return
-        
+            model_path = getattr(self, '_model_path', '') or ''
+            # 模型可能因视觉识别被卸载：配置路径仍有效时放行，由翻译线程重新加载
+            if not (model_path and os.path.exists(model_path)):
+                self._translation_lock.release()
+                self.vo_handler.speak_text(setting._("model_unavailable"))
+                return
+
         text_length = len(text)
         LONG_TEXT_THRESHOLD = 2000
         
@@ -1854,7 +2537,6 @@ class MainFrame(wx.Frame):
                 wx.CallAfter(self.text_ctrl.SetValue, f"[{setting._('translation_failed')}: {e}]")
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
-                self._is_translating = False
                 self._translation_lock.release()
         
         thread = threading.Thread(target=translate_worker, daemon=True)
@@ -1887,7 +2569,6 @@ class MainFrame(wx.Frame):
                 wx.CallAfter(self.text_ctrl.SetValue, f"{partial}\n\n{error_line}" if partial else error_line)
                 wx.CallAfter(self.vo_handler.speak_text, setting._("translation_failed"))
             finally:
-                self._is_translating = False
                 self._translation_lock.release()
         
         thread = threading.Thread(target=translate_worker, daemon=True)
@@ -2173,10 +2854,10 @@ class MainFrame(wx.Frame):
 
 
 def main():
-    # 日志配置
+    # 日志配置（含 PID：用于区分多个实例交错写配置的情况）
     logging.basicConfig(
         level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - PID%(process)d - %(name)s - %(levelname)s - %(message)s'
     )
 
     app = wx.App(False)

@@ -15,6 +15,62 @@ def _open_url(url):
     webbrowser.open(url)
 
 
+def unescape_replace_text(text: str) -> str:
+    r"""解析替换文本中的转义序列：\t \n \r \\。
+
+    单遍扫描，\\n 等双反斜杠序列不会被提前消费成单字符转义；
+    未知转义与尾部孤立反斜杠原样保留。
+    """
+    if not text:
+        return text
+
+    escape_map = {'n': '\n', 't': '\t', 'r': '\r', '\\': '\\'}
+    result = []
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == '\\' and i + 1 < len(text):
+            result.append(escape_map.get(text[i + 1], '\\' + text[i + 1]))
+            i += 2
+        else:
+            result.append(ch)
+            i += 1
+    return ''.join(result)
+
+
+def search_next_match(pattern, full_text: str, insertion: int):
+    """查找下一个匹配：自插入点向后搜索，未命中绕回开头。
+
+    零宽匹配恰好停在插入点上时跳过继续向后，避免"查找下一个"原地不动；
+    绕回（插入点已到文本末尾）后不再跳过，否则开头的零宽匹配永远无法再次选中。
+    """
+    wrapped = insertion >= len(full_text)
+    start_pos = 0 if wrapped else insertion
+    match = pattern.search(full_text, start_pos)
+    if match and not wrapped and match.start() == match.end() == start_pos:
+        match = pattern.search(full_text, start_pos + 1)
+    if not match:
+        match = pattern.search(full_text, 0)
+    return match
+
+
+def search_prev_match(pattern, full_text: str, insertion: int, sel_start: int, sel_end: int):
+    """查找上一个匹配：返回起点在界限之前的最后一个匹配。
+
+    界限取选区起点（无选区时取插入点），避免反复停在当前匹配上；
+    全部匹配都不在界限之前时绕回最后一个，无任何匹配返回 None。
+    """
+    boundary = insertion if sel_start == sel_end else min(sel_start, sel_end)
+    matches = list(pattern.finditer(full_text))
+    if not matches:
+        return None
+    match = None
+    for m in matches:
+        if m.start() < boundary:
+            match = m
+    return match if match is not None else matches[-1]
+
+
 class AboutDialog(wx.Dialog):
     def __init__(self, parent):
         super().__init__(parent, title=setting._('about_title'), size=(400, 380))
@@ -165,71 +221,55 @@ class FindReplaceDialog(wx.Dialog):
     def _update_size(self):
         self.Fit()
     
+    def _show_error(self, message):
+        self.status_text.SetLabel(message)
+        if self.vo_handler:
+            self.vo_handler.speak_text(message)
+
     def _get_pattern(self, search_text):
         use_regex = self.regex_check.GetValue()
         case_sensitive = self.case_check.GetValue()
-        
+
         if not search_text:
-            return None, 0
-        
+            return None
+
         flags = 0 if case_sensitive else re.IGNORECASE
-        
+
         if use_regex:
             try:
-                pattern = re.compile(search_text, flags)
+                return re.compile(search_text, flags)
             except re.error:
-                return None, 0
-        else:
-            pattern = re.compile(re.escape(search_text), flags)
-        
-        return pattern, 1 if use_regex else 0
+                self._show_error(setting._('edd_invalid_regex'))
+                return None
+        return re.compile(re.escape(search_text), flags)
     
     def _find(self, direction='next'):
         search_text = self.find_input.GetValue()
         if not search_text:
             return False
-        
-        pattern, pattern_type = self._get_pattern(search_text)
+
+        pattern = self._get_pattern(search_text)
         if not pattern:
             return False
-        
+
         full_text = self.text_ctrl.GetValue()
-        text_len = len(full_text)
-        
+
         if direction == 'next':
-            start_pos = self.text_ctrl.GetInsertionPoint()
-            start_pos = start_pos if start_pos < text_len else 0
-            match = pattern.search(full_text, start_pos)
-            if not match:
-                match = pattern.search(full_text, 0)
+            match = search_next_match(pattern, full_text, self.text_ctrl.GetInsertionPoint())
         else:
-            start_pos = self.text_ctrl.GetInsertionPoint() - 1
-            start_pos = start_pos if start_pos >= 0 else text_len - 1
-            matches = list(pattern.finditer(full_text))
-            if not matches:
-                self.status_text.SetLabel(setting._('edd_not_found'))
-                if self.vo_handler:
-                    self.vo_handler.speak_text(setting._('edd_not_found'))
-                return False
-            match = None
-            for m in matches:
-                if m.start() < start_pos:
-                    match = m
-            if match is None:
-                match = matches[-1]
-        
-        if match:
-            start, end = match.span()
-            self.text_ctrl.SetSelection(start, end)
-            self.text_ctrl.SetInsertionPoint(end)
-            self.last_find_pos = end if direction == 'next' else start
-            self.status_text.SetLabel("")
-            return True
-        else:
-            self.status_text.SetLabel(setting._('edd_not_found'))
-            if self.vo_handler:
-                self.vo_handler.speak_text(setting._('edd_not_found'))
+            sel_start, sel_end = self.text_ctrl.GetSelection()
+            match = search_prev_match(pattern, full_text, self.text_ctrl.GetInsertionPoint(), sel_start, sel_end)
+
+        if match is None:
+            self._show_error(setting._('edd_not_found'))
             return False
+
+        start, end = match.span()
+        self.text_ctrl.SetSelection(start, end)
+        self.text_ctrl.SetInsertionPoint(end)
+        self.last_find_pos = end if direction == 'next' else start
+        self.status_text.SetLabel("")
+        return True
     
     def on_find_next(self, event):
         if self._find('next'):
@@ -242,48 +282,69 @@ class FindReplaceDialog(wx.Dialog):
     def on_replace_one(self, event):
         search_text = self.find_input.GetValue()
         replace_text = self.replace_input.GetValue()
-        
+
         if not search_text:
             return
-        
-        pattern, pattern_type = self._get_pattern(search_text)
+
+        pattern = self._get_pattern(search_text)
         if not pattern:
             return
-        
+
         full_text = self.text_ctrl.GetValue()
-        
+
         start_pos = self.text_ctrl.GetInsertionPoint()
         match = pattern.search(full_text, start_pos)
         if not match:
             match = pattern.search(full_text, 0)
-        
-        if match:
-            start, end = match.span()
-            new_text = full_text[:start] + replace_text + full_text[end:]
-            self.text_ctrl.SetValue(new_text)
-            new_cursor = start + len(replace_text)
-            self.text_ctrl.SetSelection(new_cursor, new_cursor)
-            self.text_ctrl.SetInsertionPoint(new_cursor)
-            self.last_find_pos = new_cursor
-            self.status_text.SetLabel(setting._('edd_replaced_count') % 1)
+
+        if not match:
+            self._show_error(setting._('edd_not_found'))
+            return
+
+        start, end = match.span()
+        if self.regex_check.GetValue():
+            # 与"全部替换"一致，支持 \1 等反向引用
+            try:
+                replacement = match.expand(replace_text)
+            except re.error:
+                self._show_error(setting._('edd_invalid_replace'))
+                return
         else:
-            self.status_text.SetLabel(setting._('edd_not_found'))
+            replacement = unescape_replace_text(replace_text)
+
+        new_text = full_text[:start] + replacement + full_text[end:]
+        self.text_ctrl.SetValue(new_text)
+        new_cursor = start + len(replacement)
+        self.text_ctrl.SetSelection(new_cursor, new_cursor)
+        self.text_ctrl.SetInsertionPoint(new_cursor)
+        self.last_find_pos = new_cursor
+        self.status_text.SetLabel(setting._('edd_replaced_count') % 1)
     
     def on_replace_all(self, event):
         search_text = self.find_input.GetValue()
         replace_text = self.replace_input.GetValue()
-        
+
         if not search_text:
             return
-        
-        pattern, pattern_type = self._get_pattern(search_text)
+
+        pattern = self._get_pattern(search_text)
         if not pattern:
             return
-        
+
         full_text = self.text_ctrl.GetValue()
-        
-        new_text, count = pattern.subn(replace_text, full_text)
-        
+
+        if self.regex_check.GetValue():
+            try:
+                new_text, count = pattern.subn(replace_text, full_text)
+            except re.error:
+                self._show_error(setting._('edd_invalid_replace'))
+                return
+        else:
+            # 非正则模式：替换文本先解析转义符，再按字面替换，
+            # 以函数形式传入避免其中的反斜杠被 re 二次解释
+            replacement = unescape_replace_text(replace_text)
+            new_text, count = pattern.subn(lambda m: replacement, full_text)
+
         self.text_ctrl.SetValue(new_text)
         self.last_find_pos = 0
         self.status_text.SetLabel(setting._('edd_replaced_count') % count)
@@ -559,7 +620,7 @@ class EditDialog(wx.Dialog):
             self.last_find_text = self.find_replace_dialog.find_input.GetValue()
             self.last_replace_text = self.find_replace_dialog.replace_input.GetValue()
             self.last_regex = self.find_replace_dialog.regex_check.GetValue()
-            self.last_case = self.find_replace_dialog.regex_check.GetValue()
+            self.last_case = self.find_replace_dialog.case_check.GetValue()
             self.Enable(True)
             self.app.Bind(wx.EVT_KEY_DOWN, handler=self.on_app_key_down)
             self.find_replace_dialog = None
@@ -577,86 +638,58 @@ class EditDialog(wx.Dialog):
         if not self.last_find_text:
             return False
         
-        pattern, _ = self._get_pattern_for_quick_find()
+        pattern = self._get_pattern_for_quick_find()
         if not pattern:
+            # 非法正则经 VoiceOver 播报，避免快速查找静默失效
+            if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
+                self.Parent.vo_handler.speak_text(setting._('edd_invalid_regex'))
             return False
         
         full_text = self.text_ctrl.GetValue()
-        text_len = len(full_text)
         
         if direction == 'next':
-            start_pos = self.text_ctrl.GetInsertionPoint()
-            start_pos = start_pos if start_pos < text_len else 0
-            match = pattern.search(full_text, start_pos)
-            if not match:
-                match = pattern.search(full_text, 0)
-                if not match:
-                    if self.last_find_direction == direction:
-                        self.find_count += 1
-                    else:
-                        self.find_count = 1
-                        self.last_find_direction = direction
-                    
-                    if self.find_count >= 6:
-                        self.find_count = 0
-                        self.last_find_direction = None
-                        self.on_find_replace_click(None, show_replace=False)
-                    else:
-                        if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
-                            self.Parent.vo_handler.speak_text(setting._('edd_search_not_found'))
-                    return False
+            match = search_next_match(pattern, full_text, self.text_ctrl.GetInsertionPoint())
         else:
-            start_pos = self.text_ctrl.GetInsertionPoint() - 1
-            start_pos = start_pos if start_pos >= 0 else text_len - 1
-            matches = list(pattern.finditer(full_text))
-            if not matches:
-                if self.last_find_direction == direction:
-                    self.find_count += 1
-                else:
-                    self.find_count = 1
-                    self.last_find_direction = direction
-                
-                if self.find_count >= 6:
-                    self.find_count = 0
-                    self.last_find_direction = None
-                    self.on_find_replace_click(None, show_replace=False)
-                else:
-                    if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
-                        self.Parent.vo_handler.speak_text(setting._('edd_search_not_found'))
-                return False
-            match = None
-            for m in matches:
-                if m.start() < start_pos:
-                    match = m
-            if match is None:
-                match = matches[-1]
+            sel_start, sel_end = self.text_ctrl.GetSelection()
+            match = search_prev_match(pattern, full_text, self.text_ctrl.GetInsertionPoint(), sel_start, sel_end)
         
-        if match:
-            start, end = match.span()
-            self.text_ctrl.SetSelection(start, end)
-            self.text_ctrl.SetInsertionPoint(end)
-            self.last_find_pos = end if direction == 'next' else start
-            self.find_count = 0
-            self.last_find_direction = None
-            return True
-        return False
+        if match is None:
+            if self.last_find_direction == direction:
+                self.find_count += 1
+            else:
+                self.find_count = 1
+                self.last_find_direction = direction
+            
+            if self.find_count >= 6:
+                self.find_count = 0
+                self.last_find_direction = None
+                self.on_find_replace_click(None, show_replace=False)
+            else:
+                if hasattr(self, 'Parent') and hasattr(self.Parent, 'vo_handler'):
+                    self.Parent.vo_handler.speak_text(setting._('edd_search_not_found'))
+            return False
+        
+        start, end = match.span()
+        self.text_ctrl.SetSelection(start, end)
+        self.text_ctrl.SetInsertionPoint(end)
+        self.last_find_pos = end if direction == 'next' else start
+        self.find_count = 0
+        self.last_find_direction = None
+        return True
     
     def _get_pattern_for_quick_find(self):
         search_text = self.last_find_text
         if not search_text:
-            return None, 0
-        
+            return None
+
         flags = 0 if self.last_case else re.IGNORECASE
-        
+
         if self.last_regex:
             try:
-                pattern = re.compile(search_text, flags)
+                return re.compile(search_text, flags)
             except re.error:
-                return None, 0
-        else:
-            pattern = re.compile(re.escape(search_text), flags)
-        
-        return pattern, 1 if self.last_regex else 0
+                return None
+        return re.compile(re.escape(search_text), flags)
 
 
     def on_more_btn_click(self, event):
@@ -687,3 +720,58 @@ class EditDialog(wx.Dialog):
         self.text_processor.set_text(self.text_ctrl.GetValue())
         result = self.text_processor.replace_punctuation_with_newline()
         self.text_ctrl.SetValue(result)
+
+
+class UrlSelectDialog(wx.Dialog):
+    """多URL候选选择对话框：列表展示全部提取结果，选中一条或双击后确认打开"""
+
+    def __init__(self, parent, urls):
+        super().__init__(parent, title=setting._('url_select_title'), size=(460, 320))
+
+        self.urls = urls
+
+        panel = wx.Panel(self)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        self.url_list = wx.ListBox(panel, choices=urls, style=wx.LB_SINGLE)
+        if urls:
+            self.url_list.SetSelection(0)
+        sizer.Add(self.url_list, 1, wx.EXPAND | wx.ALL, 10)
+
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.ok_btn = wx.Button(panel, label=setting._('confirm_btn'))
+        self.cancel_btn = wx.Button(panel, label=setting._('cancel_btn'))
+        self.ok_btn.SetDefault()
+        btn_sizer.Add(self.ok_btn, 0, wx.RIGHT, 10)
+        btn_sizer.Add(self.cancel_btn, 0)
+        sizer.Add(btn_sizer, 0, wx.ALIGN_CENTER | wx.BOTTOM, 10)
+
+        panel.SetSizer(sizer)
+
+        self.ok_btn.Bind(wx.EVT_BUTTON, self.on_ok)
+        self.cancel_btn.Bind(wx.EVT_BUTTON, lambda e: self.EndModal(wx.ID_CANCEL))
+        self.url_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_ok)
+        panel.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
+
+        self.Centre()
+        self.url_list.SetFocus()
+        ime_guard.install(self)
+
+    def on_key_down(self, event):
+        if ime_guard.guard_key_event(event):
+            # 输入法组合中的 ESC（取消组合/候选），不关闭对话框
+            return
+        if event.GetKeyCode() == wx.WXK_ESCAPE:
+            self.EndModal(wx.ID_CANCEL)
+        else:
+            event.Skip()
+
+    def on_ok(self, event):
+        self.EndModal(wx.ID_OK)
+
+    def get_selected(self):
+        """返回选中项的URL，未选中返回None"""
+        index = self.url_list.GetSelection()
+        if index == wx.NOT_FOUND:
+            return None
+        return self.urls[index]

@@ -10,6 +10,7 @@ import setting
 import sys
 import threading
 import time
+import unicodedata
 
 from ctypes import POINTER, c_uint32, c_float, c_bool, Structure, byref, c_void_p
 from typing import Callable, Dict, List, Optional, Tuple
@@ -131,6 +132,58 @@ class BaseThreadedWorker:
             self.stop_worker()
 
 
+# URL匹配（finditer全量提取），两个分支：
+# 1. 带协议头/www的URL，字符集宽松，可含端口、路径、查询、锚点（localhost这类无点主机仅此分支可匹配）
+# 2. 裸域名（如 GOOGLE.COM），以"末段为2个以上字母"近似判断TLD，会把 readme.md 这类文件名一并
+#    视作URL，属可接受误报；路径中不含空白、中文及全角符号
+_URL_PATTERN = re.compile(
+    r'(?:https?://|www\.)[A-Za-z0-9\-._~:/?#@!$&()*+,;=%\[\]]+'
+    r'|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?::\d{1,5})?(?:/[A-Za-z0-9\-._~:/?#@!$&()*+,;=%\[\]]*)?'
+)
+# URL末尾需剥离的标点（中英文句读、括号引号等，多为朗读文本中URL后的自然语言内容）
+_URL_TRAILING_PUNCT = ".,;:!?)]}>\"'\u2026\u3002\uff0c\u3001\uff1b\uff1a\uff01\uff1f\uff09\u3011\u300b\u201d\u2019"
+
+# markdown标题行朗读加工：行首井号串（1-6个）后允许空白但必须紧跟数字才补句点
+_HEADING_DOT_PATTERN = re.compile(r'^(#{1,6})(?=\s*\d)')
+
+
+def insert_heading_dot(text: str) -> str:
+    """markdown标题行朗读加工：行首井号（如“# 1 绪论”“##2.3 概述”）右侧插入一个句点再朗读
+
+    仅作用于输出给VO的朗读文本拼接，不改动剪贴板原数据，逐字浏览不会看到该句点；
+    井号后非数字开头的标题不做处理。
+    """
+    if not text:
+        return text
+    return _HEADING_DOT_PATTERN.sub(r'\1.', text)
+
+
+def unicode_char_name(char: str) -> Optional[str]:
+    """未收录符号的兜底朗读描述：取 unicodedata 官方名称并转为可自然朗读的小写词串
+
+    无正式名称的字符（控制符等，符号库已覆盖常规项）返回None，由调用方回退原样输出。
+    """
+    try:
+        name = unicodedata.name(char)
+    except (ValueError, TypeError):
+        return None
+    # 连字符转空格并转小写，避免旁白逐字母拼读
+    return name.replace('-', ' ').lower() if name else None
+
+
+def extract_urls(text: Optional[str]) -> List[str]:
+    """提取朗读文本中按出现顺序的全部URL并去重；无协议头的裸域名自动补全https://"""
+    if not text:
+        return []
+    urls = []
+    for match in _URL_PATTERN.finditer(text):
+        url = match.group(0).rstrip(_URL_TRAILING_PUNCT)
+        if not url.lower().startswith(("http://", "https://")):
+            url = "https://" + url
+        urls.append(url)
+    return list(dict.fromkeys(urls))
+
+
 def split_text_by_punctuation(text: str, max_chars: int) -> List[str]:
     """按标点分割文本，确保每段不超过max_chars
 
@@ -207,6 +260,8 @@ class Translator(BaseThreadedWorker):
         super().__init__(log_level=log_level, loop_interval=loop_interval)
         
         self._model = None
+        # 加载/卸载与推理互斥锁：防止推理进行中模型被释放导致底层指针悬空崩溃
+        self._model_lock = threading.Lock()
         self._input_text: Optional[str] = None  # 待翻译文本
 
         # 查找模型
@@ -283,42 +338,29 @@ class Translator(BaseThreadedWorker):
         
         try:
             self.model_path = model_path
-            self._model = llama_cpp.Llama(
-                model_path=self.model_path,
-                **self.DEFAULT_CONFIG
-            )
-            self.model_available = True
+            with self._model_lock:
+                self._model = llama_cpp.Llama(
+                    model_path=self.model_path,
+                    **self.DEFAULT_CONFIG
+                )
+                self.model_available = True
             self.logger.info(f"模型加载成功：{self.model_path}")
             return True
         except Exception as e:
-            self.model_available = False
-            self._model = None
+            with self._model_lock:
+                self.model_available = False
+                self._model = None
             self.logger.error(f"模型加载失败：{str(e)}")
             return False
 
-    def _load_model(self) -> Optional[llama_cpp.Llama]:
-        """加载模型"""
-        if not self.model_path:
-            self.model_available = False
-            self.logger.warning("模型路径未设置，请通过浏览按钮选择翻译模型")
-            return None
+    def unload_model(self):
+        """卸载翻译模型释放内存（视觉模型识别前调用腾出统一内存）
 
-        if not os.path.exists(self.model_path):
+        与加载/推理互斥：翻译进行中调用会等待推理完成后再卸载，不会释放正在使用的模型
+        """
+        with self._model_lock:
+            self._model = None
             self.model_available = False
-            self.logger.warning(f"模型文件未找到：{self.model_path}")
-            return None
-
-        try:
-            self.model_available = True
-            self._model = llama_cpp.Llama(
-                model_path=self.model_path,
-                **self.DEFAULT_CONFIG
-            )
-            return self._model
-        except Exception as e:
-            self.model_available = False
-            self.logger.error(f"模型加载失败：{str(e)}")
-            return None
 
     def translate(self, original_text, source_lang, target_lang):
         """公有方法：翻译接口"""
@@ -344,29 +386,33 @@ class Translator(BaseThreadedWorker):
             prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
 Text: {cleaned_text_for_translation}"""
 
-        try:
-            output = self._model.create_completion(
-                prompt=prompt,
-                max_tokens=768,
-                temperature=0.33,
-                top_p=0.9,
-                stop=[],
-                echo=False,
-                repeat_penalty=1.1
-            )
-            translated_text = output["choices"][0]["text"].strip()
-            translated_text = self._post_process_translation(translated_text, cleaned_text)
-            
-            # 保存到缓存
-            self._save_to_cache(cleaned_text, translated_text, source_lang, target_lang)
-            
-            return translated_text or ""
-        except Exception as e:
-            raise RuntimeError(f"翻译失败：{str(e)}") from e
-        finally:
-            if self._model:
-                self._model.reset()
-            time.sleep(0.05)
+        # 与加载/卸载互斥：推理期间模型不会被释放，卸载会等待推理完成
+        with self._model_lock:
+            if not self._model:
+                raise RuntimeError("翻译模型不可用，请通过设置面板浏览并选择翻译模型")
+            try:
+                output = self._model.create_completion(
+                    prompt=prompt,
+                    max_tokens=768,
+                    temperature=0.33,
+                    top_p=0.9,
+                    stop=[],
+                    echo=False,
+                    repeat_penalty=1.1
+                )
+                translated_text = output["choices"][0]["text"].strip()
+                translated_text = self._post_process_translation(translated_text, cleaned_text)
+
+                # 保存到缓存
+                self._save_to_cache(cleaned_text, translated_text, source_lang, target_lang)
+
+                return translated_text or ""
+            except Exception as e:
+                raise RuntimeError(f"翻译失败：{str(e)}") from e
+            finally:
+                if self._model:
+                    self._model.reset()
+                time.sleep(0.05)
 
     def _post_process_translation(self, translated_text: str, original_text: str) -> str:
         """后处理翻译结果"""
@@ -418,55 +464,60 @@ Text: {cleaned_text_for_translation}"""
         ctx_window = self.DEFAULT_CONFIG["n_ctx"]
         safe_margin = 200
         max_chars = int((ctx_window - safe_margin) * 0.4)
-        
+
         # 使用新的分段逻辑
         segments = self._split_text_by_punctuation(cleaned_text, max_chars)
-        all_translated = []
-        
-        for i, segment in enumerate(segments):
-            if not segment.strip():
-                continue
-            
-            segment = segment.strip()
-            
-            segment_normalized = segment.replace('\n', ' ')
-            
-            prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
+
+        # 与加载/卸载互斥：长文本分段推理期间模型不会被释放，卸载会等待全部段落完成
+        with self._model_lock:
+            if not self._model:
+                raise RuntimeError("翻译模型不可用，请通过设置面板浏览并选择翻译模型")
+            all_translated = []
+
+            for i, segment in enumerate(segments):
+                if not segment.strip():
+                    continue
+
+                segment = segment.strip()
+
+                segment_normalized = segment.replace('\n', ' ')
+
+                prompt = f"""将下列文本从{source_lang}翻译成{target_lang},无需额外解释.
 Text: {segment_normalized}"""
-            
-            try:
-                output = self._model.create_completion(
-                    prompt=prompt,
-                    max_tokens=768,
-                    temperature=0.33,
-                    top_p=0.9,
-                    echo=False,
-                    repeat_penalty=1.1
-                )
-                translated_segment = output["choices"][0]["text"].strip()
-                translated_segment = self._post_process_translation(translated_segment, segment_normalized)
-                
-                all_translated.append(translated_segment)
-                
-                if callback:
-                    callback(segment, translated_segment)
-                    
-            except Exception as e:
-                self.logger.warning(f"分段翻译失败 (第{i+1}段): {e}")
-                error_msg = f"[翻译失败: {segment[:20]}...]"
-                all_translated.append(error_msg)
-                if callback:
-                    callback(segment, error_msg)
-            finally:
-                if self._model:
-                    self._model.reset()
-                time.sleep(0.05)
-        
-        result = '\n\n'.join(all_translated)
-        
+
+                try:
+                    output = self._model.create_completion(
+                        prompt=prompt,
+                        max_tokens=768,
+                        temperature=0.33,
+                        top_p=0.9,
+                        echo=False,
+                        repeat_penalty=1.1
+                    )
+                    translated_segment = output["choices"][0]["text"].strip()
+                    translated_segment = self._post_process_translation(translated_segment, segment_normalized)
+
+                    all_translated.append(translated_segment)
+
+                    if callback:
+                        callback(segment, translated_segment)
+
+                except Exception as e:
+                    self.logger.warning(f"分段翻译失败 (第{i+1}段): {e}")
+                    error_msg = f"[翻译失败: {segment[:20]}...]"
+                    all_translated.append(error_msg)
+                    if callback:
+                        callback(segment, error_msg)
+                finally:
+                    if self._model:
+                        self._model.reset()
+                    time.sleep(0.05)
+
+            result = '\n\n'.join(all_translated)
+
         # 缓存完整翻译结果
         self._save_to_cache(cleaned_text, result, source_lang, target_lang)
-        
+
         return result
 
     # 仅实现：父类抽象方法（空逻辑，满足继承要求，无任何新增功能）
@@ -536,6 +587,16 @@ class VoiceOverHandler(BaseThreadedWorker):
             if self._vo_err_count == 6:
                 reboot_VoiceOver(None)
                 self._vo_err_count = 0
+            return None
+
+
+    def get_last_spoken_text(self) -> Optional[str]:
+        """直接读取VO最后朗读的内容，不做重复判定、不改动轮询缓存（供热键即时读取）"""
+        try:
+            content = self.vo.last_phrase.content()
+            return content or None
+        except Exception as e:
+            self.logger.error(f"读取VO最后朗读内容失败：{str(e)}")
             return None
 
 
@@ -764,8 +825,9 @@ class TextBrowser:
             direction: 浏览方向
                 "prev_char": 前一个字, "next_char": 后一个字
                 "prev_line": 当前剪贴板上一行, "next_line": 当前剪贴板下一行
+                "first_line": 第一行, "last_line": 最后一行（长按跳转用）
                 - "explain_char": 返回焦点位置内容
-        
+
         返回:
             朗读的文本
         """
@@ -799,6 +861,25 @@ class TextBrowser:
             lines = self.current_text.split('\n')
             current_line = self._get_current_line(lines)
             target_line = min(len(lines) - 1, current_line + 1)
+            spoken_text = lines[target_line] if lines else ""
+            if not spoken_text:  # 手动处理空行
+                spoken_text = '\n'
+            self._current_line = spoken_text
+            self.focus_pos = self._get_line_start_index(lines, target_line)
+
+        # 第一行（长按跳转用）
+        elif direction == "first_line":
+            lines = self.current_text.split('\n')
+            spoken_text = lines[0] if lines else ""
+            if not spoken_text:  # 手动处理空行
+                spoken_text = '\n'
+            self._current_line = spoken_text
+            self.focus_pos = self._get_line_start_index(lines, 0)
+
+        # 最后一行（长按跳转用）
+        elif direction == "last_line":
+            lines = self.current_text.split('\n')
+            target_line = len(lines) - 1
             spoken_text = lines[target_line] if lines else ""
             if not spoken_text:  # 手动处理空行
                 spoken_text = '\n'
@@ -849,8 +930,16 @@ class TextBrowser:
 
 
     def get_char_explanation(self, char: str) -> str:
-        #  特定字符解释
-        return setting.chars_dict[setting.current_lang].get(char, char)
+        # 特定字符解释：优先取符号库；未收录的符号用 unicodedata 名称兜底，避免旁白无输出
+        if not char or len(char) != 1:
+            return char
+        explained = setting.chars_dict[setting.current_lang].get(char)
+        if explained:
+            return explained
+        # 字母数字汉字旁白可直接朗读，原样返回
+        if char.isalnum():
+            return char
+        return unicode_char_name(char) or char
 
 
 def is_voiceover_running():
@@ -945,14 +1034,11 @@ class TextProcessor:
         return re.sub(r'[ \t]+', ' ', text)
 
 
-    #  分行
+    #  分句
     def replace_punctuation_with_newline(self) -> str:
-        common_punctuations = [
-            ',', '，', '.', '。', '!', '！', '?', '？', ';', '；',
-            ':', '：', '"', 
-            '-'
-        ]
-        trans_table = str.maketrans({punc: '\n' for punc in common_punctuations})
+        # 分句标点可在设置面板自定义（配置项 sentence_punctuations），实时读取当前生效值
+        punctuations = getattr(setting, 'sentence_punctuations', None) or setting.DEFAULT_SENTENCE_PUNCTUATIONS
+        trans_table = str.maketrans({punc: '\n' for punc in punctuations if punc and len(punc) == 1})
         return self.text.translate(trans_table)
 
 

@@ -165,9 +165,10 @@ class AppleTranslator:
     def translate(self, text: str, source_lang: str, target_lang: str) -> str:
         if not isinstance(text, str) or not text.strip():
             return ""
-        # 前置预检：语言包缺失/语言对不支持时直接报错，绝不进入可能挂起的翻译调用
-        status = self.get_language_status(source_lang, target_lang)
-        if status != STATUS_INSTALLED:
+        # 前置预检：语言对不支持是稳定状态，直接报错；"未安装"不短路——语言包可能在
+        # 启动预检后才装好（状态有缓存），交给实际调用，未装时 Swift 侧快速失败
+        # 返回 language_not_installed，同样秒级报错且装包后重试即可用
+        if self.get_language_status(source_lang, target_lang) == STATUS_UNSUPPORTED:
             raise AppleTranslationError(self.get_language_hint(source_lang, target_lang))
         reply = self._invoke({
             "action": "translate",

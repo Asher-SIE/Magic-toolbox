@@ -6,6 +6,7 @@ Option+D    Translate the last text read aloud by VoiceOver
 Option+Shift+D    Reverse translation
 Option+Enter    Translate content in the edit box of the translation interface
 Option+Shift+Enter    Reverse translate content in the edit box of the translation interface
+Option+Shift+T    Cycle translation engines (speaks the engine name)
 
 2. Clipboard Editor Shortcuts
 Option+T    Open clipboard editor
@@ -33,3 +34,14 @@ Option+Shift+J    Sync clipboard content to system clipboard
 Option+Shift+K    Next line of current clipboard content
 Option+Shift+M    View clipboard summary (row and column information)
 Option+Shift+P    Paste the current line of the clipboard into the input box
+
+4. Image Recognition Shortcuts
+Option+Shift+R    Recognize the image in the clipboard with the current engine (Apple OCR extracts text; the local vision model produces a ~100-character description. Press Command+C on an image in Finder first); the result is read aloud automatically
+Option+Shift+Q    Cycle recognition engines (speaks the engine name)
+
+5. Link Shortcuts
+Option+Shift+E    Extract the link from the last text read aloud by VoiceOver and open it in the default browser; when multiple links are found a dialog opens for selection; a voice hint is given when no link is found
+
+6. Mouse Landmark Shortcuts
+Option+Shift+1 to 6, 0    Mark the current mouse position as a landmark slot for the current app (stored per app in the config file, persists across restarts)
+Command+Option+Shift+1 to 6, 0    Move the mouse to the landmark stored in that slot for the current app; the numeric coordinates are spoken

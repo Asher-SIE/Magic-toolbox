@@ -100,6 +100,18 @@ msgid "menu_opt_clean_list"
 msgstr "清空剪贴板列表"
 
 #: main_UI.py
+msgid "menubar_mouse"
+msgstr "鼠标路标"
+
+#: main_UI.py
+msgid "mouse_mark_slot_label"
+msgstr "标记当前位置到槽位{slot}"
+
+#: main_UI.py
+msgid "mouse_jump_slot_label"
+msgstr "跳转到槽位{slot}"
+
+#: main_UI.py
 msgid "menubar_help"
 msgstr "帮助"
 
@@ -134,6 +146,22 @@ msgstr "下载翻译模型"
 #: main_UI.py
 msgid "download_model_prompt"
 msgstr "是否自动下载翻译模型？\n\n选择\"是\"将直接下载推荐模型（HY-MT1.5-1.8B-Q4_K_M.gguf），选择\"否\"可前往 Hugging Face 手动选择其他模型。"
+
+#: main_UI.py
+msgid "menu_help_download_vlm"
+msgstr "下载视觉模型"
+
+#: main_UI.py
+msgid "ocr_vlm_download_model"
+msgstr "下载主模型（Qwen3VL-4B-Instruct-Q4_K_M.gguf）"
+
+#: main_UI.py
+msgid "ocr_vlm_download_mmproj"
+msgstr "下载视觉编码器（mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf）"
+
+#: main_UI.py
+msgid "ocr_vlm_download_home"
+msgstr "打开模型首页"
 
 #: main_UI.py
 msgid "donate_title"
@@ -266,6 +294,14 @@ msgstr "未找到"
 #: main_UI.py
 msgid "edd_search_not_found"
 msgstr "未找到"
+
+#: dialogs.py
+msgid "edd_invalid_regex"
+msgstr "正则表达式无效"
+
+#: dialogs.py
+msgid "edd_invalid_replace"
+msgstr "替换文本包含无效转义"
 
 #: main_UI.py
 msgid "msg_notice"
@@ -580,6 +616,94 @@ msgid "nav_settings"
 msgstr "设置"
 
 #: main_UI.py
+msgid "nav_recognition"
+msgstr "识别"
+
+#: main_UI.py
+msgid "recognition_hint"
+msgstr "按 Option+Shift+R 识别剪贴板中的图片，Option+Shift+Q 切换识别引擎，或通过工具栏浏览图片文件"
+
+#: main_UI.py
+msgid "ocr_engine_label"
+msgstr "OCR 引擎:"
+
+#: main_UI.py
+msgid "ocr_engine_apple"
+msgstr "Apple OCR"
+
+#: main_UI.py
+msgid "browse_ocr_image"
+msgstr "浏览图片"
+
+#: main_UI.py
+msgid "browse_ocr_image_tips"
+msgstr "选择图片文件进行文字识别"
+
+#: main_UI.py
+msgid "ocr_select_image"
+msgstr "选择图片文件"
+
+#: main_UI.py
+msgid "ocr_no_image"
+msgstr "剪贴板中没有图片，请先复制图片后再按 Option+Shift+R"
+
+#: main_UI.py
+msgid "ocr_in_progress"
+msgstr "正在识别中，请稍候"
+
+#: main_UI.py
+msgid "ocr_engine_unavailable"
+msgstr "OCR 引擎不可用"
+
+#: main_UI.py
+msgid "ocr_failed"
+msgstr "识别失败"
+
+#: main_UI.py
+msgid "ocr_empty_result"
+msgstr "未识别到文字"
+
+#: main_UI.py
+msgid "ocr_engine_vlm"
+msgstr "图像描述（本地视觉模型）"
+
+#: main_UI.py
+msgid "ocr_model_group"
+msgstr "图像识别模型"
+
+#: main_UI.py
+msgid "browse_ocr_model"
+msgstr "浏览模型"
+
+#: main_UI.py
+msgid "browse_ocr_mmproj"
+msgstr "浏览视觉编码器"
+
+#: main_UI.py
+msgid "select_ocr_model_file"
+msgstr "选择视觉模型 GGUF 文件"
+
+#: main_UI.py
+msgid "select_ocr_mmproj_file"
+msgstr "选择视觉编码器 mmproj 文件"
+
+#: main_UI.py
+msgid "ocr_vlm_not_configured"
+msgstr "请先在设置面板选择视觉模型与视觉编码器文件"
+
+#: main_UI.py
+msgid "ocr_vlm_loading"
+msgstr "正在加载视觉模型，首次加载需要一些时间，请稍候"
+
+#: main_UI.py
+msgid "ocr_vlm_ready"
+msgstr "视觉模型已就绪"
+
+#: main_UI.py
+msgid "ocr_vlm_unavailable"
+msgstr "本地视觉模型需要新版本 llama-cpp-python，请升级后使用"
+
+#: main_UI.py
 msgid "clipboard_max_count_warning_title"
 msgstr "剪贴板记录警告"
 
@@ -707,3 +831,18 @@ msgstr "Apple 翻译已就绪"
 msgid "apple_translation_not_available"
 msgstr "Apple 翻译不可用"
 
+#: main_UI.py
+msgid "no_url_found"
+msgstr "未找到链接"
+
+#: dialogs.py
+msgid "url_select_title"
+msgstr "选择要打开的链接"
+
+#: main_UI.py
+msgid "sentence_punct_group"
+msgstr "编辑器分句符号"
+
+#: main_UI.py
+msgid "sentence_punct_hint"
+msgstr "一行一个标点符号，修改后自动保存并生效"
