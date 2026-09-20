@@ -2311,7 +2311,8 @@ class MainFrame(wx.Frame):
         """读取当前鼠标全局坐标（Quartz 左上原点），失败返回 None"""
         try:
             import Quartz
-            location = Quartz.CGEventCreate(None).location
+            # CGEventRef 是 pyobjc 不透明对象，无 location 属性，必须用 CGEventGetLocation 取 CGPoint
+            location = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
             return float(location.x), float(location.y)
         except Exception as e:
             logging.error(f"读取鼠标坐标失败: {e}")
