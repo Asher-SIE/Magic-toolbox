@@ -1807,7 +1807,8 @@ class MainFrame(wx.Frame):
         print(f"切换到索引 {new_idx}，内容：{selected_content[:20]}...")
         if self.current_module == 'clipboard':
             self.list_Box.SetSelection(new_idx)
-        self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
+        # 朗读文案为「序号, 内容」结构，仅对内容段做标题补句点（首行井号后紧跟数字才处理）
+        self.vo_handler.speak_text(f"{new_idx + 1}, {insert_heading_dot(selected_content[:1024])}")
         self.update_clipboard_buttons_state()
 
         self.TB.set_text(selected_content)
@@ -1848,7 +1849,7 @@ class MainFrame(wx.Frame):
         if self.current_module == 'clipboard':
             self.list_Box.SetSelection(new_idx)
         
-        self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
+        self.vo_handler.speak_text(f"{new_idx + 1}, {insert_heading_dot(selected_content[:1024])}")
         self.TB.set_text(selected_content)
         self.TB.browse("prev_line")
         # 单步切换后开始长按监测，按住不放则快速跳到列表最后一项
@@ -2016,7 +2017,7 @@ class MainFrame(wx.Frame):
         self.TB.set_text(selected_content)
         self.TB.browse("first_line")
         self.play_sound("index")
-        self.vo_handler.speak_text(f"1, {selected_content[:1024]}")
+        self.vo_handler.speak_text(f"1, {insert_heading_dot(selected_content[:1024])}")
 
 
     def _jump_clipboard_tail(self):
@@ -2033,7 +2034,7 @@ class MainFrame(wx.Frame):
         self.TB.set_text(selected_content)
         self.TB.browse("first_line")
         self.play_sound("index")
-        self.vo_handler.speak_text(f"{new_idx + 1}, {selected_content[:1024]}")
+        self.vo_handler.speak_text(f"{new_idx + 1}, {insert_heading_dot(selected_content[:1024])}")
 
 
     def _jump_text_first_line(self):

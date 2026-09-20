@@ -85,6 +85,14 @@ class InsertHeadingDotTests(unittest.TestCase):
         insert_heading_dot(source)
         self.assertEqual(source, "# 1 绪论")
 
+    def test_multiline_only_first_match_dotted(self):
+        # 剪贴板条目朗读（opt+shift+7/9）对整个条目内容套用：仅条目开头第一个匹配点补句点，后续行井号不处理
+        self.assertEqual(insert_heading_dot("# 1 绪论\n## 2 方法\n# 3 附录"), "#. 1 绪论\n## 2 方法\n# 3 附录")
+
+    def test_content_after_index_prefix(self):
+        # 朗读文案为「序号, 内容」结构时对内容段单独套用，序号前缀不受影响
+        self.assertEqual(f"3, {insert_heading_dot('# 1 绪论')}", "3, #. 1 绪论")
+
 
 class UnicodeCharNameTests(unittest.TestCase):
     """未收录符号的 unicodedata 兜底描述"""
