@@ -109,15 +109,52 @@ class AppleTranslatorTests(unittest.TestCase):
     @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
     @mock.patch("apple_translator.subprocess.run")
     def test_get_language_hint_messages(self, run, _supports):
-        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_SUPPORTED}))
+        run.side_effect = [
+            self._completed(json.dumps({"ok": True, "status": STATUS_SUPPORTED})),
+            self._completed(json.dumps({"ok": False, "code": "language_not_installed"})),
+        ]
         self.assertIn("系统设置", self.translator.get_language_hint("English", "Chinese"))
         self.translator._language_status_cache.clear()
 
-        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_UNSUPPORTED}))
+        run.side_effect = [
+            self._completed(json.dumps({"ok": True, "status": STATUS_UNSUPPORTED})),
+        ]
         self.assertIn("不支持", self.translator.get_language_hint("English", "Chinese"))
         self.translator._language_status_cache.clear()
 
-        run.return_value = self._completed(json.dumps({"ok": True, "status": STATUS_INSTALLED}))
+        run.side_effect = [
+            self._completed(json.dumps({"ok": True, "status": STATUS_INSTALLED})),
+        ]
+        self.assertEqual(self.translator.get_language_hint("English", "Chinese"), "")
+
+    @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
+    @mock.patch("apple_translator.subprocess.run")
+    def test_supported_false_positive_corrected_by_probe(self, run, _supports):
+        """启动预检误报：状态查询返回 supported 但语言包实际已装，
+        探测翻译成功后不提示下载，并把缓存修正为 installed"""
+        run.side_effect = [
+            self._completed(json.dumps({"ok": True, "status": STATUS_SUPPORTED})),
+            self._completed(json.dumps({"ok": True, "translatedText": "你好"})),
+        ]
+
+        self.assertEqual(self.translator.get_language_hint("English", "Chinese"), "")
+
+        self.assertEqual(
+            self.translator._language_status_cache[("en", "zh-Hans")], STATUS_INSTALLED
+        )
+        probe_payload = json.loads(run.call_args_list[1].kwargs["input"])
+        self.assertEqual(probe_payload["action"], "translate")
+        self.assertEqual(probe_payload["text"], "hello")
+
+    @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
+    @mock.patch("apple_translator.subprocess.run")
+    def test_supported_with_inconclusive_probe_stays_silent(self, run, _supports):
+        """探测因其他错误无法定论时启动期不报警，交给实际翻译时再报真实错误"""
+        run.side_effect = [
+            self._completed(json.dumps({"ok": True, "status": STATUS_SUPPORTED})),
+            self._completed(json.dumps({"ok": False, "error": "boom"})),
+        ]
+
         self.assertEqual(self.translator.get_language_hint("English", "Chinese"), "")
 
     @mock.patch("apple_translator.setting.supports_apple_translation", return_value=True)
