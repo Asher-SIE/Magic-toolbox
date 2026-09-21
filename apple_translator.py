@@ -37,6 +37,10 @@ class AppleTranslationError(RuntimeError):
     """Raised when the native Apple Translation helper cannot complete a request."""
 
 
+class AppleLanguageNotInstalledError(AppleTranslationError):
+    """language_not_installed：语言包未安装，需引导用户到系统设置手动下载"""
+
+
 class AppleTranslator:
     """Invoke the bundled headless CLI helper over a small JSON/stdin protocol."""
 
@@ -129,7 +133,7 @@ class AppleTranslator:
 
         if result.returncode != 0 or not reply.get("ok"):
             if reply.get("code") == "language_not_installed":
-                raise AppleTranslationError(LANGUAGE_DOWNLOAD_HINT)
+                raise AppleLanguageNotInstalledError(LANGUAGE_DOWNLOAD_HINT)
             detail = reply.get("error") or result.stderr.strip() or "未知错误"
             raise AppleTranslationError(f"Apple 翻译失败：{detail}")
         return reply
@@ -153,6 +157,27 @@ class AppleTranslator:
             self._language_status_cache[key] = status
         return self._language_status_cache[key]
 
+    def _probe_language_installed(self, source_lang: str, target_lang: str) -> bool | None:
+        """用一次微型翻译探测语言包是否实际可用。
+
+        LanguageAvailability 在系统启动初期可能把已装好的语言包误报为 supported，
+        实际翻译才是最终事实。返回 True 表示可用，False 表示确认未安装
+        （language_not_installed），None 表示其他错误、无法定论。
+        """
+        try:
+            self._invoke({
+                "action": "translate",
+                "sourceLanguage": self._language_code(source_lang),
+                "targetLanguage": self._language_code(target_lang),
+                "text": "hello",
+            })
+            return True
+        except AppleLanguageNotInstalledError:
+            return False
+        except AppleTranslationError as exc:
+            logger.warning(f"Apple 翻译语言包探测失败: {exc}")
+            return None
+
     def get_language_hint(self, source_lang: str, target_lang: str) -> str:
         """返回语言对的状态引导提示；语言包已安装时返回空字符串"""
         status = self.get_language_status(source_lang, target_lang)
@@ -160,7 +185,15 @@ class AppleTranslator:
             return ""
         if status == STATUS_UNSUPPORTED:
             return f"Apple 翻译不支持「{source_lang} → {target_lang}」语言对"
-        return f"{source_lang} → {target_lang}：{LANGUAGE_DOWNLOAD_HINT}"
+        # supported 只是"可下载"，不等于"未安装"：启动初期状态查询可能误报，
+        # 先用一次微型翻译探测核实，只有确认 language_not_installed 才提示下载
+        probe = self._probe_language_installed(source_lang, target_lang)
+        if probe is False:
+            return f"{source_lang} → {target_lang}：{LANGUAGE_DOWNLOAD_HINT}"
+        if probe:
+            key = (self._language_code(source_lang), self._language_code(target_lang))
+            self._language_status_cache[key] = STATUS_INSTALLED
+        return ""
 
     def translate(self, text: str, source_lang: str, target_lang: str) -> str:
         if not isinstance(text, str) or not text.strip():
