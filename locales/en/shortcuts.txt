@@ -12,7 +12,7 @@ Option+Shift+T    Cycle translation engines (speaks the engine name)
 Option+T    Open clipboard editor
 Option+1    Remove blank characters
 Option+2    Merge multiple spaces
-Option+3    Convert numbers to Chinese characters
+Option+3    Convert numbers to Chinese (+, -, *, /, = are read directly as plus, minus, times, divided by, equals; fractions and negative numbers need the escape prefix: 1|/2 reads as one half, |-5 reads as negative five) characters
 Option+4    Split text into lines
 Option+F    Find next
 Option+Shift+F    Find previous

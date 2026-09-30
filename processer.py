@@ -1046,12 +1046,13 @@ class TextProcessor:
     def arabic_to_chinese(self) -> str:
         chinese_nums = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
         level_units = ['', '万', '亿', '万亿']  # 第0组=个级、第1组=万级、第2组=亿级
-        # 四则运算符号映射表
+        # 运算符号映射表：键入 +-*/= 直出汉字
         op_map = {
-            'a': ' + ',
-            's': ' - ',
-            'm': ' × ',
-            'd': ' ÷ '
+            '+': '加',
+            '-': '减',
+            '*': '乘',
+            '/': '除',
+            '=': '等于'
         }
 
         def four_digit_to_chinese(num_str: str) -> str:
@@ -1138,50 +1139,63 @@ class TextProcessor:
             return '点' + ''.join([chinese_nums[int(c)] for c in decimal_str])
 
         def fraction_to_chinese(numerator: str, denominator: str) -> str:
-            numerator_cn = int_to_chinese(int(numerator))
+            # 负号提到最前：|-1|/2 读作"负二分之一"而非"二分之一负一"
+            negative = numerator.startswith('-')
+            numerator_cn = int_to_chinese(int(numerator.lstrip('-')))
             denominator_cn = int_to_chinese(int(denominator))
-            return f"{denominator_cn}分之{numerator_cn}" if denominator != '1' else numerator_cn
+            result = f"{denominator_cn}分之{numerator_cn}" if int(denominator) != 1 else numerator_cn
+            return ('负' + result) if negative else result
 
-        # 正则匹配四则运算符号
+        # 正则匹配：分数与负数需转义符 | 显式声明（如 1|/2、|-5），避免与除号/减号混淆
         pattern = r"""
-            (-?\d+\/\d+) |                # 分数（优先匹配
-            (-?\d+\.?\d*%) |              # 百分数
-            (-?\d+\.\d+) |                # 小数
-            (-?\.\d+) |                   # 小数点开头
-            (-?\d+) |                     # 整数
-            ([aAsSmMdD])                  # 四则运算符号
+            (\|?-?\d+\|/\d+) |     # 分数：1|/2、|-1|/2（转义 |/）
+            (\|-?\d+\.?\d*%) |     # 负百分数：|-50%
+            (\|-?\d+\.\d+) |       # 负小数：|-3.14
+            (\|-?\.\d+) |          # 负小数点开头：|-.14
+            (\|-?\d+) |            # 负整数：|-5
+            (\d+\.?\d*%) |         # 百分数
+            (\d+\.\d+) |           # 小数
+            (\.\d+) |              # 小数点开头
+            (\d+) |                # 整数
+            ([+\-*/=])             # 运算符号直读
         """
         # 提取所有匹配项
         matches = re.findall(pattern, self.text, re.VERBOSE | re.MULTILINE)
 
         chinese_results = []
         for match in matches:
-            (fraction, percent, decimal_normal, decimal_dot_start, integer, op) = match
+            (fraction, neg_percent, neg_decimal, neg_dot_start, neg_integer,
+             percent, decimal_normal, decimal_dot_start, integer, op) = match
             if fraction:
-                # 分数处理
-                numerator, denominator = fraction.split('/', 1)
+                # 分数处理：剥掉转义符后按分子/分母拆分
+                numerator, denominator = fraction.lstrip('|').split('|/', 1)
                 chinese_results.append(fraction_to_chinese(numerator, denominator))
-            elif percent:
-                num_part = percent[:-1]
+            elif percent or neg_percent:
+                # 百分数：|- 前缀的负号提到"百分之"之前（负百分之五十）
+                num_part = (neg_percent or percent)[:-1].lstrip('|')
+                negative = num_part.startswith('-')
+                num_part = num_part.lstrip('-')
                 if '.' in num_part:
                     int_part, dec_part = num_part.split('.', 1)
-                    chinese_results.append(f"百分之{int_to_chinese(int(int_part))}{decimal_to_chinese(dec_part)}")
+                    body = f"百分之{int_to_chinese(int(int_part))}{decimal_to_chinese(dec_part)}"
                 else:
-                    chinese_results.append(f"百分之{int_to_chinese(int(num_part))}")
-            elif decimal_normal:
-                int_part, dec_part = decimal_normal.split('.', 1)
+                    body = f"百分之{int_to_chinese(int(num_part))}"
+                chinese_results.append(f"负{body}" if negative else body)
+            elif decimal_normal or neg_decimal:
+                # 小数：负号经 int 转换自动前置（负三点一四）
+                int_part, dec_part = (neg_decimal or decimal_normal).lstrip('|').split('.', 1)
                 chinese_results.append(f"{int_to_chinese(int(int_part))}{decimal_to_chinese(dec_part)}")
-            elif decimal_dot_start:
-                dec_part = decimal_dot_start.lstrip('.')
-                chinese_results.append(f"零{decimal_to_chinese(dec_part)}")
-            elif integer:
-                chinese_results.append(int_to_chinese(int(integer)))
+            elif decimal_dot_start or neg_dot_start:
+                # 小数点开头：负号需单独剥离，避免逐字符转换踩到
+                raw = (neg_dot_start or decimal_dot_start).lstrip('|')
+                negative = raw.startswith('-')
+                dec_part = raw.lstrip('-.')
+                chinese_results.append(f"{'负' if negative else ''}零{decimal_to_chinese(dec_part)}")
+            elif integer or neg_integer:
+                chinese_results.append(int_to_chinese(int((neg_integer or integer).lstrip('|'))))
             elif op:
-                #  符号映射
-                chinese_results.append(op_map[op.lower()])
+                # 运算符号直出汉字
+                chinese_results.append(op_map[op])
 
-        #  拼接结果
-        final_result = ''.join(chinese_results).strip()
-        # 清理空格
-        final_result = re.sub(r'\s+', ' ', final_result)
-        return final_result
+        # 拼接结果（非数字、非运算符号、非转义组合的字符丢弃，含孤立的 |）
+        return ''.join(chinese_results).strip()

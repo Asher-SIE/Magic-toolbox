@@ -12,7 +12,7 @@ Option+Shift+T    循环切换翻译引擎（播报引擎名）
 Option+T    打开剪贴板编辑器
 Option+1    移除空白字符
 Option+2    合并多个空格
-Option+3    数字转中文
+Option+3    数字转中文（+、-、*、/、= 直读为加减乘除等于；分数与负数需加转义符：1|/2 读作二分之一，|-5 读作负五）
 Option+4    文本分行
 Option+F    查找下一个
 Option+Shift+F    查找上一个
