@@ -147,6 +147,30 @@ _URL_TRAILING_PUNCT = ".,;:!?)]}>\"'\u2026\u3002\uff0c\u3001\uff1b\uff1a\uff01\u
 _HEADING_DOT_PATTERN = re.compile(r'^(#{1,6})(?=\s*\d)')
 
 
+# 标识符边界拆分（翻译前预处理）：驼峰边界与缩写词尾插空格
+# 词中小写后跟大写（前缀至少两个小写，防 iPhone/eBay 误拆）：myVar、getText；
+# 数字后跟大写：MP3Player；连续大写的词尾：HTTPServer；
+# 字母后跟数字且数字串后非小写（防 v2ray 误拆）：iPhone13、Windows11
+_IDENTIFIER_BOUNDARY = re.compile(
+    r'(?<=[a-z]{2})(?=[A-Z])'
+    r'|(?<=[0-9])(?=[A-Z])'
+    r'|(?<=[A-Z])(?=[A-Z][a-z])'
+    r'|(?<=[a-zA-Z])(?=[0-9])(?![0-9]+[a-z])'
+)
+
+
+def insert_identifier_spaces(text: str) -> str:
+    """翻译前预处理：驼峰与 -/_ 分隔的标识符在词边界插入空格，提升程序文本的翻译质量
+
+    仅处理 ASCII 字母数字边界，中文等非拉丁文本不受影响；
+    连字符/下划线仅当两侧均为字母数字时替换为空格（数字后跟小写不拆，避免 v2ray 类误伤）。
+    """
+    if not text:
+        return text
+    text = _IDENTIFIER_BOUNDARY.sub(' ', text)
+    return re.sub(r'(?<=[A-Za-z0-9])[-_](?=[A-Za-z0-9])', ' ', text)
+
+
 def insert_heading_dot(text: str) -> str:
     """markdown标题行朗读加工：行首井号（如“# 1 绪论”“##2.3 概述”）右侧插入一个句点再朗读
 

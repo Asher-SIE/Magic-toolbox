@@ -15,7 +15,7 @@ import wx.adv
 from AppKit import NSApplication, NSApp, NSWindow
 from dialogs import FindReplaceDialog, EditDialog, AboutDialog, UrlSelectDialog
 from dictionary import Dictionary
-from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, extract_urls, insert_heading_dot, split_text_by_punctuation
+from processer import ClipboardMonitor, TextBrowser, Translator, reboot_VoiceOver, TextProcessor, VoiceOverHandler, VolumeController, extract_urls, insert_heading_dot, insert_identifier_spaces, split_text_by_punctuation
 from typing import Optional, Tuple
 
 import update
@@ -411,6 +411,8 @@ class MainFrame(wx.Frame):
         Returns:
             翻译结果
         """
+        # 预处理：驼峰与 -/_ 分隔的标识符在词边界插空格（词典查询已在调用前完成，不受影响）
+        text = insert_identifier_spaces(text)
         if self._translation_mode == 'apple':
             if hasattr(self, 'apple_translator') and self.apple_translator.is_available():
                 return self._translate_with_apple(text, source_lang, target_lang, callback)
