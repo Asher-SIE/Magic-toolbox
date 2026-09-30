@@ -1082,14 +1082,16 @@ class TextProcessor:
 
     # 阿拉伯数字转中文
     def arabic_to_chinese(self) -> str:
+        # 全角竖线归一化为半角：中文输入法易输出全角｜，转义符需两种写法都识别
+        text = self.text.replace('\uff5c', '|')
         chinese_nums = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
         level_units = ['', '万', '亿', '万亿']  # 第0组=个级、第1组=万级、第2组=亿级
-        # 运算符号映射表：键入 +-*/= 直出汉字
+        # 运算符号映射表：键入 +-*/= 直出汉字（"除以"而非"除"：中文里"三除九"是9÷3，语义相反）
         op_map = {
             '+': '加',
             '-': '减',
             '*': '乘',
-            '/': '除',
+            '/': '除以',
             '=': '等于'
         }
 
@@ -1198,7 +1200,7 @@ class TextProcessor:
             ([+\-*/=])             # 运算符号直读
         """
         # 提取所有匹配项
-        matches = re.findall(pattern, self.text, re.VERBOSE | re.MULTILINE)
+        matches = re.findall(pattern, text, re.VERBOSE | re.MULTILINE)
 
         chinese_results = []
         for match in matches:

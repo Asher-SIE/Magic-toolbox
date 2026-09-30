@@ -44,11 +44,12 @@ if "setting" not in sys.modules:
 
 import processer
 
-# 还原全局状态：连 processer 一起移除，后续模块（test_processer_unload 等）
-# 会用自己的完整桩重新加载 processer；本模块已持有引用，测试不受影响
-for _name in _injected:
-    del sys.modules[_name]
-sys.modules.pop("processer", None)
+# 仅当本模块抢跑注入了桩时才还原（processer 由本模块首次加载，交还后续模块
+# 用自己的完整桩重新加载）；桩已存在说明 processer 归属其他模块管理，不动
+if _injected:
+    for _name in _injected:
+        del sys.modules[_name]
+    sys.modules.pop("processer", None)
 if _setting_injected:
     del sys.modules["setting"]
 
@@ -64,7 +65,13 @@ class OperatorTests(unittest.TestCase):
         self.assertEqual(convert("1+1=2"), "一加一等于二")
         self.assertEqual(convert("3-2"), "三减二")
         self.assertEqual(convert("2*3"), "二乘三")
-        self.assertEqual(convert("1/2"), "一除二")
+        # "除以"而非"除"：中文里"三除九"是9÷3，语义相反
+        self.assertEqual(convert("1/2"), "一除以二")
+
+    def test_fullwidth_pipe_normalized(self):
+        # 中文输入法易输出全角竖线，两种写法都应触发分数转换
+        self.assertEqual(convert("3\uff5c/9"), "九分之三")
+        self.assertEqual(convert("3|/9"), "九分之三")
 
     def test_letter_mapping_removed(self):
         # 旧版字母 a/s/m/d 误转运算符的行为已删除，普通字母丢弃
