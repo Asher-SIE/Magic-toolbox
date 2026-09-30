@@ -62,6 +62,6 @@ app = BUNDLE(
     info_plist={
         'CFBundleDevelopmentRegion': 'zh_CN',
         'CFBundleLocalizations': ['zh_CN', 'en'],
-        'CFBundleShortVersionString': '1.2.1',
+        'CFBundleShortVersionString': '1.2.2',
     },
 )
