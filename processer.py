@@ -1182,9 +1182,12 @@ class TextProcessor:
                     body = f"百分之{int_to_chinese(int(num_part))}"
                 chinese_results.append(f"负{body}" if negative else body)
             elif decimal_normal or neg_decimal:
-                # 小数：负号经 int 转换自动前置（负三点一四）
-                int_part, dec_part = (neg_decimal or decimal_normal).lstrip('|').split('.', 1)
-                chinese_results.append(f"{int_to_chinese(int(int_part))}{decimal_to_chinese(dec_part)}")
+                # 小数：负号统一剥离前置（|-0.14 的整数部分为 0，int(-0) 会被零值快速返回吞掉负号）
+                raw = (neg_decimal or decimal_normal).lstrip('|')
+                negative = raw.startswith('-')
+                int_part, dec_part = raw.lstrip('-').split('.', 1)
+                body = f"{int_to_chinese(int(int_part))}{decimal_to_chinese(dec_part)}"
+                chinese_results.append(f"负{body}" if negative else body)
             elif decimal_dot_start or neg_dot_start:
                 # 小数点开头：负号需单独剥离，避免逐字符转换踩到
                 raw = (neg_dot_start or decimal_dot_start).lstrip('|')

@@ -88,6 +88,7 @@ class EscapeTests(unittest.TestCase):
     def test_negative_decimal(self):
         self.assertEqual(convert("|-3.14"), "负三点一四")
         self.assertEqual(convert("|-.14"), "负零点一四")
+        self.assertEqual(convert("|-0.14"), "负零点一四")
 
     def test_negative_percent(self):
         self.assertEqual(convert("|-50%"), "负百分之五十")
