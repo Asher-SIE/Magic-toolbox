@@ -2361,13 +2361,13 @@ class MainFrame(wx.Frame):
         self.vo_handler.speak_text(self._format_landmark_pos(position))
 
     def on_hotkey_mouse_mark(self, event):
-        """opt+shift+数字: 将当前鼠标位置标记为当前应用的路标槽位"""
+        """cmd+opt+shift+数字: 将当前鼠标位置标记为当前应用的路标槽位"""
         slot = self._hotkey_name_of(event).replace("mark_", "")
         if slot:
             self.mouse_mark_slot(slot)
 
     def on_hotkey_mouse_jump(self, event):
-        """cmd+opt+shift+数字: 将鼠标跳转到当前应用对应槽位标记的位置"""
+        """opt+shift+数字: 将鼠标跳转到当前应用对应槽位标记的位置"""
         slot = self._hotkey_name_of(event).replace("jump_", "")
         if slot:
             self.mouse_jump_slot(slot)
