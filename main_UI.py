@@ -2360,7 +2360,8 @@ class MainFrame(wx.Frame):
         if not setting.set_mouse_landmark(self._current_app_id(), slot, position[0], position[1]):
             self.vo_handler.speak_text("保存失败")
             return
-        self.vo_handler.speak_text(self._format_landmark_pos(position))
+        # 坐标前拼"标记"二字作简洁提示，与跳转播报区分
+        self.vo_handler.speak_text("标记" + self._format_landmark_pos(position))
 
     def mouse_jump_slot(self, slot: str):
         """将鼠标跳转到当前应用对应槽位标记的位置（热键与菜单共用入口）"""
