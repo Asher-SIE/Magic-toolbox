@@ -524,15 +524,12 @@ Text: {segment_normalized}"""
     def _run_task(self) -> Optional[any]:
         return None
 
-# VO监听类：继承多线程基类
-class VoiceOverHandler(BaseThreadedWorker):
-    def __init__(self, log_level: int = logging.WARNING, repeat_threshold: float = 0.05, loop_interval: float = 0.1):
+# VO 交互类：朗读/读取最后短语均为一次性同步调用，无需后台线程
+class VoiceOverHandler:
+    def __init__(self, log_level: int = logging.WARNING, repeat_threshold: float = 0.05):
         """
         :param repeat_threshold: 重复内容的时间阈值（秒），超过此值视为新朗读
-        :param loop_interval: 监听循环间隔时间（秒）
         """
-        super().__init__(log_level=log_level, loop_interval=loop_interval)
-        
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(log_level)
         self._vo_err_count = 0    #初始化错误计数器
@@ -619,11 +616,6 @@ class VoiceOverHandler(BaseThreadedWorker):
         
             self.logger.error(f"朗读文本时发生未知异常：{str(e)}", exc_info=True)
             return False
-
-
-    def _run_task(self) -> Optional[Tuple[str, float]]:
-        """多线程任务实现：获取VO内容并返回"""
-        return self.get_last_phrase()
 
 
 #  剪贴板监视器类
