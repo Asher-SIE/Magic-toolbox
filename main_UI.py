@@ -105,8 +105,7 @@ class MainFrame(wx.Frame):
         self.dictionary = Dictionary()
         self.vo_handler = VoiceOverHandler(
             log_level=logging.INFO,
-            repeat_threshold=0.02,
-            loop_interval=0.01
+            repeat_threshold=0.02
         )
         
         self.clipboard_monitor = ClipboardMonitor(
@@ -2615,28 +2614,74 @@ class MainFrame(wx.Frame):
 
 
     def on_reboot_vo_processer(self, event):
-        """重启处理器线程"""
+        """重启处理器：强制重新初始化剪贴板监视、音量控制、翻译引擎与 OCR 引擎
 
-        try:
-            
-            #  停止当前线程
-            if self.clipboard_monitor:
-                self.clipboard_monitor.stop_worker()
-                self.clipboard_monitor = None
+        纯 Python 轮询线程直接停止重建（卡死线程无法强杀，放弃旧线程由新实例接管）；
+        llama_cpp 模型经互斥锁卸载（进行中的推理跑完后释放，绕过互斥直接释放会段错误）。
+        整个流程后台执行避免模型重载阻塞界面，完成后 VO 播报结果。
+        """
 
-                logging.info("已停止当前VO处理器线程")
+        def reboot_worker():
+            results = []
+            # 剪贴板监视：停止并重建
+            try:
+                if self.clipboard_monitor:
+                    self.clipboard_monitor.stop_worker()
+                self.clipboard_monitor = ClipboardMonitor(
+                    log_level=logging.INFO,
+                    loop_interval=0.1
+                )
+                self.clipboard_monitor.start_worker(callback=self.on_new_clipboard_content)
+                results.append("剪贴板监视")
+            except Exception as e:
+                logging.error(f"重启剪贴板监视失败: {e}")
 
-            #  重新实例化并启动
-            self.clipboard_monitor = ClipboardMonitor(
-                log_level=logging.INFO, 
-                loop_interval=0.1
-            )
-            self.clipboard_monitor.start_worker(callback=self.on_new_clipboard_content)
-            
-            logging.info("处理器线程已重启")
+            # 音量控制：停止并重建，恢复音量配置
+            try:
+                if self.volume_controller:
+                    self.volume_controller.stop_worker()
+                self.volume_controller = VolumeController(loop_interval=0.02)
+                self.volume_controller.set_config(self._volume_limit, self._volume_target)
+                self.volume_controller.start_worker()
+                results.append("音量控制")
+            except Exception as e:
+                logging.error(f"重启音量控制失败: {e}")
 
-        except Exception as e:
-            logging.error(f"重启处理器失败: {str(e)}")
+            # 翻译引擎：apple 重建实例；llm 卸载模型（等待进行中的推理结束）后按原路径重载
+            try:
+                if self._translation_mode == 'apple':
+                    from apple_translator import AppleTranslator
+                    self.apple_translator = AppleTranslator()
+                    if not self.apple_translator.is_available():
+                        wx.CallAfter(self.text_ctrl.SetValue, setting._('apple_translation_not_available'))
+                elif self.translator:
+                    model_path = self.translator.model_path or getattr(self, '_model_path', '')
+                    self.translator.unload_model()
+                    if model_path and os.path.exists(model_path):
+                        self.translator.load_model(model_path)
+                    if not self.translator.model_available:
+                        wx.CallAfter(self.text_ctrl.SetValue, setting._('model_warning'))
+                results.append("翻译引擎")
+            except Exception as e:
+                logging.error(f"重启翻译引擎失败: {e}")
+
+            # OCR 引擎：卸载缓存的引擎（绕过实例复用）重新初始化，并后台预加载视觉模型
+            try:
+                for engine in self._ocr_engine_cache.values():
+                    unload = getattr(engine, 'unload', None)
+                    if callable(unload):
+                        unload()
+                self._ocr_engine_cache.clear()
+                self.init_ocr_engine()
+                self._preload_ocr_engine()
+                results.append("识别引擎")
+            except Exception as e:
+                logging.error(f"重启识别引擎失败: {e}")
+
+            summary = "、".join(results) if results else "全部失败，详见日志"
+            wx.CallAfter(self.vo_handler.speak_text, f"处理器已重新初始化：{summary}")
+
+        threading.Thread(target=reboot_worker, daemon=True).start()
 
 
     def on_clean_list(self, event):
