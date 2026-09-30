@@ -901,6 +901,28 @@ class TextBrowser:
                 spoken_text = '\n'
             self._current_line = spoken_text
             self.focus_pos = self._get_line_start_index(lines, target_line)
+
+        # 上移10行（快速跳转，钳制到第一行）
+        elif direction == "prev_10_lines":
+            lines = self.current_text.split('\n')
+            current_line = self._get_current_line(lines)
+            target_line = max(0, current_line - 10)
+            spoken_text = lines[target_line] if lines else ""
+            if not spoken_text:  # 手动处理空行
+                spoken_text = '\n'
+            self._current_line = spoken_text
+            self.focus_pos = self._get_line_start_index(lines, target_line)
+
+        # 下移10行（快速跳转，钳制到最后一行）
+        elif direction == "next_10_lines":
+            lines = self.current_text.split('\n')
+            current_line = self._get_current_line(lines)
+            target_line = min(len(lines) - 1, current_line + 10)
+            spoken_text = lines[target_line] if lines else ""
+            if not spoken_text:  # 手动处理空行
+                spoken_text = '\n'
+            self._current_line = spoken_text
+            self.focus_pos = self._get_line_start_index(lines, target_line)
         
         # 返回焦点位置内容
         elif direction == "explain_char":

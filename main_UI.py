@@ -1959,6 +1959,18 @@ class MainFrame(wx.Frame):
         self._start_long_press("altshiftk")
 
 
+    def on_hotkey_altshiftsemicolon(self, event):
+        """alt+shift+;: 当前剪贴板浏览位置向前跳转10行"""
+        result_text = self.TB.browse("prev_10_lines")
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
+
+
+    def on_hotkey_altshiftslash(self, event):
+        """alt+shift+/: 当前剪贴板浏览位置向后跳转10行"""
+        result_text = self.TB.browse("next_10_lines")
+        self.vo_handler.speak_text(insert_heading_dot(result_text))
+
+
     def play_sound(self, name: str) -> None:
         """播放 resources/sound 下的提示音（异步，不阻塞界面）"""
         try:

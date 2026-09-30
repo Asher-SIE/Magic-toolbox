@@ -32,6 +32,8 @@ Option+Shift+I    剪贴板浏览模式下查看当前字符解释
 Option+Shift+O    切换至当前剪贴板内容后一个字
 Option+Shift+J    将剪贴板内容同步至系统剪贴板
 Option+Shift+K    切换至当前剪贴板内容下一行
+Option+Shift+;    当前剪贴板浏览位置向前跳转10行
+Option+Shift+/    当前剪贴板浏览位置向后跳转10行
 Option+Shift+M    查看剪贴板综述（行列信息）
 Option+Shift+P    粘贴剪贴板当前行到输入框
 

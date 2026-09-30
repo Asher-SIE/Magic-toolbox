@@ -74,6 +74,32 @@ class TextBrowserJumpTests(unittest.TestCase):
         self.assertEqual(self.tb.browse("first_line"), "")
         self.assertEqual(self.tb.browse("last_line"), "")
 
+    def test_prev_10_lines(self):
+        self.tb.set_text("\n".join(f"第{i}行" for i in range(1, 26)))
+        self.tb.browse("last_line")
+        spoken = self.tb.browse("prev_10_lines")
+        self.assertEqual(spoken, "第15行")
+        self.assertEqual(self.tb._current_line, "第15行")
+
+    def test_next_10_lines(self):
+        self.tb.set_text("\n".join(f"第{i}行" for i in range(1, 26)))
+        spoken = self.tb.browse("next_10_lines")
+        self.assertEqual(spoken, "第11行")
+        self.assertEqual(self.tb._current_line, "第11行")
+
+    def test_10_lines_clamped_at_boundaries(self):
+        # 不足10行时钳制到首行/末行，不越界
+        self.tb.set_text("一\n二\n三")
+        self.assertEqual(self.tb.browse("prev_10_lines"), "一")
+        self.tb.browse("last_line")
+        self.assertEqual(self.tb.browse("next_10_lines"), "三")
+
+    def test_10_lines_row_column_updated(self):
+        # 跳转后行列坐标同步刷新（第11行 = row 11, col 1）
+        self.tb.set_text("\n".join(f"第{i}行" for i in range(1, 26)))
+        self.tb.browse("next_10_lines")
+        self.assertEqual(self.tb.row_column, (11, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

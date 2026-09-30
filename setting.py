@@ -507,6 +507,20 @@ hotKeys = [
         "description": "alt+shift+k: 当前剪贴板下一行，长按跳到最后一行"
     },
     {
+        "name": "altshiftsemicolon",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": ";",
+        "handler": "on_hotkey_altshiftsemicolon",
+        "description": "alt+shift+;: 当前剪贴板浏览位置向前跳转10行"
+    },
+    {
+        "name": "altshiftslash",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": "/",
+        "handler": "on_hotkey_altshiftslash",
+        "description": "alt+shift+/: 当前剪贴板浏览位置向后跳转10行"
+    },
+    {
         "name": "altshiftm",
         "modifiers": ["ALT", "SHIFT"],
         "key": "m",
