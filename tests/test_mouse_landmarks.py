@@ -101,6 +101,12 @@ class MouseLandmarkTests(unittest.TestCase):
         self.assertEqual(mark_keys, slots)
         self.assertEqual(jump_keys, slots)
         self.assertEqual(mark_keys & {"7", "8", "9"}, set())
+        # 标记需加 cmd，跳转不加：两组合键互为对调
+        for hotkey in setting.hotKeys:
+            if hotkey["name"].startswith("mark_"):
+                self.assertEqual(set(hotkey["modifiers"]), {"CMD", "ALT", "SHIFT"})
+            elif hotkey["name"].startswith("jump_"):
+                self.assertEqual(set(hotkey["modifiers"]), {"ALT", "SHIFT"})
 
 
 if __name__ == "__main__":

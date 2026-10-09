@@ -12,7 +12,7 @@ Option+Shift+T    循环切换翻译引擎（播报引擎名）
 Option+T    打开剪贴板编辑器
 Option+1    移除空白字符
 Option+2    合并多个空格
-Option+3    数字转中文
+Option+3    数字转中文（+、-、*、/、= 直读为加、减、乘以、除以、等于；分数与负数需加转义符：1|/2 读作二分之一，|-5 读作负五，全角｜同样有效）
 Option+4    文本分行
 Option+F    查找下一个
 Option+Shift+F    查找上一个
@@ -32,6 +32,8 @@ Option+Shift+I    剪贴板浏览模式下查看当前字符解释
 Option+Shift+O    切换至当前剪贴板内容后一个字
 Option+Shift+J    将剪贴板内容同步至系统剪贴板
 Option+Shift+K    切换至当前剪贴板内容下一行
+Option+Shift+;    当前剪贴板浏览位置向前跳转10行
+Option+Shift+/    当前剪贴板浏览位置向后跳转10行
 Option+Shift+M    查看剪贴板综述（行列信息）
 Option+Shift+P    粘贴剪贴板当前行到输入框
 
@@ -43,5 +45,5 @@ Option+Shift+Q    循环切换识别引擎（播报引擎名）
 Option+Shift+E    提取 VoiceOver 最后朗读内容中的链接，并用默认浏览器打开；多个链接时弹窗选择，未找到时语音提示
 
 六、鼠标路标快捷键
-Option+Shift+1 至 6、0    将当前鼠标位置标记为当前应用的路标槽位（按应用独立保存，写入配置文件，重启后保留）
-Command+Option+Shift+1 至 6、0    将鼠标跳转到当前应用对应槽位标记的位置，语音直接播报数字坐标
+Command+Option+Shift+1 至 6、0    将当前鼠标位置标记为当前应用的路标槽位（按应用独立保存，写入配置文件，重启后保留）
+Option+Shift+1 至 6、0    将鼠标跳转到当前应用对应槽位标记的位置，语音直接播报数字坐标

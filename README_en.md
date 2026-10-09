@@ -72,6 +72,8 @@ The app uses a layout with a left navigation bar and a right content panel:
 | Option+Shift+O | Switch to the next character of the current clipboard content |
 | Option+Shift+J | Sync clipboard content to the system clipboard |
 | Option+Shift+K | Switch to the next line of the current clipboard content (long-press to jump to the last line) |
+| Option+Shift+; | Jump 10 lines forward in the current clipboard content |
+| Option+Shift+/ | Jump 10 lines backward in the current clipboard content |
 | Option+Shift+M | View the clipboard summary (row and column information) |
 | Option+Shift+P | Paste the current line into the frontmost app's input box |
 Option+Shift+E    Extract the link from the last text read aloud by VoiceOver and open it in the default browser; a voice hint is given when no link is found

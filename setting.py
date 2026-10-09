@@ -507,6 +507,20 @@ hotKeys = [
         "description": "alt+shift+k: 当前剪贴板下一行，长按跳到最后一行"
     },
     {
+        "name": "altshiftsemicolon",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": ";",
+        "handler": "on_hotkey_altshiftsemicolon",
+        "description": "alt+shift+;: 当前剪贴板浏览位置向前跳转10行"
+    },
+    {
+        "name": "altshiftslash",
+        "modifiers": ["ALT", "SHIFT"],
+        "key": "/",
+        "handler": "on_hotkey_altshiftslash",
+        "description": "alt+shift+/: 当前剪贴板浏览位置向后跳转10行"
+    },
+    {
         "name": "altshiftm",
         "modifiers": ["ALT", "SHIFT"],
         "key": "m",
@@ -553,21 +567,21 @@ hotKeys = [
 # 鼠标路标槽位键：1-6 与 0；7/8/9 已被剪贴板导航占用，不得使用（菜单栏入口同用此定义）
 MOUSE_LANDMARK_SLOTS = ("1", "2", "3", "4", "5", "6", "0")
 
-# 鼠标路标热键：opt+shift+数字 标记当前鼠标位置，再加 cmd 跳转回标记点
+# 鼠标路标热键：cmd+opt+shift+数字 标记当前鼠标位置，不加 cmd 跳转回标记点
 for _digit in MOUSE_LANDMARK_SLOTS:
     hotKeys.append({
         "name": f"mark_{_digit}",
-        "modifiers": ["ALT", "SHIFT"],
+        "modifiers": ["CMD", "ALT", "SHIFT"],
         "key": _digit,
         "handler": "on_hotkey_mouse_mark",
-        "description": f"opt+shift+{_digit}: 标记当前鼠标位置为路标槽位{_digit}"
+        "description": f"cmd+opt+shift+{_digit}: 标记当前鼠标位置为路标槽位{_digit}"
     })
     hotKeys.append({
         "name": f"jump_{_digit}",
-        "modifiers": ["CMD", "ALT", "SHIFT"],
+        "modifiers": ["ALT", "SHIFT"],
         "key": _digit,
         "handler": "on_hotkey_mouse_jump",
-        "description": f"cmd+opt+shift+{_digit}: 跳转到路标槽位{_digit}的位置"
+        "description": f"opt+shift+{_digit}: 跳转到路标槽位{_digit}的位置"
     })
 
 
