@@ -64,7 +64,7 @@ class OperatorTests(unittest.TestCase):
     def test_operators_read_as_chinese(self):
         self.assertEqual(convert("1+1=2"), "一加一等于二")
         self.assertEqual(convert("3-2"), "三减二")
-        self.assertEqual(convert("2*3"), "二乘三")
+        self.assertEqual(convert("2*3"), "二乘以三")
         # "除以"而非"除"：中文里"三除九"是9÷3，语义相反
         self.assertEqual(convert("1/2"), "一除以二")
 
@@ -88,6 +88,12 @@ class EscapeTests(unittest.TestCase):
 
     def test_negative_fraction(self):
         self.assertEqual(convert("|-1|/2"), "负二分之一")
+
+    def test_bare_minus_before_fraction_is_operator(self):
+        # 分数前的裸 - 是减号，不吞成负号：负分数须 |- 显式转义
+        self.assertEqual(convert("1|/3-1|/2"), "三分之一减二分之一")
+        self.assertEqual(convert("3-1|/2"), "三减二分之一")
+        self.assertEqual(convert("|-1|/3-1|/2"), "负三分之一减二分之一")
 
     def test_negative_integer(self):
         self.assertEqual(convert("|-5"), "负五")
