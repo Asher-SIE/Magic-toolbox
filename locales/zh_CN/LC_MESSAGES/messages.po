@@ -846,3 +846,23 @@ msgstr "编辑器分句符号"
 #: main_UI.py
 msgid "sentence_punct_hint"
 msgstr "一行一个标点符号，修改后自动保存并生效"
+
+#: main_UI.py
+msgid "mouse_limit_group"
+msgstr "鼠标移动范围限制"
+
+#: main_UI.py
+msgid "mouse_limit_hint"
+msgstr "开启时以当前鼠标位置为区域左上角，指针越界自动拉回边界；宽高修改后自动保存并即时生效"
+
+#: main_UI.py
+msgid "mouse_limit_enable"
+msgstr "启用鼠标移动范围限制"
+
+#: main_UI.py
+msgid "mouse_limit_width_label"
+msgstr "限制宽度"
+
+#: main_UI.py
+msgid "mouse_limit_height_label"
+msgstr "限制高度"

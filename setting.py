@@ -584,6 +584,15 @@ for _digit in MOUSE_LANDMARK_SLOTS:
         "description": f"opt+shift+{_digit}: 跳转到路标槽位{_digit}的位置"
     })
 
+# 鼠标移动范围限制开关热键：opt+shift+~，开启时以当前鼠标位置为区域左上角
+hotKeys.append({
+    "name": "mouselock",
+    "modifiers": ["ALT", "SHIFT"],
+    "key": "~",
+    "handler": "on_hotkey_mouse_lock_toggle",
+    "description": "opt+shift+~: 开关鼠标移动范围限制"
+})
+
 
 # 文本编辑器分句功能的默认标点（原硬编码值，可在设置面板自定义）
 DEFAULT_SENTENCE_PUNCTUATIONS = [',', '，', '.', '。', '!', '！', '?', '？', ';', '；', ':', '：', '"', '-']
@@ -593,6 +602,13 @@ sentence_punctuations = list(DEFAULT_SENTENCE_PUNCTUATIONS)
 
 # 鼠标路标：按前台应用持久ID分组记录各数字槽位的屏幕坐标，格式 {app_id: {"1": [x, y], ...}}
 mouse_landmarks = {}
+
+# 鼠标移动范围限制：默认宽高与当前生效值（启动加载配置时刷新，面板修改即时生效）
+DEFAULT_MOUSE_LIMIT_WIDTH = 1000
+DEFAULT_MOUSE_LIMIT_HEIGHT = 50
+mouse_limit_enabled = False
+mouse_limit_width = DEFAULT_MOUSE_LIMIT_WIDTH
+mouse_limit_height = DEFAULT_MOUSE_LIMIT_HEIGHT
 
 
 def _normalize_sentence_punctuations(value) -> list:
@@ -630,9 +646,22 @@ def _normalize_mouse_landmarks(value) -> dict:
     return result
 
 
+def _normalize_mouse_limit_enabled(value) -> bool:
+    """清洗鼠标限制开关配置：仅接受布尔值，其余回退关闭"""
+    return value if isinstance(value, bool) else False
+
+
+def _normalize_mouse_limit_dimension(value, default: int) -> int:
+    """清洗鼠标限制宽高配置：仅接受正整数，非法回退默认值"""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return default
+    return value if value >= 1 else default
+
+
 def load_config():
     """加载配置"""
     global sentence_punctuations, mouse_landmarks
+    global mouse_limit_enabled, mouse_limit_width, mouse_limit_height
     config = {
         'source_lang': 'English',
         'target_lang': 'Chinese',
@@ -645,7 +674,10 @@ def load_config():
         'ocr_model_path': '',
         'ocr_mmproj_path': '',
         'sentence_punctuations': list(DEFAULT_SENTENCE_PUNCTUATIONS),
-        'mouse_landmarks': {}
+        'mouse_landmarks': {},
+        'mouse_limit_enabled': False,
+        'mouse_limit_width': DEFAULT_MOUSE_LIMIT_WIDTH,
+        'mouse_limit_height': DEFAULT_MOUSE_LIMIT_HEIGHT
     }
     try:
         if os.path.exists(config_path):
@@ -656,11 +688,18 @@ def load_config():
         logging.warning(f"加载配置失败: {e}")
     sentence_punctuations = _normalize_sentence_punctuations(config.get('sentence_punctuations'))
     mouse_landmarks = _normalize_mouse_landmarks(config.get('mouse_landmarks'))
+    mouse_limit_enabled = _normalize_mouse_limit_enabled(config.get('mouse_limit_enabled'))
+    mouse_limit_width = _normalize_mouse_limit_dimension(config.get('mouse_limit_width'), DEFAULT_MOUSE_LIMIT_WIDTH)
+    mouse_limit_height = _normalize_mouse_limit_dimension(config.get('mouse_limit_height'), DEFAULT_MOUSE_LIMIT_HEIGHT)
+    # 归一化后的值写回 config，供界面层直接读取
+    config['mouse_limit_enabled'] = mouse_limit_enabled
+    config['mouse_limit_width'] = mouse_limit_width
+    config['mouse_limit_height'] = mouse_limit_height
     return config
 
 
-def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple', ocr_model_path: str = '', ocr_mmproj_path: str = '', sentence_punctuations=None, mouse_landmarks=None):
-    """保存配置；sentence_punctuations 与 mouse_landmarks 未传入时保留当前生效值，避免其他配置项保存时覆盖"""
+def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple', ocr_model_path: str = '', ocr_mmproj_path: str = '', sentence_punctuations=None, mouse_landmarks=None, mouse_limit_enabled=None, mouse_limit_width=None, mouse_limit_height=None):
+    """保存配置；可选参数未传入时保留当前生效值，避免其他配置项保存时覆盖"""
     if sentence_punctuations is None:
         sentence_punctuations = globals()['sentence_punctuations']
     normalized = _normalize_sentence_punctuations(sentence_punctuations)
@@ -670,6 +709,16 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
         mouse_landmarks = globals()['mouse_landmarks']
     normalized_landmarks = _normalize_mouse_landmarks(mouse_landmarks)
     globals()['mouse_landmarks'] = normalized_landmarks
+    # 鼠标移动范围限制：同步模块级生效值（启动恢复开关状态时读取）
+    if mouse_limit_enabled is None:
+        mouse_limit_enabled = globals()['mouse_limit_enabled']
+    if mouse_limit_width is None:
+        mouse_limit_width = globals()['mouse_limit_width']
+    if mouse_limit_height is None:
+        mouse_limit_height = globals()['mouse_limit_height']
+    globals()['mouse_limit_enabled'] = _normalize_mouse_limit_enabled(mouse_limit_enabled)
+    globals()['mouse_limit_width'] = _normalize_mouse_limit_dimension(mouse_limit_width, DEFAULT_MOUSE_LIMIT_WIDTH)
+    globals()['mouse_limit_height'] = _normalize_mouse_limit_dimension(mouse_limit_height, DEFAULT_MOUSE_LIMIT_HEIGHT)
     try:
         config = {
             'source_lang': source_lang,
@@ -683,7 +732,10 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
             'ocr_model_path': ocr_model_path,
             'ocr_mmproj_path': ocr_mmproj_path,
             'sentence_punctuations': normalized,
-            'mouse_landmarks': normalized_landmarks
+            'mouse_landmarks': normalized_landmarks,
+            'mouse_limit_enabled': globals()['mouse_limit_enabled'],
+            'mouse_limit_width': globals()['mouse_limit_width'],
+            'mouse_limit_height': globals()['mouse_limit_height']
         }
         logging.info(f"保存配置: ocr_mode={ocr_mode}, ocr_model_path={ocr_model_path!r}, ocr_mmproj_path={ocr_mmproj_path!r}")
         with open(config_path, 'w', encoding='utf-8') as f:
@@ -697,6 +749,50 @@ def get_mouse_landmark(app_id: str, slot) -> list:
     slots = globals()['mouse_landmarks'].get(app_id) or {}
     pos = slots.get(str(slot))
     return list(pos) if pos else None
+
+
+def parse_limit_dimension(text, fallback: int) -> int:
+    """解析限制宽高输入：正整数有效，其余回退上次生效值"""
+    try:
+        value = int(str(text).strip())
+    except (TypeError, ValueError):
+        return fallback
+    return value if value >= 1 else fallback
+
+
+def compute_mouse_limit_rect(origin, width: int, height: int, display_bounds=None) -> tuple:
+    """计算鼠标限制矩形 (x0, y0, x1, y1)，边界含端点；提供显示器边界时右/下边收缩贴合屏幕"""
+    x0, y0 = float(origin[0]), float(origin[1])
+    x1 = x0 + max(int(width), 1)
+    y1 = y0 + max(int(height), 1)
+    if display_bounds is not None:
+        left, top, right, bottom = display_bounds
+        x1 = min(x1, float(right))
+        y1 = min(y1, float(bottom))
+        # 起始点异常越出显示器时夹紧起始点，避免产生空矩形
+        x0 = min(max(x0, float(left)), x1 - 1)
+        y0 = min(max(y0, float(top)), y1 - 1)
+    return (x0, y0, x1, y1)
+
+
+def is_point_outside_rect(x: float, y: float, rect) -> bool:
+    """判断点是否越出矩形（边界值本身属于矩形内部）"""
+    x0, y0, x1, y1 = rect
+    return x < x0 or x > x1 or y < y0 or y > y1
+
+
+def clamp_point_to_rect(x: float, y: float, rect) -> tuple:
+    """将点夹紧回矩形内，返回吸附到边界的坐标"""
+    x0, y0, x1, y1 = rect
+    return (min(max(float(x), x0), x1), min(max(float(y), y0), y1))
+
+
+def should_announce_coord_change(position, last_position, precision: int) -> bool:
+    """判断是否播报坐标：刚按住修饰键（上次为空）或任一轴移动达到精度阈值"""
+    if last_position is None:
+        return True
+    return (abs(float(position[0]) - float(last_position[0])) >= precision
+            or abs(float(position[1]) - float(last_position[1])) >= precision)
 
 
 def set_mouse_landmark(app_id: str, slot, x: float, y: float) -> bool:

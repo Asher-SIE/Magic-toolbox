@@ -22,6 +22,11 @@ import update
 import ime_guard
 
 
+# 鼠标辅助功能：按住 Ctrl 播报坐标的精度阈值（任一轴移动像素数）与轮询间隔（毫秒）
+MOUSE_COORD_ANNOUNCE_PRECISION = 5
+MOUSE_POLL_INTERVAL_MS = 50
+
+
 class MainFrame(wx.Frame):
     # 长按跳转热键表：热键名 -> (macOS 物理键码, 跳转方法名)
     LONG_PRESS_KEYS = {
@@ -60,6 +65,14 @@ class MainFrame(wx.Frame):
         self.current_module = "translation"
         self._clipboard_filter_keyword = ""  # 搜索关键词
         self._clipboard_filtered_data = None  # 筛选后的数据
+
+        # 鼠标移动范围限制：运行态开关、区域左上角起始点与所在显示器边界（仅开启功能时取一次）
+        self._mouse_limit_active = False
+        self._mouse_limit_origin = None
+        self._mouse_limit_display = None
+        # 按住 Ctrl 播报坐标：上次播报的坐标（释放修饰键时清空）
+        self._last_announce_pos = None
+        self._announce_flags_error_logged = False
         
         self._translation_lock = threading.Lock()
 
@@ -180,6 +193,15 @@ class MainFrame(wx.Frame):
         # 注册热键
         self.hotkey_ids = {}
         self.register_hotkeys()
+
+        # 鼠标轮询定时器：按住 Ctrl 实时播报坐标 + 移动范围越界吸附共用
+        self._mouse_poll_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_mouse_poll_timer, self._mouse_poll_timer)
+        self._mouse_poll_timer.Start(MOUSE_POLL_INTERVAL_MS)
+
+        # 恢复上次会话的鼠标移动范围限制：起始点取恢复时刻的鼠标位置
+        if self._mouse_limit_active:
+            self._restore_mouse_limit()
 
         self.Bind(wx.EVT_CLOSE, self.on_exit)
         # 显示窗口
@@ -473,6 +495,10 @@ class MainFrame(wx.Frame):
         self._ocr_model_path = config.get('ocr_model_path', '')
         self._ocr_mmproj_path = config.get('ocr_mmproj_path', '')
         self._sentence_punctuations = list(setting.sentence_punctuations)
+        # 鼠标移动范围限制：开关状态随配置恢复，宽高为设置面板当前生效值
+        self._mouse_limit_active = bool(config.get('mouse_limit_enabled', False))
+        self._mouse_limit_width = int(config.get('mouse_limit_width', setting.DEFAULT_MOUSE_LIMIT_WIDTH))
+        self._mouse_limit_height = int(config.get('mouse_limit_height', setting.DEFAULT_MOUSE_LIMIT_HEIGHT))
 
         is_internal = setting.is_internal_device()
         supports_apple = setting.supports_apple_translation()
@@ -515,6 +541,12 @@ class MainFrame(wx.Frame):
         if hasattr(self, 'sentence_punct_input') and self.sentence_punct_input:
             self.sentence_punct_input.SetValue(self._format_sentence_punctuations(self._sentence_punctuations))
 
+        if hasattr(self, 'mouse_limit_check') and self.mouse_limit_check:
+            self.mouse_limit_check.SetValue(self._mouse_limit_active)
+        if hasattr(self, 'mouse_limit_width_input') and self.mouse_limit_width_input:
+            self.mouse_limit_width_input.SetValue(str(self._mouse_limit_width))
+            self.mouse_limit_height_input.SetValue(str(self._mouse_limit_height))
+
     def save_config(self):
         model_path = getattr(self, '_model_path', '') or ''
         clipboard_max_count = getattr(self, '_clipboard_max_count', 1000)
@@ -525,7 +557,10 @@ class MainFrame(wx.Frame):
         ocr_model_path = getattr(self, '_ocr_model_path', '') or ''
         ocr_mmproj_path = getattr(self, '_ocr_mmproj_path', '') or ''
         sentence_punctuations = getattr(self, '_sentence_punctuations', None)
-        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode, ocr_model_path, ocr_mmproj_path, sentence_punctuations)
+        setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode, ocr_model_path, ocr_mmproj_path, sentence_punctuations,
+                            mouse_limit_enabled=getattr(self, '_mouse_limit_active', False),
+                            mouse_limit_width=getattr(self, '_mouse_limit_width', setting.DEFAULT_MOUSE_LIMIT_WIDTH),
+                            mouse_limit_height=getattr(self, '_mouse_limit_height', setting.DEFAULT_MOUSE_LIMIT_HEIGHT))
 
 
     def setup_clipboard_panel(self):
@@ -640,6 +675,38 @@ class MainFrame(wx.Frame):
         sentence_punct_sizer.Add(self.sentence_punct_input, 0, wx.EXPAND | wx.ALL, 5)
 
         main_sizer.Add(sentence_punct_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # --- 鼠标移动范围限制分组：复选框开关，宽高输入失焦保存并即时生效 ---
+        mouse_limit_static_box = wx.StaticBox(settings_scroll, label=setting._("mouse_limit_group"))
+        mouse_limit_sizer = wx.StaticBoxSizer(mouse_limit_static_box, wx.VERTICAL)
+
+        mouse_limit_hint = wx.StaticText(mouse_limit_static_box, label=setting._("mouse_limit_hint"))
+        mouse_limit_sizer.Add(mouse_limit_hint, 0, wx.ALL, 5)
+
+        self.mouse_limit_check = wx.CheckBox(mouse_limit_static_box, label=setting._("mouse_limit_enable"))
+        self.mouse_limit_check.SetValue(bool(getattr(self, '_mouse_limit_active', False)))
+        self.mouse_limit_check.Bind(wx.EVT_CHECKBOX, self.on_mouse_limit_check)
+        mouse_limit_sizer.Add(self.mouse_limit_check, 0, wx.ALL, 5)
+
+        mouse_limit_width_row = wx.BoxSizer(wx.HORIZONTAL)
+        mouse_limit_width_label = wx.StaticText(mouse_limit_static_box, label=setting._("mouse_limit_width_label"))
+        mouse_limit_width_row.Add(mouse_limit_width_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.mouse_limit_width_input = wx.TextCtrl(mouse_limit_static_box, value=str(getattr(self, '_mouse_limit_width', setting.DEFAULT_MOUSE_LIMIT_WIDTH)), style=wx.TE_RIGHT)
+        self.mouse_limit_width_input.Bind(wx.EVT_TEXT, self.on_mouse_limit_width_text_change)
+        self.mouse_limit_width_input.Bind(wx.EVT_KILL_FOCUS, self.on_mouse_limit_width_focus_lost)
+        mouse_limit_width_row.Add(self.mouse_limit_width_input, 1, wx.EXPAND)
+        mouse_limit_sizer.Add(mouse_limit_width_row, 0, wx.EXPAND | wx.ALL, 5)
+
+        mouse_limit_height_row = wx.BoxSizer(wx.HORIZONTAL)
+        mouse_limit_height_label = wx.StaticText(mouse_limit_static_box, label=setting._("mouse_limit_height_label"))
+        mouse_limit_height_row.Add(mouse_limit_height_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.mouse_limit_height_input = wx.TextCtrl(mouse_limit_static_box, value=str(getattr(self, '_mouse_limit_height', setting.DEFAULT_MOUSE_LIMIT_HEIGHT)), style=wx.TE_RIGHT)
+        self.mouse_limit_height_input.Bind(wx.EVT_TEXT, self.on_mouse_limit_height_text_change)
+        self.mouse_limit_height_input.Bind(wx.EVT_KILL_FOCUS, self.on_mouse_limit_height_focus_lost)
+        mouse_limit_height_row.Add(self.mouse_limit_height_input, 1, wx.EXPAND)
+        mouse_limit_sizer.Add(mouse_limit_height_row, 0, wx.EXPAND | wx.ALL, 5)
+
+        main_sizer.Add(mouse_limit_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         settings_scroll.SetSizer(main_sizer)
         settings_scroll.FitInside()  # 虚拟尺寸随内容扩展，内容超出窗口时出现滚动条
@@ -2385,6 +2452,193 @@ class MainFrame(wx.Frame):
         slot = self._hotkey_name_of(event).replace("jump_", "")
         if slot:
             self.mouse_jump_slot(slot)
+
+    # 鼠标移动范围限制与坐标实时播报
+
+    def _restore_mouse_limit(self):
+        """启动恢复鼠标移动范围限制：起始点取恢复时刻的鼠标位置，静默生效"""
+        position = self._get_mouse_position()
+        if position is None:
+            logging.warning("启动恢复鼠标移动范围限制失败：读取鼠标坐标失败")
+            return
+        self._mouse_limit_origin = position
+        self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
+        self._mouse_limit_active = True
+        self._sync_mouse_limit_widgets()
+        logging.info(f"已恢复鼠标移动范围限制，起始点: {position}")
+
+    def _get_display_bounds_at(self, x, y):
+        """返回包含指定点的显示器边界 (left, top, right, bottom)，找不到或读取失败返回 None"""
+        try:
+            import Quartz
+            candidates = [Quartz.CGMainDisplayID()]
+            try:
+                err, displays, _count = Quartz.CGGetActiveDisplayList(8, None, None)
+                if err == 0 and displays:
+                    candidates = list(displays)
+            except Exception:
+                pass
+            for display_id in candidates:
+                bounds = Quartz.CGDisplayBounds(display_id)
+                left, top = float(bounds.origin.x), float(bounds.origin.y)
+                right, bottom = left + float(bounds.size.width), top + float(bounds.size.height)
+                if left <= x < right and top <= y < bottom:
+                    return (left, top, right, bottom)
+        except Exception as e:
+            logging.error(f"读取显示器边界失败: {e}")
+        return None
+
+    def _current_mouse_limit_rect(self):
+        """根据起始点、当前宽高与显示器边界计算限制矩形，未开启时返回 None"""
+        if self._mouse_limit_origin is None:
+            return None
+        return setting.compute_mouse_limit_rect(
+            self._mouse_limit_origin, self._mouse_limit_width, self._mouse_limit_height,
+            self._mouse_limit_display)
+
+    def mouse_lock_enable(self) -> bool:
+        """开启鼠标移动范围限制：以当前鼠标位置为左上角，宽高取设置面板当前值"""
+        position = self._get_mouse_position()
+        if position is None:
+            self.vo_handler.speak_text("读取鼠标坐标失败")
+            return False
+        self._mouse_limit_origin = position
+        self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
+        self._mouse_limit_active = True
+        self._sync_mouse_limit_widgets()
+        self.save_config()
+        self.vo_handler.speak_text("鼠标限制已开启")
+        return True
+
+    def mouse_lock_disable(self) -> bool:
+        """关闭鼠标移动范围限制"""
+        self._mouse_limit_active = False
+        self._mouse_limit_origin = None
+        self._mouse_limit_display = None
+        self._sync_mouse_limit_widgets()
+        self.save_config()
+        self.vo_handler.speak_text("鼠标限制已关闭")
+        return True
+
+    def _sync_mouse_limit_widgets(self):
+        """热键与设置面板复选框状态双向同步"""
+        if hasattr(self, 'mouse_limit_check') and self.mouse_limit_check:
+            self.mouse_limit_check.SetValue(self._mouse_limit_active)
+
+    def on_hotkey_mouse_lock_toggle(self, event):
+        """opt+shift+~: 开关鼠标移动范围限制"""
+        if event.GetId() != self.hotkey_ids.get("mouselock"):
+            return
+        if self._mouse_limit_active:
+            self.mouse_lock_disable()
+        else:
+            self.mouse_lock_enable()
+
+    def on_mouse_limit_check(self, event):
+        """设置面板复选框开关鼠标限制：开启时起始点取当前鼠标位置"""
+        checked = bool(event.IsChecked())
+        if checked != self._mouse_limit_active:
+            if checked:
+                self.mouse_lock_enable()
+            else:
+                self.mouse_lock_disable()
+        event.Skip()
+
+    @staticmethod
+    def _filter_digit_input(input_ctrl):
+        """输入框过滤：仅保留数字字符"""
+        current_value = input_ctrl.GetValue()
+        new_value = "".join(char for char in current_value if char.isdigit())
+        if new_value != current_value:
+            input_ctrl.ChangeValue(new_value)
+
+    def on_mouse_limit_width_text_change(self, event):
+        """限制宽度输入过滤：仅允许数字"""
+        self._filter_digit_input(self.mouse_limit_width_input)
+        event.Skip()
+
+    def on_mouse_limit_width_focus_lost(self, event):
+        """限制宽度编辑框失去焦点：解析保存并即时生效，非法输入还原为当前生效值"""
+        if getattr(self, '_processing_mouse_limit_width', False):
+            event.Skip()
+            return
+        self._processing_mouse_limit_width = True
+        try:
+            value = setting.parse_limit_dimension(self.mouse_limit_width_input.GetValue(), self._mouse_limit_width)
+            if str(value) != self.mouse_limit_width_input.GetValue():
+                self.mouse_limit_width_input.SetValue(str(value))
+            self._mouse_limit_width = value
+            self.save_config()
+        finally:
+            self._processing_mouse_limit_width = False
+        event.Skip()
+
+    def on_mouse_limit_height_text_change(self, event):
+        """限制高度输入过滤：仅允许数字"""
+        self._filter_digit_input(self.mouse_limit_height_input)
+        event.Skip()
+
+    def on_mouse_limit_height_focus_lost(self, event):
+        """限制高度编辑框失去焦点：解析保存并即时生效，非法输入还原为当前生效值"""
+        if getattr(self, '_processing_mouse_limit_height', False):
+            event.Skip()
+            return
+        self._processing_mouse_limit_height = True
+        try:
+            value = setting.parse_limit_dimension(self.mouse_limit_height_input.GetValue(), self._mouse_limit_height)
+            if str(value) != self.mouse_limit_height_input.GetValue():
+                self.mouse_limit_height_input.SetValue(str(value))
+            self._mouse_limit_height = value
+            self.save_config()
+        finally:
+            self._processing_mouse_limit_height = False
+        event.Skip()
+
+    def _on_mouse_poll_timer(self, event):
+        """鼠标轮询定时器：越界吸附与按住 Ctrl 坐标实时播报"""
+        try:
+            self._poll_mouse_limit()
+            self._poll_mouse_coord_announce()
+        except Exception as e:
+            logging.error(f"鼠标轮询异常: {e}")
+
+    def _poll_mouse_limit(self):
+        """鼠标移动范围限制：指针越出矩形时立即拉回边界（吸附）"""
+        if not self._mouse_limit_active:
+            return
+        position = self._get_mouse_position()
+        if position is None:
+            return
+        rect = self._current_mouse_limit_rect()
+        if rect is None:
+            return
+        if not setting.is_point_outside_rect(position[0], position[1], rect):
+            return
+        nx, ny = setting.clamp_point_to_rect(position[0], position[1], rect)
+        self._move_mouse_to(nx, ny)
+
+    def _poll_mouse_coord_announce(self):
+        """按住 Ctrl 移动鼠标时实时播报坐标，任一轴移动达到精度阈值才播报一次"""
+        try:
+            import Quartz
+            flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateCombinedSessionState)
+        except Exception as e:
+            # 修饰键状态读取失败时轮询仍在跑，仅记录一次错误避免刷屏
+            if not self._announce_flags_error_logged:
+                self._announce_flags_error_logged = True
+                logging.error(f"读取修饰键状态失败: {e}")
+            self._last_announce_pos = None
+            return
+        if not (flags & Quartz.kCGEventFlagMaskControl):
+            self._last_announce_pos = None
+            return
+        position = self._get_mouse_position()
+        if position is None:
+            return
+        if not setting.should_announce_coord_change(position, self._last_announce_pos, MOUSE_COORD_ANNOUNCE_PRECISION):
+            return
+        self._last_announce_pos = position
+        self.vo_handler.speak_text(self._format_landmark_pos(position))
 
     def on_browse_ocr_image(self, event):
         """工具栏浏览图片文件并识别"""

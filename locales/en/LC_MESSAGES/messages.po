@@ -846,3 +846,23 @@ msgstr "Editor Sentence Punctuation"
 #: main_UI.py
 msgid "sentence_punct_hint"
 msgstr "One punctuation per line. Changes are saved and applied automatically."
+
+#: main_UI.py
+msgid "mouse_limit_group"
+msgstr "Mouse Movement Range Limit"
+
+#: main_UI.py
+msgid "mouse_limit_hint"
+msgstr "Uses the current mouse position as the top-left corner when enabled; the pointer snaps back to the boundary when it moves outside; width and height changes are saved and applied immediately"
+
+#: main_UI.py
+msgid "mouse_limit_enable"
+msgstr "Enable mouse movement range limit"
+
+#: main_UI.py
+msgid "mouse_limit_width_label"
+msgstr "Limit width"
+
+#: main_UI.py
+msgid "mouse_limit_height_label"
+msgstr "Limit height"
