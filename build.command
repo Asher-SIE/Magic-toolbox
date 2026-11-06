@@ -147,18 +147,29 @@ if security find-identity -v -p codesigning | grep -q "$SIGN_CERT"; then
     echo "使用钥匙串既有证书：$SIGN_CERT"
 elif [ -f "$CERT_FILE" ]; then
     echo "未找到有效身份 \"$SIGN_CERT\"，正在将 cert.p12 导入登录钥匙串..."
-    # 导入错误不屏蔽，失败原因直接可见
+    # 导入错误不屏蔽，失败原因直接可见；重复导入（证书已在钥匙串）报错可忽略
     security import "$CERT_FILE" -P "$CERT_PASS" -T /usr/bin/codesign || true
     if security find-identity -v -p codesigning | grep -q "$SIGN_CERT"; then
         CAN_SIGN=1
         echo "证书导入成功：$SIGN_CERT"
-    fi
-    if [ "$CAN_SIGN" -eq 0 ]; then
-        echo "警告：导入后仍无有效身份 \"$SIGN_CERT\"，跳过签名。排查指引："
-        security find-identity -p codesigning 2>/dev/null || true
-        echo "① 上方列出了 \"$SIGN_CERT\" 但有效签名身份中没有：证书未被信任。钥匙串访问中双击该证书，展开"信任"，把"使用此证书时"改为"始终信任""
-        echo "② 完全未列出：导入的内容不含私钥（如误导 cer）或导错了钥匙串。请重新双击仓库中的 cert.p12，密码 145896，导入后应出现在"我的证书"分类且证书左侧三角下挂有私钥"
-        echo "③ 导入时报错（见上方日志）：常见为密码不符或文件损坏"
+    else
+        # 信任标记不存储在 p12 内，手动双击导入的证书默认不受信任，导致 find-identity -v 查不到；
+        # 从 p12 提取纯证书写入用户信任域，等效于钥匙串访问中手动设置"始终信任"
+        echo "证书未受信任或导入不完整，正在自动设置信任（可能弹出授权对话框，输入开机密码确认即可）..."
+        TMP_CERT="$(mktemp -t magictoolbox-cert)"
+        if openssl pkcs12 -in "$CERT_FILE" -passin "pass:$CERT_PASS" -nokeys -clcerts -out "$TMP_CERT" 2>/dev/null \
+            && security add-trusted-cert -r trustRoot -k "$HOME/Library/Keychains/login.keychain-db" "$TMP_CERT" \
+            && security find-identity -v -p codesigning | grep -q "$SIGN_CERT"; then
+            CAN_SIGN=1
+            echo "信任设置成功，签名身份可用：$SIGN_CERT"
+        else
+            echo "警告：自动设置信任未成功，跳过签名。排查指引："
+            security find-identity -p codesigning 2>/dev/null || true
+            echo "① 上方列出了 \"$SIGN_CERT\"：证书在钥匙串但未受信任（无 GUI 授权时自动信任会失败）。手动方法：钥匙串访问双击证书 → 展开\"信任\" → \"使用此证书时\"选\"始终信任\""
+            echo "② 未列出 \"$SIGN_CERT\"：导入不含私钥或导错钥匙串。双击仓库 cert.p12（密码 145896）重新导入，确认出现在\"我的证书\"分类且证书下挂有私钥"
+            echo "③ 导入日志有报错：密码不符或文件损坏"
+        fi
+        rm -f "$TMP_CERT"
     fi
 else
     echo "警告：仓库中缺少 cert.p12，无法自动导入签名证书"
