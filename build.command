@@ -129,9 +129,41 @@ echo "清理完成"
 
 # 使用自签名证书签名（同一证书 → 签名身份稳定，TCC 权限不随重打包丢失）
 SIGN_CERT="MagicToolbox Dev"
+CERT_FILE="$SCRIPT_DIR/cert.p12"
+# 专用签名钥匙串：密码固定，不依赖登录钥匙串，非交互环境（CI/SSH）同样可签名
+SIGN_KEYCHAIN="$HOME/Library/Keychains/MagicToolboxSign.keychain"
+SIGN_KEYCHAIN_PASS="MagicToolbox"
+
+CAN_SIGN=0
+CODESIGN_ARGS=(--force --deep)
 if security find-identity -v -p codesigning | grep -q "$SIGN_CERT"; then
+    CAN_SIGN=1
+    echo "使用钥匙串既有证书：$SIGN_CERT"
+elif [ -f "$CERT_FILE" ]; then
+    # 从仓库内置 cert.p12 导入专用钥匙串（p12 为空密码 legacy 3DES，security 可直接解析）
+    # import 幂等：证书已在钥匙串时报错可忽略
+    echo "钥匙串中未找到证书 \"$SIGN_CERT\"，正在从 cert.p12 导入..."
+    security create-keychain -p "$SIGN_KEYCHAIN_PASS" "$SIGN_KEYCHAIN" 2>/dev/null || true
+    security unlock-keychain -p "$SIGN_KEYCHAIN_PASS" "$SIGN_KEYCHAIN"
+    security import "$CERT_FILE" -k "$SIGN_KEYCHAIN" -P "" -T /usr/bin/codesign 2>/dev/null || true
+    # 授权 codesign 非交互访问私钥
+    security set-key-partition-list -S apple-tool:,apple: -k "$SIGN_KEYCHAIN_PASS" "$SIGN_KEYCHAIN" >/dev/null 2>&1 || true
+    if security find-identity -v -p codesigning "$SIGN_KEYCHAIN" 2>/dev/null | grep -q "$SIGN_CERT"; then
+        CAN_SIGN=1
+        CODESIGN_ARGS+=(--keychain "$SIGN_KEYCHAIN")
+        echo "证书导入成功：$SIGN_CERT（$SIGN_KEYCHAIN）"
+    else
+        echo "警告：证书导入失败，无法签名"
+    fi
+else
+    echo "警告：仓库中缺少 cert.p12，无法自动导入签名证书"
+fi
+
+if [ "$CAN_SIGN" -eq 1 ]; then
     echo "正在签名应用（证书：$SIGN_CERT）..."
-    codesign --force --deep --sign "$SIGN_CERT" "$APP_BUNDLE"
+    # 清除扩展属性：PyInstaller 产物常见 resource fork/Finder 元数据会阻断 codesign
+    xattr -cr "$APP_BUNDLE" 2>/dev/null
+    codesign "${CODESIGN_ARGS[@]}" --sign "$SIGN_CERT" "$APP_BUNDLE"
     if [ $? -eq 0 ]; then
         codesign --verify --verbose "$APP_BUNDLE"
         echo "签名成功"
