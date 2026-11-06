@@ -127,6 +127,17 @@ echo "正在清理 .dist-info 目录..."
 find "$APP_BUNDLE" -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null
 echo "清理完成"
 
+# 将 Apple 翻译工具作为嵌套 bundle 拷入 Frameworks：不能经 PyInstaller datas 打包
+# （目录名被改写为 __dot__ 且复制产生循环符号链接，导致运行时找不到工具、codesign 报 Too many levels of symbolic links）
+NESTED_APP="$SCRIPT_DIR/AppleTranslateTool.app"
+if [ -d "$NESTED_APP" ]; then
+    echo "正在拷入 Apple 翻译工具..."
+    ditto "$NESTED_APP" "$APP_BUNDLE/Contents/Frameworks/AppleTranslateTool.app"
+    echo "已拷入：$APP_BUNDLE/Contents/Frameworks/AppleTranslateTool.app"
+else
+    echo "未构建 AppleTranslateTool.app，跳过拷入（Apple 翻译功能不可用）"
+fi
+
 # 使用自签名证书签名（同一证书 → 签名身份稳定，TCC 权限不随重打包丢失）
 SIGN_CERT="MagicToolbox Dev"
 CERT_FILE="$SCRIPT_DIR/cert.p12"

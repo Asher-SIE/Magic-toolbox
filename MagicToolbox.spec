@@ -1,12 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-import os
-
-# macOS 15+ 且已构建时，将 Apple 翻译工具作为嵌套 bundle 打入应用
-apple_tool_datas = []
-if os.path.exists('AppleTranslateTool.app'):
-    apple_tool_datas.append(('AppleTranslateTool.app', 'AppleTranslateTool.app'))
-
 
 a = Analysis(
     ['main_UI.py'],
@@ -17,7 +10,10 @@ a = Analysis(
         ('venv/lib/python3.13/site-packages/llama_cpp/lib', '.'),
         ('venv/lib/python3.13/site-packages/llama_cpp/lib', 'llama_cpp/lib'),
     ],
-    datas=[('resources', 'resources'), ('locales', 'locales')] + apple_tool_datas,
+    # AppleTranslateTool.app 不能经 datas 打包：PyInstaller 会把目录名改写为 __dot__ 并产生循环符号链接，
+    # 既让运行时找不到工具，又导致 codesign 报 Too many levels of symbolic links。
+    # 由 build.command 在打包后用 ditto 拷入 Contents/Frameworks。
+    datas=[('resources', 'resources'), ('locales', 'locales')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
