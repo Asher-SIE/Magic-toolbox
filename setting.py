@@ -584,14 +584,8 @@ for _digit in MOUSE_LANDMARK_SLOTS:
         "description": f"opt+shift+{_digit}: 跳转到路标槽位{_digit}的位置"
     })
 
-# 鼠标移动范围限制开关热键：opt+shift+~，开启时以当前鼠标位置为区域左上角
-hotKeys.append({
-    "name": "mouselock",
-    "modifiers": ["ALT", "SHIFT"],
-    "key": "~",
-    "handler": "on_hotkey_mouse_lock_toggle",
-    "description": "opt+shift+~: 开关鼠标移动范围限制"
-})
+# 注：opt+shift+~ 区域锁定开关不经 hotKeys 注册——wx 的 macOS 键码映射表不含波浪号，
+# RegisterHotKey 注册不了该键，由 main_UI 的鼠标轮询定时器按 kVK_ANSI_Grave 边沿触发
 
 
 # 文本编辑器分句功能的默认标点（原硬编码值，可在设置面板自定义）

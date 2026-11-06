@@ -134,14 +134,10 @@ class MouseLimitTests(unittest.TestCase):
         config = setting.load_config()
         self.assertFalse(config["mouse_limit_auto_fit"])
 
-    def test_mouselock_hotkey_registered(self):
-        # opt+shift+~ 开关热键已注册，热键名全局唯一
-        lock_hotkeys = [h for h in setting.hotKeys if h["name"] == "mouselock"]
-        self.assertEqual(len(lock_hotkeys), 1)
-        self.assertEqual(lock_hotkeys[0]["modifiers"], ["ALT", "SHIFT"])
-        self.assertEqual(lock_hotkeys[0]["key"], "~")
-        self.assertEqual(lock_hotkeys[0]["handler"], "on_hotkey_mouse_lock_toggle")
+    def test_mouselock_hotkey_not_registered(self):
+        # 区域锁定开关不经 wx 热键注册（macOS 键码映射表无波浪号，注册必失败），由轮询实现
         names = [h["name"] for h in setting.hotKeys]
+        self.assertNotIn("mouselock", names)
         self.assertEqual(len(names), len(set(names)))
 
 

@@ -30,6 +30,10 @@ MOUSE_POLL_INTERVAL_MS = 50
 MOUSE_LIMIT_SLIDER_ANCESTOR_DEPTH = 10
 MOUSE_LIMIT_SLIDER_PADDING = 2
 
+# 区域锁定开关键码：Carbon kVK_ANSI_Grave（Esc 下方波浪号/反引号物理键）。
+# wx 的 macOS 键码映射表不含波浪号，RegisterHotKey 注册不了该键，改由轮询定时器检测按键边沿
+MOUSE_LOCK_KEYCODE = 0x32
+
 
 class MainFrame(wx.Frame):
     # 长按跳转热键表：热键名 -> (macOS 物理键码, 跳转方法名)
@@ -80,6 +84,9 @@ class MainFrame(wx.Frame):
         # 按住 Ctrl 播报坐标：上次播报的坐标（释放修饰键时清空）
         self._last_announce_pos = None
         self._announce_flags_error_logged = False
+        # 区域锁定开关键（opt+shift+~）：上次轮询时是否处于按下状态，用于边沿触发
+        self._mouse_lock_key_pressed = False
+        self._lock_key_error_logged = False
         
         self._translation_lock = threading.Lock()
 
@@ -2476,6 +2483,8 @@ class MainFrame(wx.Frame):
         position = self._get_mouse_position()
         if position is None:
             logging.warning("启动恢复鼠标移动范围限制失败：读取鼠标坐标失败")
+            # 常见原因为辅助功能权限缺失（重签/换机后失效），弹系统授权页引导重新授权
+            self._check_ax_trusted(prompt=True)
             return
         self._mouse_limit_origin = position
         self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
@@ -2568,6 +2577,9 @@ class MainFrame(wx.Frame):
         """开启鼠标移动范围限制：优先适配鼠标下的滑块控件，未命中时以当前位置为左上角"""
         position = self._get_mouse_position()
         if position is None:
+            # 读坐标失败优先怀疑辅助功能权限：Finder 启动的 app 需自身被授权（终端启动则记在终端头上）
+            if not self._check_ax_trusted(prompt=True):
+                return False
             self.vo_handler.speak_text("读取鼠标坐标失败")
             return False
         fit_result = self._fit_slider_rect_at(position[0], position[1]) if self._mouse_limit_auto_fit else None
@@ -2605,14 +2617,49 @@ class MainFrame(wx.Frame):
         if hasattr(self, 'mouse_limit_check') and self.mouse_limit_check:
             self.mouse_limit_check.SetValue(self._mouse_limit_active)
 
-    def on_hotkey_mouse_lock_toggle(self, event):
-        """opt+shift+~: 开关鼠标移动范围限制"""
-        if event.GetId() != self.hotkey_ids.get("mouselock"):
-            return
+    def _mouse_lock_toggle(self):
+        """切换区域锁定状态（轮询按键与复选框共用入口）"""
         if self._mouse_limit_active:
             self.mouse_lock_disable()
         else:
             self.mouse_lock_enable()
+
+    def _poll_mouse_lock_key(self):
+        """轮询检测 opt+shift+波浪号 按下边沿并切换区域锁定
+
+        与长按监测同用 CGEventSourceKeyState（无需额外权限）；
+        仅在"上次未按下且本次按下"时触发一次，按住不重复。
+        """
+        try:
+            import Quartz
+            flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateCombinedSessionState)
+            mods_ok = (bool(flags & Quartz.kCGEventFlagMaskAlternate)
+                       and bool(flags & Quartz.kCGEventFlagMaskShift))
+            key_down = mods_ok and bool(Quartz.CGEventSourceKeyState(
+                Quartz.kCGEventSourceStateCombinedSessionState, MOUSE_LOCK_KEYCODE))
+        except Exception as e:
+            # 按键状态读取失败时轮询仍在跑，仅记录一次错误避免刷屏
+            if not self._lock_key_error_logged:
+                self._lock_key_error_logged = True
+                logging.error(f"读取区域锁定按键状态失败: {e}")
+            self._mouse_lock_key_pressed = False
+            return
+        if key_down and not self._mouse_lock_key_pressed:
+            self._mouse_lock_toggle()
+        self._mouse_lock_key_pressed = key_down
+
+    def _check_ax_trusted(self, prompt: bool) -> bool:
+        """检查辅助功能权限；未授权时可弹系统授权页并播报提示（读坐标/移动鼠标均依赖此权限）"""
+        try:
+            from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
+            trusted = AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: prompt})
+        except Exception as e:
+            # 检查本身失败（非 mac 环境）时不拦截，交由具体功能自行失败
+            logging.warning(f"辅助功能权限检查失败: {e}")
+            return True
+        if not trusted:
+            self.vo_handler.speak_text("需要辅助功能权限，请在系统设置中授权后重试")
+        return trusted
 
     def on_mouse_limit_check(self, event):
         """设置面板复选框开关鼠标限制：开启时起始点取当前鼠标位置"""
@@ -2681,8 +2728,9 @@ class MainFrame(wx.Frame):
         event.Skip()
 
     def _on_mouse_poll_timer(self, event):
-        """鼠标轮询定时器：越界吸附与按住 Ctrl 坐标实时播报"""
+        """鼠标轮询定时器：区域锁定按键检测、越界吸附与按住 Ctrl 坐标实时播报"""
         try:
+            self._poll_mouse_lock_key()
             self._poll_mouse_limit()
             self._poll_mouse_coord_announce()
         except Exception as e:

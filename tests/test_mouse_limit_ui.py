@@ -70,6 +70,8 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._mouse_limit_display = None
         self.frame._last_announce_pos = None
         self.frame._announce_flags_error_logged = False
+        self.frame._mouse_lock_key_pressed = False
+        self.frame._lock_key_error_logged = False
         self.frame._mouse_limit_auto_fit = True
         self.frame._mouse_limit_fitted_rect = None
         self.frame._mouse_limit_width = 1000
@@ -84,11 +86,15 @@ class MouseLimitUITests(unittest.TestCase):
     def _set_mouse_position(self, x, y):
         self.positions.append((x, y))
 
-    def _install_quartz_stub(self, flags):
+    def _install_quartz_stub(self, flags, grave_down=False):
+        import main_UI as main_ui_mod
         stub = types.ModuleType("Quartz")
         stub.kCGEventSourceStateCombinedSessionState = 0
         stub.kCGEventFlagMaskControl = 1 << 18
+        stub.kCGEventFlagMaskAlternate = 1 << 19
+        stub.kCGEventFlagMaskShift = 1 << 17
         stub.CGEventSourceFlagsState = lambda source: flags
+        stub.CGEventSourceKeyState = lambda state, key: grave_down and key == main_ui_mod.MOUSE_LOCK_KEYCODE
         sys.modules["Quartz"] = stub
         self.addCleanup(sys.modules.pop, "Quartz", None)
 
@@ -108,18 +114,13 @@ class MouseLimitUITests(unittest.TestCase):
         self.assertIn("区域锁定开", self.speech)
         self.assertTrue(self._read_saved_config()["mouse_limit_enabled"])
 
-        # 热键切换：关闭
-        event_id = self.frame.hotkey_ids["mouselock"]
-        self.frame.on_hotkey_mouse_lock_toggle(types.SimpleNamespace(GetId=lambda: event_id))
+        # 共用切换入口（轮询按键边沿与复选框共用）：关闭
+        self.frame._mouse_lock_toggle()
         self.assertFalse(self.frame._mouse_limit_active)
         self.assertIsNone(self.frame._mouse_limit_origin)
         self.assertFalse(self.frame.mouse_limit_check.GetValue())
         self.assertIn("区域锁定关", self.speech)
         self.assertFalse(self._read_saved_config()["mouse_limit_enabled"])
-
-        # 热键 id 不匹配时不动作
-        self.frame.on_hotkey_mouse_lock_toggle(types.SimpleNamespace(GetId=lambda: -1))
-        self.assertFalse(self.frame._mouse_limit_active)
 
         # 复选框切换：开启与关闭
         self.frame.on_mouse_limit_check(types.SimpleNamespace(IsChecked=lambda: True, Skip=lambda: None))
@@ -294,6 +295,53 @@ class MouseLimitUITests(unittest.TestCase):
         self._set_mouse_position(1600.0, 400.0)
         self.frame._poll_mouse_limit()
         self.assertEqual(self.warps, [(1500.0, 350.0)])
+
+    def test_lock_key_poll_toggles(self):
+        self._set_mouse_position(500.0, 300.0)
+        self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
+        mods = (1 << 19) | (1 << 17)  # option + shift
+
+        # 无修饰键按波浪号：不触发
+        self._install_quartz_stub(0, grave_down=True)
+        self.frame._poll_mouse_lock_key()
+        self.assertFalse(self.frame._mouse_limit_active)
+
+        # opt+shift+波浪号 按下边沿：开启
+        self._install_quartz_stub(mods, grave_down=True)
+        self.frame._poll_mouse_lock_key()
+        self.assertTrue(self.frame._mouse_limit_active)
+        self.assertIn("区域锁定开", self.speech)
+
+        # 持续按住不重复触发
+        self.frame._poll_mouse_lock_key()
+        self.assertTrue(self.frame._mouse_limit_active)
+        self.assertEqual(self.speech.count("区域锁定开"), 1)
+
+        # 松开后再次按下：关闭
+        self._install_quartz_stub(0, grave_down=False)
+        self.frame._poll_mouse_lock_key()
+        self._install_quartz_stub(mods, grave_down=True)
+        self.frame._poll_mouse_lock_key()
+        self.assertFalse(self.frame._mouse_limit_active)
+        self.assertIn("区域锁定关", self.speech)
+
+    def test_ax_trusted_hint_when_untrusted(self):
+        fake = types.ModuleType("ApplicationServices")
+        fake.AXIsProcessTrustedWithOptions = lambda options: False
+        fake.kAXTrustedCheckOptionPrompt = "AXTrustedCheckOptionPrompt"
+        sys.modules["ApplicationServices"] = fake
+        self.addCleanup(sys.modules.pop, "ApplicationServices", None)
+
+        # 未授权：检查返回 False 并播报权限提示
+        self.assertFalse(self.frame._check_ax_trusted(prompt=True))
+        # assertIn 对列表是整串相等判断，播报为完整长句，须用子串匹配
+        self.assertTrue(any("需要辅助功能权限" in s for s in self.speech))
+
+        # 读坐标失败且未授权时：开启播报权限提示而非坐标失败
+        self.assertFalse(self.frame.mouse_lock_enable())
+        self.assertFalse(self.frame._mouse_limit_active)
+        self.assertNotIn("读取鼠标坐标失败", self.speech)
+
 
 
 if __name__ == "__main__":
