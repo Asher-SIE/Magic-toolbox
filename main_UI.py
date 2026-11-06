@@ -2584,9 +2584,9 @@ class MainFrame(wx.Frame):
         self.save_config()
         if fit_result is not None:
             _, slider_width, slider_height = fit_result
-            self.vo_handler.speak_text(f"鼠标限制已开启，适配滑块宽度{int(round(slider_width))}，高度{int(round(slider_height))}")
+            self.vo_handler.speak_text(f"区域锁定开，适配滑块宽度{int(round(slider_width))}，高度{int(round(slider_height))}")
         else:
-            self.vo_handler.speak_text("鼠标限制已开启")
+            self.vo_handler.speak_text("区域锁定开")
         return True
 
     def mouse_lock_disable(self) -> bool:
@@ -2597,7 +2597,7 @@ class MainFrame(wx.Frame):
         self._mouse_limit_fitted_rect = None
         self._sync_mouse_limit_widgets()
         self.save_config()
-        self.vo_handler.speak_text("鼠标限制已关闭")
+        self.vo_handler.speak_text("区域锁定关")
         return True
 
     def _sync_mouse_limit_widgets(self):
@@ -2720,6 +2720,10 @@ class MainFrame(wx.Frame):
             return
         position = self._get_mouse_position()
         if position is None:
+            return
+        if self._last_announce_pos is None:
+            # 刚按住 Ctrl：静默记录基准位置，移动达到阈值后才开始播报
+            self._last_announce_pos = position
             return
         if not setting.should_announce_coord_change(position, self._last_announce_pos, MOUSE_COORD_ANNOUNCE_PRECISION):
             return

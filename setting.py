@@ -814,9 +814,9 @@ def fit_slider_rect(bounds, display_bounds=None, padding: int = 0):
 
 
 def should_announce_coord_change(position, last_position, precision: int) -> bool:
-    """判断是否播报坐标：刚按住修饰键（上次为空）或任一轴移动达到精度阈值"""
+    """判断是否播报坐标：上次为空（刚按住修饰键）不播报，任一轴移动达到精度阈值才播报"""
     if last_position is None:
-        return True
+        return False
     return (abs(float(position[0]) - float(last_position[0])) >= precision
             or abs(float(position[1]) - float(last_position[1])) >= precision)
 

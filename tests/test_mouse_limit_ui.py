@@ -105,7 +105,7 @@ class MouseLimitUITests(unittest.TestCase):
         self.assertTrue(self.frame._mouse_limit_active)
         self.assertEqual(self.frame._mouse_limit_origin, (500.0, 300.0))
         self.assertTrue(self.frame.mouse_limit_check.GetValue())
-        self.assertIn("鼠标限制已开启", self.speech)
+        self.assertIn("区域锁定开", self.speech)
         self.assertTrue(self._read_saved_config()["mouse_limit_enabled"])
 
         # 热键切换：关闭
@@ -114,7 +114,7 @@ class MouseLimitUITests(unittest.TestCase):
         self.assertFalse(self.frame._mouse_limit_active)
         self.assertIsNone(self.frame._mouse_limit_origin)
         self.assertFalse(self.frame.mouse_limit_check.GetValue())
-        self.assertIn("鼠标限制已关闭", self.speech)
+        self.assertIn("区域锁定关", self.speech)
         self.assertFalse(self._read_saved_config()["mouse_limit_enabled"])
 
         # 热键 id 不匹配时不动作
@@ -213,28 +213,31 @@ class MouseLimitUITests(unittest.TestCase):
         self.assertEqual(self.speech, [])
         self.assertIsNone(self.frame._last_announce_pos)
 
-        # 按住 Ctrl：按住后首次立即播报
+        # 按住 Ctrl 不动：静默记录基准，不播报
         self._install_quartz_stub(1 << 18)
         self.frame._poll_mouse_coord_announce()
-        self.assertEqual(self.speech, ["100, 200"])
+        self.assertEqual(self.speech, [])
 
         # 移动不足精度阈值不播报
         self._set_mouse_position(103.0, 202.0)
         self.frame._poll_mouse_coord_announce()
-        self.assertEqual(self.speech, ["100, 200"])
+        self.assertEqual(self.speech, [])
 
-        # 任一轴移动达到 5 像素播报一次
+        # 任一轴移动达到 5 像素开始播报
         self._set_mouse_position(105.0, 202.0)
         self.frame._poll_mouse_coord_announce()
-        self.assertEqual(self.speech, ["100, 200", "105, 202"])
+        self.assertEqual(self.speech, ["105, 202"])
 
-        # 松开 Ctrl 清空记录，再次按住重新立即播报
+        # 松开 Ctrl 清空记录；再次按住仍静默，需重新移动才播报
         self._install_quartz_stub(0)
         self.frame._poll_mouse_coord_announce()
         self._install_quartz_stub(1 << 18)
         self._set_mouse_position(106.0, 202.0)
         self.frame._poll_mouse_coord_announce()
-        self.assertEqual(self.speech, ["100, 200", "105, 202", "106, 202"])
+        self.assertEqual(self.speech, ["105, 202"])
+        self._set_mouse_position(111.0, 202.0)
+        self.frame._poll_mouse_coord_announce()
+        self.assertEqual(self.speech, ["105, 202", "111, 202"])
 
     def test_autofit_slider(self):
         # 命中滑块（经由内部文本沿父链向上找到 AXSlider）：矩形取滑块外接框并外扩 2 像素
@@ -275,7 +278,7 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame.mouse_lock_enable()
         self.assertTrue(self.frame._mouse_limit_active)
         self.assertIsNone(self.frame._mouse_limit_fitted_rect)
-        self.assertIn("鼠标限制已开启", self.speech)
+        self.assertIn("区域锁定开", self.speech)
 
     def test_autofit_disabled_uses_manual_rect(self):
         # 复选框关闭时即使命中滑块也走手动宽高

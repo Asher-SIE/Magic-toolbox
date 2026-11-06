@@ -57,8 +57,8 @@ class MouseLimitTests(unittest.TestCase):
         self.assertEqual(setting.clamp_point_to_rect(500.0, 220.0, rect), (500.0, 220.0))
 
     def test_should_announce_coord_change(self):
-        # 刚按住修饰键（上次为空）立即播报
-        self.assertTrue(setting.should_announce_coord_change((100, 200), None, 5))
+        # 刚按住修饰键（上次为空）不播报，需移动后按阈值播报
+        self.assertFalse(setting.should_announce_coord_change((100, 200), None, 5))
         # 任一轴移动达到精度阈值即播报
         self.assertTrue(setting.should_announce_coord_change((105, 200), (100, 200), 5))
         self.assertTrue(setting.should_announce_coord_change((100, 205.5), (100, 200), 5))
