@@ -26,6 +26,10 @@ import ime_guard
 MOUSE_COORD_ANNOUNCE_PRECISION = 5
 MOUSE_POLL_INTERVAL_MS = 50
 
+# 自动适配滑块：命中后沿父链向上查找 AXSlider 的深度上限与限制矩形外扩边距（像素）
+MOUSE_LIMIT_SLIDER_ANCESTOR_DEPTH = 10
+MOUSE_LIMIT_SLIDER_PADDING = 2
+
 
 class MainFrame(wx.Frame):
     # 长按跳转热键表：热键名 -> (macOS 物理键码, 跳转方法名)
@@ -70,6 +74,9 @@ class MainFrame(wx.Frame):
         self._mouse_limit_active = False
         self._mouse_limit_origin = None
         self._mouse_limit_display = None
+        # 自动适配滑块：开关随配置持久化；命中滑块时保存固定矩形，优先于起始点+宽高
+        self._mouse_limit_auto_fit = True
+        self._mouse_limit_fitted_rect = None
         # 按住 Ctrl 播报坐标：上次播报的坐标（释放修饰键时清空）
         self._last_announce_pos = None
         self._announce_flags_error_logged = False
@@ -499,6 +506,7 @@ class MainFrame(wx.Frame):
         self._mouse_limit_active = bool(config.get('mouse_limit_enabled', False))
         self._mouse_limit_width = int(config.get('mouse_limit_width', setting.DEFAULT_MOUSE_LIMIT_WIDTH))
         self._mouse_limit_height = int(config.get('mouse_limit_height', setting.DEFAULT_MOUSE_LIMIT_HEIGHT))
+        self._mouse_limit_auto_fit = bool(config.get('mouse_limit_auto_fit', setting.DEFAULT_MOUSE_LIMIT_AUTO_FIT))
 
         is_internal = setting.is_internal_device()
         supports_apple = setting.supports_apple_translation()
@@ -543,6 +551,8 @@ class MainFrame(wx.Frame):
 
         if hasattr(self, 'mouse_limit_check') and self.mouse_limit_check:
             self.mouse_limit_check.SetValue(self._mouse_limit_active)
+        if hasattr(self, 'mouse_limit_autofit_check') and self.mouse_limit_autofit_check:
+            self.mouse_limit_autofit_check.SetValue(self._mouse_limit_auto_fit)
         if hasattr(self, 'mouse_limit_width_input') and self.mouse_limit_width_input:
             self.mouse_limit_width_input.SetValue(str(self._mouse_limit_width))
             self.mouse_limit_height_input.SetValue(str(self._mouse_limit_height))
@@ -560,7 +570,8 @@ class MainFrame(wx.Frame):
         setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode, ocr_model_path, ocr_mmproj_path, sentence_punctuations,
                             mouse_limit_enabled=getattr(self, '_mouse_limit_active', False),
                             mouse_limit_width=getattr(self, '_mouse_limit_width', setting.DEFAULT_MOUSE_LIMIT_WIDTH),
-                            mouse_limit_height=getattr(self, '_mouse_limit_height', setting.DEFAULT_MOUSE_LIMIT_HEIGHT))
+                            mouse_limit_height=getattr(self, '_mouse_limit_height', setting.DEFAULT_MOUSE_LIMIT_HEIGHT),
+                            mouse_limit_auto_fit=getattr(self, '_mouse_limit_auto_fit', setting.DEFAULT_MOUSE_LIMIT_AUTO_FIT))
 
 
     def setup_clipboard_panel(self):
@@ -687,6 +698,11 @@ class MainFrame(wx.Frame):
         self.mouse_limit_check.SetValue(bool(getattr(self, '_mouse_limit_active', False)))
         self.mouse_limit_check.Bind(wx.EVT_CHECKBOX, self.on_mouse_limit_check)
         mouse_limit_sizer.Add(self.mouse_limit_check, 0, wx.ALL, 5)
+
+        self.mouse_limit_autofit_check = wx.CheckBox(mouse_limit_static_box, label=setting._("mouse_limit_autofit"))
+        self.mouse_limit_autofit_check.SetValue(bool(getattr(self, '_mouse_limit_auto_fit', setting.DEFAULT_MOUSE_LIMIT_AUTO_FIT)))
+        self.mouse_limit_autofit_check.Bind(wx.EVT_CHECKBOX, self.on_mouse_limit_autofit_check)
+        mouse_limit_sizer.Add(self.mouse_limit_autofit_check, 0, wx.ALL, 5)
 
         mouse_limit_width_row = wx.BoxSizer(wx.HORIZONTAL)
         mouse_limit_width_label = wx.StaticText(mouse_limit_static_box, label=setting._("mouse_limit_width_label"))
@@ -2489,25 +2505,88 @@ class MainFrame(wx.Frame):
         return None
 
     def _current_mouse_limit_rect(self):
-        """根据起始点、当前宽高与显示器边界计算限制矩形，未开启时返回 None"""
+        """计算当前生效的限制矩形：优先适配滑块的固定矩形，否则按起始点与当前宽高计算"""
+        if self._mouse_limit_fitted_rect is not None:
+            return self._mouse_limit_fitted_rect
         if self._mouse_limit_origin is None:
             return None
         return setting.compute_mouse_limit_rect(
             self._mouse_limit_origin, self._mouse_limit_width, self._mouse_limit_height,
             self._mouse_limit_display)
 
+    def _fit_slider_rect_at(self, x, y):
+        """自动适配鼠标下的滑块控件：命中 AXSlider 时返回 (限制矩形, 滑块宽, 滑块高)，未命中返回 None"""
+        bounds = self._find_slider_bounds_at(x, y)
+        if bounds is None:
+            return None
+        # 以滑块中心确定所在显示器，矩形外扩边距后收缩贴合屏幕
+        display = self._get_display_bounds_at((bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2)
+        rect = setting.fit_slider_rect(bounds, display, MOUSE_LIMIT_SLIDER_PADDING)
+        if rect is None:
+            return None
+        return (rect, bounds[2] - bounds[0], bounds[3] - bounds[1])
+
+    def _find_slider_bounds_at(self, x, y):
+        """命中测试鼠标位置并沿父链向上查找 AXSlider，返回滑块屏幕外接矩形，未找到返回 None"""
+        try:
+            import Quartz
+            system_wide = Quartz.AXUIElementCreateSystemWide()
+            err, element = Quartz.AXUIElementCopyElementAtPosition(system_wide, float(x), float(y))
+            if err != 0 or element is None:
+                return None
+            for _ in range(MOUSE_LIMIT_SLIDER_ANCESTOR_DEPTH):
+                role_err, role = Quartz.AXUIElementCopyAttributeValue(element, "AXRole")
+                if role_err == 0 and role == "AXSlider":
+                    pos_err, pos = Quartz.AXUIElementCopyAttributeValue(element, "AXPosition")
+                    size_err, size = Quartz.AXUIElementCopyAttributeValue(element, "AXSize")
+                    if pos_err != 0 or size_err != 0:
+                        return None
+                    point = self._ax_value_pair(pos, "x", "y")
+                    size_pair = self._ax_value_pair(size, "width", "height")
+                    if point is None or size_pair is None:
+                        return None
+                    left, top = point
+                    width, height = size_pair
+                    return (float(left), float(top), float(left + width), float(top + height))
+                parent_err, parent = Quartz.AXUIElementCopyAttributeValue(element, "AXParent")
+                if parent_err != 0 or parent is None:
+                    return None
+                element = parent
+        except Exception as e:
+            logging.error(f"自动适配滑块失败: {e}")
+        return None
+
+    @staticmethod
+    def _ax_value_pair(value, first_name, second_name):
+        """读取 AX 位置/尺寸值的两个分量，兼容 pyobjc 桥接差异，失败返回 None"""
+        try:
+            return float(getattr(value, first_name)), float(getattr(value, second_name))
+        except (AttributeError, TypeError, ValueError):
+            return None
+
     def mouse_lock_enable(self) -> bool:
-        """开启鼠标移动范围限制：以当前鼠标位置为左上角，宽高取设置面板当前值"""
+        """开启鼠标移动范围限制：优先适配鼠标下的滑块控件，未命中时以当前位置为左上角"""
         position = self._get_mouse_position()
         if position is None:
             self.vo_handler.speak_text("读取鼠标坐标失败")
             return False
-        self._mouse_limit_origin = position
-        self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
+        fit_result = self._fit_slider_rect_at(position[0], position[1]) if self._mouse_limit_auto_fit else None
+        self._mouse_limit_fitted_rect = fit_result[0] if fit_result else None
+        if fit_result is not None:
+            # 适配滑块时起始点取滑块左上角，矩形已含屏幕收缩，不再随宽高输入变化
+            self._mouse_limit_origin = (fit_result[0][0], fit_result[0][1])
+            self._mouse_limit_display = None
+        else:
+            self._mouse_limit_origin = position
+            self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
         self._mouse_limit_active = True
         self._sync_mouse_limit_widgets()
         self.save_config()
-        self.vo_handler.speak_text("鼠标限制已开启")
+        if fit_result is not None:
+            _, slider_width, slider_height = fit_result
+            self.vo_handler.speak_text(f"鼠标限制已开启，适配滑块宽度{int(round(slider_width))}，高度{int(round(slider_height))}")
+        else:
+            self.vo_handler.speak_text("鼠标限制已开启")
         return True
 
     def mouse_lock_disable(self) -> bool:
@@ -2515,6 +2594,7 @@ class MainFrame(wx.Frame):
         self._mouse_limit_active = False
         self._mouse_limit_origin = None
         self._mouse_limit_display = None
+        self._mouse_limit_fitted_rect = None
         self._sync_mouse_limit_widgets()
         self.save_config()
         self.vo_handler.speak_text("鼠标限制已关闭")
@@ -2542,6 +2622,12 @@ class MainFrame(wx.Frame):
                 self.mouse_lock_enable()
             else:
                 self.mouse_lock_disable()
+        event.Skip()
+
+    def on_mouse_limit_autofit_check(self, event):
+        """自动适配滑块开关：仅影响下次开启限制时的适配尝试"""
+        self._mouse_limit_auto_fit = bool(event.IsChecked())
+        self.save_config()
         event.Skip()
 
     @staticmethod

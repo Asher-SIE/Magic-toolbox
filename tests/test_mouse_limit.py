@@ -111,6 +111,29 @@ class MouseLimitTests(unittest.TestCase):
         self.assertEqual(config["mouse_limit_width"], 1000)
         self.assertEqual(config["mouse_limit_height"], 50)
 
+    def test_fit_slider_rect(self):
+        # 外扩 padding 像素
+        rect = setting.fit_slider_rect((500.0, 300.0, 1500.0, 350.0), None, 2)
+        self.assertEqual(rect, (498.0, 298.0, 1502.0, 352.0))
+        # 贴合显示器边界收缩
+        rect = setting.fit_slider_rect((1800.0, 300.0, 2500.0, 350.0), (0.0, 0.0, 1920.0, 1080.0), 2)
+        self.assertEqual(rect, (1798.0, 298.0, 1920.0, 352.0))
+        # 退化矩形返回 None
+        self.assertIsNone(setting.fit_slider_rect((500.0, 300.0, 500.0, 350.0), None, 0))
+        self.assertIsNone(setting.fit_slider_rect((0.0, 0.0, 10.0, 10.0), (500.0, 500.0, 600.0, 600.0), 0))
+
+    def test_mouse_limit_auto_fit_config(self):
+        # 默认开启自动适配
+        config = setting.load_config()
+        self.assertTrue(config["mouse_limit_auto_fit"])
+        # 保存后重新加载可恢复，未传入时保留当前生效值
+        setting.save_config("English", "Chinese", mouse_limit_auto_fit=False)
+        self.assertFalse(setting.mouse_limit_auto_fit)
+        setting.save_config("English", "Chinese")
+        self.assertFalse(setting.mouse_limit_auto_fit)
+        config = setting.load_config()
+        self.assertFalse(config["mouse_limit_auto_fit"])
+
     def test_mouselock_hotkey_registered(self):
         # opt+shift+~ 开关热键已注册，热键名全局唯一
         lock_hotkeys = [h for h in setting.hotKeys if h["name"] == "mouselock"]

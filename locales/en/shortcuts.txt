@@ -50,4 +50,4 @@ Option+Shift+1 to 6, 0    Move the mouse to the landmark stored in that slot for
 
 7. Mouse Assistance
 Hold Control and move the mouse    Announce the current mouse coordinates in real time (spoken once every 5 pixels of movement)
-Option+Shift+~    Toggle the mouse movement range limit (uses the current mouse position as the top-left corner when enabled; the pointer snaps back to the boundary when it moves outside)
+Option+Shift+~    Toggle the mouse movement range limit (auto-fits a slider under the mouse when enabled; otherwise uses the current mouse position as the top-left corner; the pointer snaps back to the boundary when it moves outside)
