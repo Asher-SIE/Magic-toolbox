@@ -853,7 +853,7 @@ msgstr "Mouse Movement Range Limit"
 
 #: main_UI.py
 msgid "mouse_limit_hint"
-msgstr "When enabled, the range auto-fits a slider under the mouse; otherwise the current mouse position is used as the top-left corner; the pointer snaps back to the boundary when it moves outside; width and height changes are saved and applied immediately"
+msgstr "Uses the current mouse position as the top-left corner when enabled; the pointer snaps back to the boundary when it moves outside; width and height changes are saved and applied immediately"
 
 #: main_UI.py
 msgid "mouse_limit_enable"
@@ -867,6 +867,3 @@ msgstr "Limit width"
 msgid "mouse_limit_height_label"
 msgstr "Limit height"
 
-#: main_UI.py
-msgid "mouse_limit_autofit"
-msgstr "Auto-fit the slider under the mouse"

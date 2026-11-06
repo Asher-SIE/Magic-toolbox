@@ -22,17 +22,17 @@ import update
 import ime_guard
 
 
-# 鼠标辅助功能：按住 Ctrl 播报坐标的精度阈值（任一轴移动像素数）与轮询间隔（毫秒）
+# 鼠标辅助功能：按住 Option+Shift 播报坐标的精度阈值（任一轴移动像素数）与轮询间隔（毫秒）
 MOUSE_COORD_ANNOUNCE_PRECISION = 5
 MOUSE_POLL_INTERVAL_MS = 50
-
-# 自动适配滑块：命中后沿父链向上查找 AXSlider 的深度上限与限制矩形外扩边距（像素）
-MOUSE_LIMIT_SLIDER_ANCESTOR_DEPTH = 10
-MOUSE_LIMIT_SLIDER_PADDING = 2
 
 # 区域锁定开关键码：Carbon kVK_ANSI_Grave（Esc 下方波浪号/反引号物理键）。
 # wx 的 macOS 键码映射表不含波浪号，RegisterHotKey 注册不了该键，改由轮询定时器检测按键边沿
 MOUSE_LOCK_KEYCODE = 0x32
+
+# 越界吸附的最小间隔（秒）：CGWarpMouseCursorPosition 高频调用会被系统节流（插入约 0.1 秒暂停），
+# 顶边推进时指针会整体发僵，吸附带冷却规避
+MOUSE_LIMIT_WARP_COOLDOWN_S = 0.15
 
 
 class MainFrame(wx.Frame):
@@ -78,10 +78,9 @@ class MainFrame(wx.Frame):
         self._mouse_limit_active = False
         self._mouse_limit_origin = None
         self._mouse_limit_display = None
-        # 自动适配滑块：开关随配置持久化；命中滑块时保存固定矩形，优先于起始点+宽高
-        self._mouse_limit_auto_fit = True
-        self._mouse_limit_fitted_rect = None
-        # 按住 Ctrl 播报坐标：上次播报的坐标（释放修饰键时清空）
+        # 上次吸附拉回的时刻（monotonic），用于吸附冷却
+        self._mouse_limit_last_warp = 0.0
+        # 按住 Option+Shift 播报坐标：上次播报的坐标（释放修饰键时清空）
         self._last_announce_pos = None
         self._announce_flags_error_logged = False
         # 区域锁定开关键（opt+shift+~）：上次轮询时是否处于按下状态，用于边沿触发
@@ -513,7 +512,6 @@ class MainFrame(wx.Frame):
         self._mouse_limit_active = bool(config.get('mouse_limit_enabled', False))
         self._mouse_limit_width = int(config.get('mouse_limit_width', setting.DEFAULT_MOUSE_LIMIT_WIDTH))
         self._mouse_limit_height = int(config.get('mouse_limit_height', setting.DEFAULT_MOUSE_LIMIT_HEIGHT))
-        self._mouse_limit_auto_fit = bool(config.get('mouse_limit_auto_fit', setting.DEFAULT_MOUSE_LIMIT_AUTO_FIT))
 
         is_internal = setting.is_internal_device()
         supports_apple = setting.supports_apple_translation()
@@ -558,8 +556,6 @@ class MainFrame(wx.Frame):
 
         if hasattr(self, 'mouse_limit_check') and self.mouse_limit_check:
             self.mouse_limit_check.SetValue(self._mouse_limit_active)
-        if hasattr(self, 'mouse_limit_autofit_check') and self.mouse_limit_autofit_check:
-            self.mouse_limit_autofit_check.SetValue(self._mouse_limit_auto_fit)
         if hasattr(self, 'mouse_limit_width_input') and self.mouse_limit_width_input:
             self.mouse_limit_width_input.SetValue(str(self._mouse_limit_width))
             self.mouse_limit_height_input.SetValue(str(self._mouse_limit_height))
@@ -577,8 +573,7 @@ class MainFrame(wx.Frame):
         setting.save_config(self._source_lang, self._target_lang, model_path, clipboard_max_count, volume_limit, volume_target, translation_mode, ocr_mode, ocr_model_path, ocr_mmproj_path, sentence_punctuations,
                             mouse_limit_enabled=getattr(self, '_mouse_limit_active', False),
                             mouse_limit_width=getattr(self, '_mouse_limit_width', setting.DEFAULT_MOUSE_LIMIT_WIDTH),
-                            mouse_limit_height=getattr(self, '_mouse_limit_height', setting.DEFAULT_MOUSE_LIMIT_HEIGHT),
-                            mouse_limit_auto_fit=getattr(self, '_mouse_limit_auto_fit', setting.DEFAULT_MOUSE_LIMIT_AUTO_FIT))
+                            mouse_limit_height=getattr(self, '_mouse_limit_height', setting.DEFAULT_MOUSE_LIMIT_HEIGHT))
 
 
     def setup_clipboard_panel(self):
@@ -705,11 +700,6 @@ class MainFrame(wx.Frame):
         self.mouse_limit_check.SetValue(bool(getattr(self, '_mouse_limit_active', False)))
         self.mouse_limit_check.Bind(wx.EVT_CHECKBOX, self.on_mouse_limit_check)
         mouse_limit_sizer.Add(self.mouse_limit_check, 0, wx.ALL, 5)
-
-        self.mouse_limit_autofit_check = wx.CheckBox(mouse_limit_static_box, label=setting._("mouse_limit_autofit"))
-        self.mouse_limit_autofit_check.SetValue(bool(getattr(self, '_mouse_limit_auto_fit', setting.DEFAULT_MOUSE_LIMIT_AUTO_FIT)))
-        self.mouse_limit_autofit_check.Bind(wx.EVT_CHECKBOX, self.on_mouse_limit_autofit_check)
-        mouse_limit_sizer.Add(self.mouse_limit_autofit_check, 0, wx.ALL, 5)
 
         mouse_limit_width_row = wx.BoxSizer(wx.HORIZONTAL)
         mouse_limit_width_label = wx.StaticText(mouse_limit_static_box, label=setting._("mouse_limit_width_label"))
@@ -2489,6 +2479,7 @@ class MainFrame(wx.Frame):
         self._mouse_limit_origin = position
         self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
         self._mouse_limit_active = True
+        self._mouse_limit_last_warp = 0.0
         self._sync_mouse_limit_widgets()
         logging.info(f"已恢复鼠标移动范围限制，起始点: {position}")
 
@@ -2514,67 +2505,15 @@ class MainFrame(wx.Frame):
         return None
 
     def _current_mouse_limit_rect(self):
-        """计算当前生效的限制矩形：优先适配滑块的固定矩形，否则按起始点与当前宽高计算"""
-        if self._mouse_limit_fitted_rect is not None:
-            return self._mouse_limit_fitted_rect
+        """根据起始点、当前宽高与显示器边界计算限制矩形，未开启时返回 None"""
         if self._mouse_limit_origin is None:
             return None
         return setting.compute_mouse_limit_rect(
             self._mouse_limit_origin, self._mouse_limit_width, self._mouse_limit_height,
             self._mouse_limit_display)
 
-    def _fit_slider_rect_at(self, x, y):
-        """自动适配鼠标下的滑块控件：命中 AXSlider 时返回 (限制矩形, 滑块宽, 滑块高)，未命中返回 None"""
-        bounds = self._find_slider_bounds_at(x, y)
-        if bounds is None:
-            return None
-        # 以滑块中心确定所在显示器，矩形外扩边距后收缩贴合屏幕
-        display = self._get_display_bounds_at((bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2)
-        rect = setting.fit_slider_rect(bounds, display, MOUSE_LIMIT_SLIDER_PADDING)
-        if rect is None:
-            return None
-        return (rect, bounds[2] - bounds[0], bounds[3] - bounds[1])
-
-    def _find_slider_bounds_at(self, x, y):
-        """命中测试鼠标位置并沿父链向上查找 AXSlider，返回滑块屏幕外接矩形，未找到返回 None"""
-        try:
-            import Quartz
-            system_wide = Quartz.AXUIElementCreateSystemWide()
-            err, element = Quartz.AXUIElementCopyElementAtPosition(system_wide, float(x), float(y))
-            if err != 0 or element is None:
-                return None
-            for _ in range(MOUSE_LIMIT_SLIDER_ANCESTOR_DEPTH):
-                role_err, role = Quartz.AXUIElementCopyAttributeValue(element, "AXRole")
-                if role_err == 0 and role == "AXSlider":
-                    pos_err, pos = Quartz.AXUIElementCopyAttributeValue(element, "AXPosition")
-                    size_err, size = Quartz.AXUIElementCopyAttributeValue(element, "AXSize")
-                    if pos_err != 0 or size_err != 0:
-                        return None
-                    point = self._ax_value_pair(pos, "x", "y")
-                    size_pair = self._ax_value_pair(size, "width", "height")
-                    if point is None or size_pair is None:
-                        return None
-                    left, top = point
-                    width, height = size_pair
-                    return (float(left), float(top), float(left + width), float(top + height))
-                parent_err, parent = Quartz.AXUIElementCopyAttributeValue(element, "AXParent")
-                if parent_err != 0 or parent is None:
-                    return None
-                element = parent
-        except Exception as e:
-            logging.error(f"自动适配滑块失败: {e}")
-        return None
-
-    @staticmethod
-    def _ax_value_pair(value, first_name, second_name):
-        """读取 AX 位置/尺寸值的两个分量，兼容 pyobjc 桥接差异，失败返回 None"""
-        try:
-            return float(getattr(value, first_name)), float(getattr(value, second_name))
-        except (AttributeError, TypeError, ValueError):
-            return None
-
     def mouse_lock_enable(self) -> bool:
-        """开启鼠标移动范围限制：优先适配鼠标下的滑块控件，未命中时以当前位置为左上角"""
+        """开启鼠标移动范围限制：以当前鼠标位置为左上角，宽高取设置面板当前值"""
         position = self._get_mouse_position()
         if position is None:
             # 读坐标失败优先怀疑辅助功能权限：Finder 启动的 app 需自身被授权（终端启动则记在终端头上）
@@ -2582,23 +2521,13 @@ class MainFrame(wx.Frame):
                 return False
             self.vo_handler.speak_text("读取鼠标坐标失败")
             return False
-        fit_result = self._fit_slider_rect_at(position[0], position[1]) if self._mouse_limit_auto_fit else None
-        self._mouse_limit_fitted_rect = fit_result[0] if fit_result else None
-        if fit_result is not None:
-            # 适配滑块时起始点取滑块左上角，矩形已含屏幕收缩，不再随宽高输入变化
-            self._mouse_limit_origin = (fit_result[0][0], fit_result[0][1])
-            self._mouse_limit_display = None
-        else:
-            self._mouse_limit_origin = position
-            self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
+        self._mouse_limit_origin = position
+        self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
         self._mouse_limit_active = True
+        self._mouse_limit_last_warp = 0.0
         self._sync_mouse_limit_widgets()
         self.save_config()
-        if fit_result is not None:
-            _, slider_width, slider_height = fit_result
-            self.vo_handler.speak_text(f"区域锁定开，适配滑块宽度{int(round(slider_width))}，高度{int(round(slider_height))}")
-        else:
-            self.vo_handler.speak_text("区域锁定开")
+        self.vo_handler.speak_text("区域锁定开")
         return True
 
     def mouse_lock_disable(self) -> bool:
@@ -2606,7 +2535,6 @@ class MainFrame(wx.Frame):
         self._mouse_limit_active = False
         self._mouse_limit_origin = None
         self._mouse_limit_display = None
-        self._mouse_limit_fitted_rect = None
         self._sync_mouse_limit_widgets()
         self.save_config()
         self.vo_handler.speak_text("区域锁定关")
@@ -2671,13 +2599,6 @@ class MainFrame(wx.Frame):
                 self.mouse_lock_disable()
         event.Skip()
 
-    def on_mouse_limit_autofit_check(self, event):
-        """自动适配滑块开关：仅影响下次开启限制时的适配尝试"""
-        self._mouse_limit_auto_fit = bool(event.IsChecked())
-        self.save_config()
-        event.Skip()
-
-    @staticmethod
     def _filter_digit_input(input_ctrl):
         """输入框过滤：仅保留数字字符"""
         current_value = input_ctrl.GetValue()
@@ -2728,7 +2649,7 @@ class MainFrame(wx.Frame):
         event.Skip()
 
     def _on_mouse_poll_timer(self, event):
-        """鼠标轮询定时器：区域锁定按键检测、越界吸附与按住 Ctrl 坐标实时播报"""
+        """鼠标轮询定时器：区域锁定按键检测、越界吸附与按住 Option+Shift 坐标实时播报"""
         try:
             self._poll_mouse_lock_key()
             self._poll_mouse_limit()
@@ -2737,7 +2658,8 @@ class MainFrame(wx.Frame):
             logging.error(f"鼠标轮询异常: {e}")
 
     def _poll_mouse_limit(self):
-        """鼠标移动范围限制：指针越出矩形时立即拉回边界（吸附）"""
+        """鼠标移动范围限制：指针越出矩形时拉回边界（吸附）；连续吸附带冷却，
+        避免 warp 高频触发系统节流导致指针整体卡顿"""
         if not self._mouse_limit_active:
             return
         position = self._get_mouse_position()
@@ -2748,11 +2670,15 @@ class MainFrame(wx.Frame):
             return
         if not setting.is_point_outside_rect(position[0], position[1], rect):
             return
+        now = time.monotonic()
+        if now - self._mouse_limit_last_warp < MOUSE_LIMIT_WARP_COOLDOWN_S:
+            return
         nx, ny = setting.clamp_point_to_rect(position[0], position[1], rect)
-        self._move_mouse_to(nx, ny)
+        if self._move_mouse_to(nx, ny):
+            self._mouse_limit_last_warp = now
 
     def _poll_mouse_coord_announce(self):
-        """按住 Ctrl 移动鼠标时实时播报坐标，任一轴移动达到精度阈值才播报一次"""
+        """按住 Option+Shift 移动鼠标时实时播报坐标，任一轴移动达到精度阈值才播报一次"""
         try:
             import Quartz
             flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateCombinedSessionState)
@@ -2763,14 +2689,17 @@ class MainFrame(wx.Frame):
                 logging.error(f"读取修饰键状态失败: {e}")
             self._last_announce_pos = None
             return
-        if not (flags & Quartz.kCGEventFlagMaskControl):
+        # 与应用热键体系保持一致的组合；Option+Shift 纯移动不触发系统鼠标行为，无冲突
+        mods_ok = (bool(flags & Quartz.kCGEventFlagMaskAlternate)
+                   and bool(flags & Quartz.kCGEventFlagMaskShift))
+        if not mods_ok:
             self._last_announce_pos = None
             return
         position = self._get_mouse_position()
         if position is None:
             return
         if self._last_announce_pos is None:
-            # 刚按住 Ctrl：静默记录基准位置，移动达到阈值后才开始播报
+            # 刚按住修饰键：静默记录基准位置，移动达到阈值后才开始播报
             self._last_announce_pos = position
             return
         if not setting.should_announce_coord_change(position, self._last_announce_pos, MOUSE_COORD_ANNOUNCE_PRECISION):

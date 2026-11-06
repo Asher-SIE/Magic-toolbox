@@ -853,7 +853,7 @@ msgstr "鼠标移动范围限制"
 
 #: main_UI.py
 msgid "mouse_limit_hint"
-msgstr "开启时若鼠标下是滑块控件则自动适配其范围，否则以当前鼠标位置为区域左上角；指针越界自动拉回边界；宽高修改后自动保存并即时生效"
+msgstr "开启时以当前鼠标位置为区域左上角，指针越界自动拉回边界；宽高修改后自动保存并即时生效"
 
 #: main_UI.py
 msgid "mouse_limit_enable"
@@ -867,6 +867,3 @@ msgstr "限制宽度"
 msgid "mouse_limit_height_label"
 msgstr "限制高度"
 
-#: main_UI.py
-msgid "mouse_limit_autofit"
-msgstr "自动适配鼠标下的滑块控件"

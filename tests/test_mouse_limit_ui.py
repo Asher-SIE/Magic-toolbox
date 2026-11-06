@@ -6,27 +6,6 @@ import types
 import unittest
 from unittest import mock
 
-class _FakeAXElement:
-    """模拟 AXUIElement：仅支持测试所需的四个属性"""
-
-    def __init__(self, role, parent=None, position=None, size=None):
-        self._role = role
-        self._parent = parent
-        self._position = position
-        self._size = size
-
-    def ax_attr(self, attribute):
-        if attribute == "AXRole":
-            return (0, self._role)
-        if attribute == "AXParent":
-            return (0, self._parent) if self._parent is not None else (1, None)
-        if attribute == "AXPosition":
-            return (0, self._position) if self._position is not None else (1, None)
-        if attribute == "AXSize":
-            return (0, self._size) if self._size is not None else (1, None)
-        return (1, None)
-
-
 @unittest.skipUnless(sys.platform == "win32", "依赖 Windows 预览桩环境（win_preview_main_ui）")
 class MouseLimitUITests(unittest.TestCase):
     """鼠标限制与坐标播报的界面层功能测试：开关切换、越界吸附、Ctrl 播报节流、持久化"""
@@ -70,6 +49,7 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._mouse_limit_display = None
         self.frame._last_announce_pos = None
         self.frame._announce_flags_error_logged = False
+        self.frame._mouse_limit_last_warp = 0.0
         self.frame._mouse_lock_key_pressed = False
         self.frame._lock_key_error_logged = False
         self.frame._mouse_limit_auto_fit = True
@@ -160,6 +140,7 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._poll_mouse_limit()
         self.assertEqual(self.warps, [])
         self._set_mouse_position(2000.0, 320.0)
+        self.frame._mouse_limit_last_warp = 0.0  # 模拟冷却时间已过
         self.frame._poll_mouse_limit()
         self.assertEqual(self.warps, [(1920.0, 320.0)])
 
@@ -178,44 +159,20 @@ class MouseLimitUITests(unittest.TestCase):
         self.assertEqual(self.frame._mouse_limit_height, 80)
         self.assertEqual(self._read_saved_config()["mouse_limit_height"], 80)
 
-    def _install_ax_stub(self, hit_element):
-        """安装带 AX 函数的 Quartz 桩：hit_element 为元素或 (x, y)->元素 回调，None 表示未命中"""
-        stub = types.ModuleType("Quartz")
-        stub.kCGEventSourceStateCombinedSessionState = 0
-        stub.kCGEventFlagMaskControl = 1 << 18
-        stub.CGEventSourceFlagsState = lambda source: 0
-        stub.AXUIElementCreateSystemWide = lambda: object()
-
-        def _hit(system, x, y):
-            element = hit_element(x, y) if callable(hit_element) else hit_element
-            return (0, element) if element is not None else (1, None)
-
-        stub.AXUIElementCopyElementAtPosition = _hit
-        stub.AXUIElementCopyAttributeValue = lambda element, attribute: element.ax_attr(attribute)
-        sys.modules["Quartz"] = stub
-        self.addCleanup(sys.modules.pop, "Quartz", None)
-
-    @staticmethod
-    def _make_ax_chain():
-        """构造 内部文本 -> AXSlider 的元素链，滑块位于 (500,300) 尺寸 1000x50"""
-        slider = _FakeAXElement("AXSlider",
-                                position=types.SimpleNamespace(x=500.0, y=300.0),
-                                size=types.SimpleNamespace(width=1000.0, height=50.0))
-        inner = _FakeAXElement("AXStaticText", parent=slider,
-                               position=types.SimpleNamespace(x=600.0, y=310.0),
-                               size=types.SimpleNamespace(width=10.0, height=20.0))
-        return slider, inner
-
-    def test_ctrl_announce_flow(self):
-        # 未按住 Ctrl：不播报
+    def test_optshift_announce_flow(self):
+        # 未按住 Option+Shift：不播报
         self._install_quartz_stub(0)
         self._set_mouse_position(100.0, 200.0)
         self.frame._poll_mouse_coord_announce()
         self.assertEqual(self.speech, [])
         self.assertIsNone(self.frame._last_announce_pos)
 
-        # 按住 Ctrl 不动：静默记录基准，不播报
+        # 仅按 Ctrl 不算：需 Option+Shift 同时按住
         self._install_quartz_stub(1 << 18)
+        self.frame._poll_mouse_coord_announce()
+        self.assertEqual(self.speech, [])
+        # 按住 Option+Shift 不动：静默记录基准，不播报
+        self._install_quartz_stub((1 << 19) | (1 << 17))
         self.frame._poll_mouse_coord_announce()
         self.assertEqual(self.speech, [])
 
@@ -229,10 +186,10 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._poll_mouse_coord_announce()
         self.assertEqual(self.speech, ["105, 202"])
 
-        # 松开 Ctrl 清空记录；再次按住仍静默，需重新移动才播报
+        # 松开修饰键清空记录；再次按住仍静默，需重新移动才播报
         self._install_quartz_stub(0)
         self.frame._poll_mouse_coord_announce()
-        self._install_quartz_stub(1 << 18)
+        self._install_quartz_stub((1 << 19) | (1 << 17))
         self._set_mouse_position(106.0, 202.0)
         self.frame._poll_mouse_coord_announce()
         self.assertEqual(self.speech, ["105, 202"])
@@ -240,61 +197,27 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._poll_mouse_coord_announce()
         self.assertEqual(self.speech, ["105, 202", "111, 202"])
 
-    def test_autofit_slider(self):
-        # 命中滑块（经由内部文本沿父链向上找到 AXSlider）：矩形取滑块外接框并外扩 2 像素
+    def test_snap_warp_cooldown(self):
         self._set_mouse_position(500.0, 300.0)
         self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
-        slider, inner = self._make_ax_chain()
-        button = _FakeAXElement("AXButton")
-        self._install_ax_stub(lambda x, y: inner if 500 <= x <= 1500 and 300 <= y <= 350 else button)
-
         self.frame.mouse_lock_enable()
-        self.assertTrue(self.frame._mouse_limit_active)
-        self.assertEqual(self.frame._mouse_limit_fitted_rect, (498.0, 298.0, 1502.0, 352.0))
-        self.assertIn("适配滑块宽度1000，高度50", self.speech[-1])
-
-        # 吸附按适配矩形拉回
-        self._set_mouse_position(1600.0, 400.0)
-        self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1502.0, 352.0)])
-
-        # 适配矩形不随宽高输入变化
-        self.frame.mouse_limit_width_input.SetValue("100")
-        self.frame.on_mouse_limit_width_focus_lost(types.SimpleNamespace(Skip=lambda: None))
         self.warps.clear()
-        self._set_mouse_position(1600.0, 400.0)
-        self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1502.0, 352.0)])
 
-        # 关闭后清除适配矩形
-        self.frame.mouse_lock_disable()
-        self.assertIsNone(self.frame._mouse_limit_fitted_rect)
-
-    def test_autofit_falls_back_without_slider(self):
-        # 命中的不是滑块（也无滑块祖先）时回退手动宽高
-        self._set_mouse_position(500.0, 300.0)
-        self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
-        button = _FakeAXElement("AXButton")
-        self._install_ax_stub(lambda x, y: button)
-        self.frame.mouse_lock_enable()
-        self.assertTrue(self.frame._mouse_limit_active)
-        self.assertIsNone(self.frame._mouse_limit_fitted_rect)
-        self.assertIn("区域锁定开", self.speech)
-
-    def test_autofit_disabled_uses_manual_rect(self):
-        # 复选框关闭时即使命中滑块也走手动宽高
-        self._set_mouse_position(500.0, 300.0)
-        self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
-        slider, inner = self._make_ax_chain()
-        self._install_ax_stub(lambda x, y: inner)
-        self.frame.on_mouse_limit_autofit_check(types.SimpleNamespace(IsChecked=lambda: False, Skip=lambda: None))
-        self.frame.mouse_lock_enable()
-        self.assertTrue(self.frame._mouse_limit_active)
-        self.assertIsNone(self.frame._mouse_limit_fitted_rect)
-        # 手动矩形：(500,300) + 1000x50
+        # 第一次越界：立即吸附
         self._set_mouse_position(1600.0, 400.0)
         self.frame._poll_mouse_limit()
         self.assertEqual(self.warps, [(1500.0, 350.0)])
+
+        # 冷却期内再次越界：不重复 warp，避免触发系统节流导致指针卡顿
+        self._set_mouse_position(1700.0, 450.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [(1500.0, 350.0)])
+
+        # 冷却结束后恢复吸附
+        self.frame._mouse_limit_last_warp = 0.0
+        self._set_mouse_position(1700.0, 450.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [(1500.0, 350.0), (1500.0, 350.0)])
 
     def test_lock_key_poll_toggles(self):
         self._set_mouse_position(500.0, 300.0)

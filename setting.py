@@ -600,12 +600,9 @@ mouse_landmarks = {}
 # 鼠标移动范围限制：默认宽高与当前生效值（启动加载配置时刷新，面板修改即时生效）
 DEFAULT_MOUSE_LIMIT_WIDTH = 1000
 DEFAULT_MOUSE_LIMIT_HEIGHT = 50
-# 开启限制时自动适配鼠标下滑块控件的开关（默认开启，未命中滑块时回退手动宽高）
-DEFAULT_MOUSE_LIMIT_AUTO_FIT = True
 mouse_limit_enabled = False
 mouse_limit_width = DEFAULT_MOUSE_LIMIT_WIDTH
 mouse_limit_height = DEFAULT_MOUSE_LIMIT_HEIGHT
-mouse_limit_auto_fit = DEFAULT_MOUSE_LIMIT_AUTO_FIT
 
 
 def _normalize_sentence_punctuations(value) -> list:
@@ -644,7 +641,7 @@ def _normalize_mouse_landmarks(value) -> dict:
 
 
 def _normalize_mouse_limit_bool(value, default: bool) -> bool:
-    """清洗鼠标限制布尔配置（开关/自动适配）：仅接受布尔值，非法回退默认"""
+    """清洗鼠标限制开关配置：仅接受布尔值，非法回退默认"""
     return value if isinstance(value, bool) else default
 
 
@@ -658,7 +655,7 @@ def _normalize_mouse_limit_dimension(value, default: int) -> int:
 def load_config():
     """加载配置"""
     global sentence_punctuations, mouse_landmarks
-    global mouse_limit_enabled, mouse_limit_width, mouse_limit_height, mouse_limit_auto_fit
+    global mouse_limit_enabled, mouse_limit_width, mouse_limit_height
     config = {
         'source_lang': 'English',
         'target_lang': 'Chinese',
@@ -674,8 +671,7 @@ def load_config():
         'mouse_landmarks': {},
         'mouse_limit_enabled': False,
         'mouse_limit_width': DEFAULT_MOUSE_LIMIT_WIDTH,
-        'mouse_limit_height': DEFAULT_MOUSE_LIMIT_HEIGHT,
-        'mouse_limit_auto_fit': DEFAULT_MOUSE_LIMIT_AUTO_FIT
+        'mouse_limit_height': DEFAULT_MOUSE_LIMIT_HEIGHT
     }
     try:
         if os.path.exists(config_path):
@@ -689,16 +685,14 @@ def load_config():
     mouse_limit_enabled = _normalize_mouse_limit_bool(config.get('mouse_limit_enabled'), False)
     mouse_limit_width = _normalize_mouse_limit_dimension(config.get('mouse_limit_width'), DEFAULT_MOUSE_LIMIT_WIDTH)
     mouse_limit_height = _normalize_mouse_limit_dimension(config.get('mouse_limit_height'), DEFAULT_MOUSE_LIMIT_HEIGHT)
-    mouse_limit_auto_fit = _normalize_mouse_limit_bool(config.get('mouse_limit_auto_fit'), DEFAULT_MOUSE_LIMIT_AUTO_FIT)
     # 归一化后的值写回 config，供界面层直接读取
     config['mouse_limit_enabled'] = mouse_limit_enabled
     config['mouse_limit_width'] = mouse_limit_width
     config['mouse_limit_height'] = mouse_limit_height
-    config['mouse_limit_auto_fit'] = mouse_limit_auto_fit
     return config
 
 
-def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple', ocr_model_path: str = '', ocr_mmproj_path: str = '', sentence_punctuations=None, mouse_landmarks=None, mouse_limit_enabled=None, mouse_limit_width=None, mouse_limit_height=None, mouse_limit_auto_fit=None):
+def save_config(source_lang: str, target_lang: str, model_path: str = '', clipboard_max_count: int = 1000, volume_limit: float = 100, volume_target: float = 80, translation_mode: str = 'llm', ocr_mode: str = 'apple', ocr_model_path: str = '', ocr_mmproj_path: str = '', sentence_punctuations=None, mouse_landmarks=None, mouse_limit_enabled=None, mouse_limit_width=None, mouse_limit_height=None):
     """保存配置；可选参数未传入时保留当前生效值，避免其他配置项保存时覆盖"""
     if sentence_punctuations is None:
         sentence_punctuations = globals()['sentence_punctuations']
@@ -716,12 +710,9 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
         mouse_limit_width = globals()['mouse_limit_width']
     if mouse_limit_height is None:
         mouse_limit_height = globals()['mouse_limit_height']
-    if mouse_limit_auto_fit is None:
-        mouse_limit_auto_fit = globals()['mouse_limit_auto_fit']
     globals()['mouse_limit_enabled'] = _normalize_mouse_limit_bool(mouse_limit_enabled, False)
     globals()['mouse_limit_width'] = _normalize_mouse_limit_dimension(mouse_limit_width, DEFAULT_MOUSE_LIMIT_WIDTH)
     globals()['mouse_limit_height'] = _normalize_mouse_limit_dimension(mouse_limit_height, DEFAULT_MOUSE_LIMIT_HEIGHT)
-    globals()['mouse_limit_auto_fit'] = _normalize_mouse_limit_bool(mouse_limit_auto_fit, DEFAULT_MOUSE_LIMIT_AUTO_FIT)
     try:
         config = {
             'source_lang': source_lang,
@@ -738,8 +729,7 @@ def save_config(source_lang: str, target_lang: str, model_path: str = '', clipbo
             'mouse_landmarks': normalized_landmarks,
             'mouse_limit_enabled': globals()['mouse_limit_enabled'],
             'mouse_limit_width': globals()['mouse_limit_width'],
-            'mouse_limit_height': globals()['mouse_limit_height'],
-            'mouse_limit_auto_fit': globals()['mouse_limit_auto_fit']
+            'mouse_limit_height': globals()['mouse_limit_height']
         }
         logging.info(f"保存配置: ocr_mode={ocr_mode}, ocr_model_path={ocr_model_path!r}, ocr_mmproj_path={ocr_mmproj_path!r}")
         with open(config_path, 'w', encoding='utf-8') as f:
@@ -789,22 +779,6 @@ def clamp_point_to_rect(x: float, y: float, rect) -> tuple:
     """将点夹紧回矩形内，返回吸附到边界的坐标"""
     x0, y0, x1, y1 = rect
     return (min(max(float(x), x0), x1), min(max(float(y), y0), y1))
-
-
-def fit_slider_rect(bounds, display_bounds=None, padding: int = 0):
-    """由滑块外接矩形计算限制矩形：外扩 padding 像素并收缩贴合显示器边界，退化矩形返回 None"""
-    left, top, right, bottom = bounds
-    left, top = float(left) - padding, float(top) - padding
-    right, bottom = float(right) + padding, float(bottom) + padding
-    if display_bounds is not None:
-        dleft, dtop, dright, dbottom = display_bounds
-        left = max(left, float(dleft))
-        top = max(top, float(dtop))
-        right = min(right, float(dright))
-        bottom = min(bottom, float(dbottom))
-    if right - left < 1 or bottom - top < 1:
-        return None
-    return (left, top, right, bottom)
 
 
 def should_announce_coord_change(position, last_position, precision: int) -> bool:
