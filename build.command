@@ -132,30 +132,33 @@ SIGN_CERT="MagicToolbox Dev"
 CERT_FILE="$SCRIPT_DIR/cert.p12"
 # cert.p12 的导出密码
 CERT_PASS="145896"
-# 专用签名钥匙串：密码固定，不依赖登录钥匙串，非交互环境（CI/SSH）同样可签名
-SIGN_KEYCHAIN="$HOME/Library/Keychains/MagicToolboxSign.keychain"
-SIGN_KEYCHAIN_PASS="MagicToolbox"
 
 CAN_SIGN=0
 CODESIGN_ARGS=(--force --deep)
+
+# 诊断输出：全部身份（含无效）与有效身份分开列出，便于定位导入或信任问题
+echo "当前签名身份（含无效项）："
+security find-identity -p codesigning 2>/dev/null || true
+echo "当前有效签名身份："
+security find-identity -v -p codesigning 2>/dev/null || true
+
 if security find-identity -v -p codesigning | grep -q "$SIGN_CERT"; then
     CAN_SIGN=1
     echo "使用钥匙串既有证书：$SIGN_CERT"
 elif [ -f "$CERT_FILE" ]; then
-    # 从仓库内置 cert.p12 导入专用钥匙串（p12 为空密码 legacy 3DES，security 可直接解析）
-    # import 幂等：证书已在钥匙串时报错可忽略
-    echo "钥匙串中未找到证书 \"$SIGN_CERT\"，正在从 cert.p12 导入..."
-    security create-keychain -p "$SIGN_KEYCHAIN_PASS" "$SIGN_KEYCHAIN" 2>/dev/null || true
-    security unlock-keychain -p "$SIGN_KEYCHAIN_PASS" "$SIGN_KEYCHAIN"
-    security import "$CERT_FILE" -k "$SIGN_KEYCHAIN" -P "$CERT_PASS" -T /usr/bin/codesign 2>/dev/null || true
-    # 授权 codesign 非交互访问私钥
-    security set-key-partition-list -S apple-tool:,apple: -k "$SIGN_KEYCHAIN_PASS" "$SIGN_KEYCHAIN" >/dev/null 2>&1 || true
-    if security find-identity -v -p codesigning "$SIGN_KEYCHAIN" 2>/dev/null | grep -q "$SIGN_CERT"; then
+    echo "未找到有效身份 \"$SIGN_CERT\"，正在将 cert.p12 导入登录钥匙串..."
+    # 导入错误不屏蔽，失败原因直接可见
+    security import "$CERT_FILE" -P "$CERT_PASS" -T /usr/bin/codesign || true
+    if security find-identity -v -p codesigning | grep -q "$SIGN_CERT"; then
         CAN_SIGN=1
-        CODESIGN_ARGS+=(--keychain "$SIGN_KEYCHAIN")
-        echo "证书导入成功：$SIGN_CERT（$SIGN_KEYCHAIN）"
-    else
-        echo "警告：证书导入失败，无法签名"
+        echo "证书导入成功：$SIGN_CERT"
+    fi
+    if [ "$CAN_SIGN" -eq 0 ]; then
+        echo "警告：导入后仍无有效身份 \"$SIGN_CERT\"，跳过签名。排查指引："
+        security find-identity -p codesigning 2>/dev/null || true
+        echo "① 上方列出了 \"$SIGN_CERT\" 但有效签名身份中没有：证书未被信任。钥匙串访问中双击该证书，展开"信任"，把"使用此证书时"改为"始终信任""
+        echo "② 完全未列出：导入的内容不含私钥（如误导 cer）或导错了钥匙串。请重新双击仓库中的 cert.p12，密码 145896，导入后应出现在"我的证书"分类且证书左侧三角下挂有私钥"
+        echo "③ 导入时报错（见上方日志）：常见为密码不符或文件损坏"
     fi
 else
     echo "警告：仓库中缺少 cert.p12，无法自动导入签名证书"
