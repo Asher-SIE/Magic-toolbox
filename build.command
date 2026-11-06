@@ -130,6 +130,8 @@ echo "清理完成"
 # 使用自签名证书签名（同一证书 → 签名身份稳定，TCC 权限不随重打包丢失）
 SIGN_CERT="MagicToolbox Dev"
 CERT_FILE="$SCRIPT_DIR/cert.p12"
+# cert.p12 的导出密码：重新导出带密码的 p12 后，改成一致即可
+CERT_PASS="MagicToolbox"
 # 专用签名钥匙串：密码固定，不依赖登录钥匙串，非交互环境（CI/SSH）同样可签名
 SIGN_KEYCHAIN="$HOME/Library/Keychains/MagicToolboxSign.keychain"
 SIGN_KEYCHAIN_PASS="MagicToolbox"
@@ -145,7 +147,7 @@ elif [ -f "$CERT_FILE" ]; then
     echo "钥匙串中未找到证书 \"$SIGN_CERT\"，正在从 cert.p12 导入..."
     security create-keychain -p "$SIGN_KEYCHAIN_PASS" "$SIGN_KEYCHAIN" 2>/dev/null || true
     security unlock-keychain -p "$SIGN_KEYCHAIN_PASS" "$SIGN_KEYCHAIN"
-    security import "$CERT_FILE" -k "$SIGN_KEYCHAIN" -P "" -T /usr/bin/codesign 2>/dev/null || true
+    security import "$CERT_FILE" -k "$SIGN_KEYCHAIN" -P "$CERT_PASS" -T /usr/bin/codesign 2>/dev/null || true
     # 授权 codesign 非交互访问私钥
     security set-key-partition-list -S apple-tool:,apple: -k "$SIGN_KEYCHAIN_PASS" "$SIGN_KEYCHAIN" >/dev/null 2>&1 || true
     if security find-identity -v -p codesigning "$SIGN_KEYCHAIN" 2>/dev/null | grep -q "$SIGN_CERT"; then
