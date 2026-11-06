@@ -130,8 +130,8 @@ echo "清理完成"
 # 使用自签名证书签名（同一证书 → 签名身份稳定，TCC 权限不随重打包丢失）
 SIGN_CERT="MagicToolbox Dev"
 CERT_FILE="$SCRIPT_DIR/cert.p12"
-# cert.p12 的导出密码：重新导出带密码的 p12 后，改成一致即可
-CERT_PASS="MagicToolbox"
+# cert.p12 的导出密码
+CERT_PASS="145896"
 # 专用签名钥匙串：密码固定，不依赖登录钥匙串，非交互环境（CI/SSH）同样可签名
 SIGN_KEYCHAIN="$HOME/Library/Keychains/MagicToolboxSign.keychain"
 SIGN_KEYCHAIN_PASS="MagicToolbox"
