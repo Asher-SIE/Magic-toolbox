@@ -2657,10 +2657,27 @@ class MainFrame(wx.Frame):
         except Exception as e:
             logging.error(f"鼠标轮询异常: {e}")
 
+    def _optshift_held(self) -> bool:
+        """读取 Option+Shift 是否同时按住（坐标播报与探索模式共用）；失败按未按住处理"""
+        try:
+            import Quartz
+            flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateCombinedSessionState)
+            return (bool(flags & Quartz.kCGEventFlagMaskAlternate)
+                    and bool(flags & Quartz.kCGEventFlagMaskShift))
+        except Exception as e:
+            # 修饰键状态读取失败时轮询仍在跑，仅记录一次错误避免刷屏
+            if not self._announce_flags_error_logged:
+                self._announce_flags_error_logged = True
+                logging.error(f"读取修饰键状态失败: {e}")
+            return False
+
     def _poll_mouse_limit(self):
         """鼠标移动范围限制：指针越出矩形时拉回边界（吸附）；连续吸附带冷却，
-        避免 warp 高频触发系统节流导致指针整体卡顿"""
+        避免 warp 高频触发系统节流导致指针整体卡顿；
+        按住 Option+Shift 时暂停吸附让指针自由探索坐标，松开后恢复限制"""
         if not self._mouse_limit_active:
+            return
+        if self._optshift_held():
             return
         position = self._get_mouse_position()
         if position is None:
@@ -2679,20 +2696,8 @@ class MainFrame(wx.Frame):
 
     def _poll_mouse_coord_announce(self):
         """按住 Option+Shift 移动鼠标时实时播报坐标，任一轴移动达到精度阈值才播报一次"""
-        try:
-            import Quartz
-            flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateCombinedSessionState)
-        except Exception as e:
-            # 修饰键状态读取失败时轮询仍在跑，仅记录一次错误避免刷屏
-            if not self._announce_flags_error_logged:
-                self._announce_flags_error_logged = True
-                logging.error(f"读取修饰键状态失败: {e}")
-            self._last_announce_pos = None
-            return
         # 与应用热键体系保持一致的组合；Option+Shift 纯移动不触发系统鼠标行为，无冲突
-        mods_ok = (bool(flags & Quartz.kCGEventFlagMaskAlternate)
-                   and bool(flags & Quartz.kCGEventFlagMaskShift))
-        if not mods_ok:
+        if not self._optshift_held():
             self._last_announce_pos = None
             return
         position = self._get_mouse_position()

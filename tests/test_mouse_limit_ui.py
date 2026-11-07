@@ -197,6 +197,26 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._poll_mouse_coord_announce()
         self.assertEqual(self.speech, ["105, 202", "111, 202"])
 
+    def test_optshift_suspend_snap(self):
+        # 按住 Option+Shift 探索坐标时暂停吸附，指针可越界自由移动；松开恢复限制拉回
+        self._set_mouse_position(500.0, 300.0)
+        self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
+        self.frame.mouse_lock_enable()
+        self.warps.clear()
+        mods = (1 << 19) | (1 << 17)  # option + shift
+
+        self._install_quartz_stub(mods)
+        self._set_mouse_position(1600.0, 400.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [])
+
+        # 松开修饰键：越界恢复吸附
+        self._install_quartz_stub(0)
+        self.frame._mouse_limit_last_warp = 0.0  # 模拟冷却时间已过
+        self._set_mouse_position(1600.0, 400.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [(1500.0, 350.0)])
+
     def test_snap_warp_cooldown(self):
         self._set_mouse_position(500.0, 300.0)
         self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
