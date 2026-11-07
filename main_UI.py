@@ -30,9 +30,16 @@ MOUSE_POLL_INTERVAL_MS = 50
 # wx 的 macOS 键码映射表不含波浪号，RegisterHotKey 注册不了该键，改由轮询定时器检测按键边沿
 MOUSE_LOCK_KEYCODE = 0x32
 
-# 越界吸附的最小间隔（秒）：CGWarpMouseCursorPosition 高频调用会被系统节流（插入约 0.1 秒暂停），
-# 顶边推进时指针会整体发僵，吸附带冷却规避
-MOUSE_LIMIT_WARP_COOLDOWN_S = 0.15
+# 越界拉回的最小间隔（秒）：CGWarpMouseCursorPosition 高频调用会被系统节流（插入约 0.1 秒暂停）；
+# 缓冲带已吸收贴边抖动，此处取较小值尽快钉回，真机出现指针发僵时可调大
+MOUSE_LIMIT_WARP_COOLDOWN_S = 0.05
+
+# 缓冲带宽度（像素）：核心区=限制矩形各边内缩缓冲带，最后合法坐标只在核心区内记录；
+# 贴边抖动不更新目标也不拉回，降低 warp 频率。拖动滑条时端部约有缓冲带宽度的不可停区
+MOUSE_LIMIT_BAND_PX = 8
+
+# 拉回提示音最小间隔（秒）：连续拉回时避免音效连发
+MOUSE_PULL_SOUND_MIN_INTERVAL_S = 0.3
 
 
 class MainFrame(wx.Frame):
@@ -80,6 +87,10 @@ class MainFrame(wx.Frame):
         self._mouse_limit_display = None
         # 上次吸附拉回的时刻（monotonic），用于吸附冷却
         self._mouse_limit_last_warp = 0.0
+        # 最后一个合法坐标（核心区内最后一次读到的指针位置），越界拉回的目标
+        self._mouse_limit_last_legal = None
+        # 上次拉回提示音时刻（monotonic），用于音效最小间隔
+        self._last_pull_sound_time = 0.0
         # 按住 Option+Shift 播报坐标：上次播报的坐标（释放修饰键时清空）
         self._last_announce_pos = None
         self._announce_flags_error_logged = False
@@ -2480,6 +2491,7 @@ class MainFrame(wx.Frame):
         self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
         self._mouse_limit_active = True
         self._mouse_limit_last_warp = 0.0
+        self._mouse_limit_last_legal = position
         self._sync_mouse_limit_widgets()
         logging.info(f"已恢复鼠标移动范围限制，起始点: {position}")
 
@@ -2525,6 +2537,8 @@ class MainFrame(wx.Frame):
         self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
         self._mouse_limit_active = True
         self._mouse_limit_last_warp = 0.0
+        # 起始点即使落在缓冲带内也作为首个拉回目标，保证开启瞬间越界有锚点
+        self._mouse_limit_last_legal = position
         self._sync_mouse_limit_widgets()
         self.save_config()
         self.vo_handler.speak_text("区域锁定开")
@@ -2535,6 +2549,7 @@ class MainFrame(wx.Frame):
         self._mouse_limit_active = False
         self._mouse_limit_origin = None
         self._mouse_limit_display = None
+        self._mouse_limit_last_legal = None
         self._sync_mouse_limit_widgets()
         self.save_config()
         self.vo_handler.speak_text("区域锁定关")
@@ -2658,7 +2673,7 @@ class MainFrame(wx.Frame):
             logging.error(f"鼠标轮询异常: {e}")
 
     def _optshift_held(self) -> bool:
-        """读取 Option+Shift 是否同时按住（坐标播报与探索模式共用）；失败按未按住处理"""
+        """读取 Option+Shift 是否同时按住（坐标播报修饰键判断）；失败按未按住处理"""
         try:
             import Quartz
             flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateCombinedSessionState)
@@ -2672,12 +2687,10 @@ class MainFrame(wx.Frame):
             return False
 
     def _poll_mouse_limit(self):
-        """鼠标移动范围限制：指针越出矩形时拉回边界（吸附）；连续吸附带冷却，
-        避免 warp 高频触发系统节流导致指针整体卡顿；
-        按住 Option+Shift 时暂停吸附让指针自由探索坐标，松开后恢复限制"""
+        """虚拟墙：指针越出矩形时拉回最后一个合法坐标并播提示音；
+        合法坐标仅在核心区（矩形内缩缓冲带）内记录，缓冲带内的位置不拉回也不更新目标，
+        避免贴边抖动退化成高频拉锯；连续拉回带冷却，避免 warp 高频触发系统节流"""
         if not self._mouse_limit_active:
-            return
-        if self._optshift_held():
             return
         position = self._get_mouse_position()
         if position is None:
@@ -2685,14 +2698,31 @@ class MainFrame(wx.Frame):
         rect = self._current_mouse_limit_rect()
         if rect is None:
             return
+        core = setting.shrink_rect_by_band(rect, MOUSE_LIMIT_BAND_PX)
+        if not setting.is_point_outside_rect(position[0], position[1], core):
+            # 核心区内自由移动，记录最后合法坐标作为拉回锚点
+            self._mouse_limit_last_legal = position
+            return
         if not setting.is_point_outside_rect(position[0], position[1], rect):
+            # 缓冲带内：仍属合法范围不拉回，目标冻结防止贴边拉锯
             return
         now = time.monotonic()
         if now - self._mouse_limit_last_warp < MOUSE_LIMIT_WARP_COOLDOWN_S:
             return
-        nx, ny = setting.clamp_point_to_rect(position[0], position[1], rect)
-        if self._move_mouse_to(nx, ny):
+        target = self._mouse_limit_last_legal
+        if target is None or setting.is_point_outside_rect(target[0], target[1], rect):
+            # 无合法锚点（或宽高/显示器变化后锚点落在新矩形外）时兜底钳制到边界
+            target = setting.clamp_point_to_rect(position[0], position[1], rect)
+        if self._move_mouse_to(target[0], target[1]):
             self._mouse_limit_last_warp = now
+            self._play_pull_sound(now)
+
+    def _play_pull_sound(self, now):
+        """拉回提示音：告知用户虚拟墙生效；最小间隔防连续拉回时音效连发"""
+        if now - self._last_pull_sound_time < MOUSE_PULL_SOUND_MIN_INTERVAL_S:
+            return
+        self._last_pull_sound_time = now
+        self.play_sound("ding")
 
     def _poll_mouse_coord_announce(self):
         """按住 Option+Shift 移动鼠标时实时播报坐标，任一轴移动达到精度阈值才播报一次"""

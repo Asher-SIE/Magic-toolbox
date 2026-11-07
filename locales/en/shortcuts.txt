@@ -49,5 +49,5 @@ Command+Option+Shift+1 to 6, 0    Mark the current mouse position as a landmark 
 Option+Shift+1 to 6, 0    Move the mouse to the landmark stored in that slot for the current app; the numeric coordinates are spoken
 
 7. Mouse Assistance
-Hold Option+Shift and move the mouse    Announce the current mouse coordinates in real time (spoken once every 5 pixels of movement; the range limit snap-back pauses while held and resumes on release)
-Option+Shift+~    Toggle the mouse movement range limit (uses the current mouse position as the top-left corner when enabled; the pointer snaps back to the boundary when it moves outside)
+Hold Option+Shift and move the mouse    Announce the current mouse coordinates in real time (spoken once every 5 pixels of movement)
+Option+Shift+~    Toggle the mouse movement range limit (uses the current mouse position as the top-left corner when enabled; when the pointer moves outside it is pulled back to the last legal position with a sound cue; a small buffer band near the edges absorbs jitter)

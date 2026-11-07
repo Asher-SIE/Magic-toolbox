@@ -781,6 +781,14 @@ def clamp_point_to_rect(x: float, y: float, rect) -> tuple:
     return (min(max(float(x), x0), x1), min(max(float(y), y0), y1))
 
 
+def shrink_rect_by_band(rect, band_px: int) -> tuple:
+    """矩形各边向内收缩缓冲带宽度，返回核心区矩形；缓冲带过大时夹紧保证核心区至少 1 像素"""
+    x0, y0, x1, y1 = (float(v) for v in rect)
+    band = max(0, int(band_px))
+    band = min(band, int(min(x1 - x0, y1 - y0) - 1) // 2)
+    return (x0 + band, y0 + band, x1 - band, y1 - band)
+
+
 def should_announce_coord_change(position, last_position, precision: int) -> bool:
     """判断是否播报坐标：上次为空（刚按住修饰键）不播报，任一轴移动达到精度阈值才播报"""
     if last_position is None:
