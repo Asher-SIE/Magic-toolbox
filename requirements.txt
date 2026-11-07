@@ -3,3 +3,4 @@ cryptography
 llama-cpp-python>=0.3.26
 pyobjc==12.1
 typing_extensions==4.15.0
+wxpython==4.2.5
