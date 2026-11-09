@@ -28,7 +28,7 @@ class MouseLimitTests(unittest.TestCase):
 
     def test_compute_rect_basic(self):
         rect = setting.compute_mouse_limit_rect((100, 200), 1000, 50)
-        self.assertEqual(rect, (100.0, 200.0, 1100.0, 250.0))
+        self.assertEqual(rect, (100.0, 200.0, 1099.0, 249.0))
 
     def test_compute_rect_shrinks_to_display(self):
         # 鼠标点靠近屏幕右/下边缘时，右/下边收缩贴合屏幕边缘
@@ -37,12 +37,12 @@ class MouseLimitTests(unittest.TestCase):
         self.assertEqual(rect, (1900.0, 1050.0, 1920.0, 1080.0))
         # 未提供显示器边界时按配置原样计算
         rect = setting.compute_mouse_limit_rect((1900, 1050), 1000, 50)
-        self.assertEqual(rect, (1900.0, 1050.0, 2900.0, 1100.0))
+        self.assertEqual(rect, (1900.0, 1050.0, 2899.0, 1099.0))
 
     def test_compute_rect_min_size(self):
-        # 宽高非法（0/负数）时按 1 处理，不产生空矩形
+        # 宽高非法（0/负数）时按 1 处理，退化为单像素矩形
         rect = setting.compute_mouse_limit_rect((10, 10), 0, -5)
-        self.assertEqual(rect, (10.0, 10.0, 11.0, 11.0))
+        self.assertEqual(rect, (10.0, 10.0, 10.0, 10.0))
 
     def test_outside_and_clamp(self):
         rect = (100.0, 200.0, 1100.0, 250.0)
@@ -55,15 +55,6 @@ class MouseLimitTests(unittest.TestCase):
         self.assertEqual(setting.clamp_point_to_rect(1100.5, 100.0, rect), (1100.0, 200.0))
         self.assertEqual(setting.clamp_point_to_rect(500.0, 300.0, rect), (500.0, 250.0))
         self.assertEqual(setting.clamp_point_to_rect(500.0, 220.0, rect), (500.0, 220.0))
-
-    def test_shrink_rect_by_band(self):
-        rect = (0.0, 0.0, 1000.0, 50.0)
-        # 各边向内收缩缓冲带宽度
-        self.assertEqual(setting.shrink_rect_by_band(rect, 8), (8.0, 8.0, 992.0, 42.0))
-        # 缓冲带为 0 时保持原矩形
-        self.assertEqual(setting.shrink_rect_by_band(rect, 0), rect)
-        # 缓冲带过大时夹紧，保证核心区至少 1 像素
-        self.assertEqual(setting.shrink_rect_by_band(rect, 100), (24.0, 24.0, 976.0, 26.0))
 
     def test_should_announce_coord_change(self):
         # 刚按住修饰键（上次为空）不播报，需移动后按阈值播报

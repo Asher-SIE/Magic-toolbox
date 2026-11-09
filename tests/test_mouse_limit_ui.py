@@ -50,7 +50,6 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._last_announce_pos = None
         self.frame._announce_flags_error_logged = False
         self.frame._mouse_limit_last_warp = 0.0
-        self.frame._mouse_limit_last_legal = None
         self.frame._last_pull_sound_time = 0.0
         self.frame._mouse_lock_key_pressed = False
         self.frame._lock_key_error_logged = False
@@ -94,7 +93,6 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame.mouse_lock_enable()
         self.assertTrue(self.frame._mouse_limit_active)
         self.assertEqual(self.frame._mouse_limit_origin, (500.0, 300.0))
-        self.assertEqual(self.frame._mouse_limit_last_legal, (500.0, 300.0))
         self.assertTrue(self.frame.mouse_limit_check.GetValue())
         self.assertIn("区域锁定开", self.speech)
         self.assertTrue(self._read_saved_config()["mouse_limit_enabled"])
@@ -103,7 +101,6 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._mouse_lock_toggle()
         self.assertFalse(self.frame._mouse_limit_active)
         self.assertIsNone(self.frame._mouse_limit_origin)
-        self.assertIsNone(self.frame._mouse_limit_last_legal)
         self.assertFalse(self.frame.mouse_limit_check.GetValue())
         self.assertIn("区域锁定关", self.speech)
         self.assertFalse(self._read_saved_config()["mouse_limit_enabled"])
@@ -121,81 +118,37 @@ class MouseLimitUITests(unittest.TestCase):
         self.assertFalse(self.frame.mouse_limit_check.GetValue())
         self.assertIn("读取鼠标坐标失败", self.speech)
 
-    def test_pull_returns_to_last_legal(self):
+    def test_pull_clamps_to_boundary(self):
         self._set_mouse_position(500.0, 300.0)
         self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
         self.frame.mouse_lock_enable()
-        self.assertEqual(self.frame._mouse_limit_last_legal, (500.0, 300.0))
         self.warps.clear()
 
-        # 区域为 (500,300)-(1500,350)：越界拉回开启时的合法坐标并播一次提示音
+        # 区域为 (500,300)-(1499,349)：越界钳制到最近边界并播一次提示音，而非拉回内部坐标
         self._set_mouse_position(1600.0, 400.0)
         self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(500.0, 300.0)])
+        self.assertEqual(self.warps, [(1499.0, 349.0)])
         self.assertEqual(self.sounds, ["ding"])
 
-        # 核心区内自由移动会更新拉回锚点
-        self.warps.clear()
-        self._set_mouse_position(1000.0, 320.0)
+        # 边界坐标属于界内：贴边不拉回
+        self._set_mouse_position(1499.0, 320.0)
         self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [])
-        self.frame._mouse_limit_last_warp = 0.0  # 模拟冷却时间已过
-        self._set_mouse_position(1600.0, 400.0)
-        self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1000.0, 320.0)])
+        self.assertEqual(self.warps, [(1499.0, 349.0)])
 
-        # 修改宽度即时生效，右边界收缩贴合屏幕，锚点随核心区内移动更新
+        # 单轴越界只钳对应轴，另一轴保持
+        self.frame._mouse_limit_last_warp = 0.0  # 模拟冷却时间已过
+        self._set_mouse_position(1600.0, 320.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [(1499.0, 349.0), (1499.0, 320.0)])
+
+        # 修改宽度即时生效，右边界收缩贴合屏幕
         self.frame.mouse_limit_width_input.SetValue("2000")
         self.frame.on_mouse_limit_width_focus_lost(types.SimpleNamespace(Skip=lambda: None))
         self.assertEqual(self.frame._mouse_limit_width, 2000)
-        self._set_mouse_position(1800.0, 320.0)
-        self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1000.0, 320.0)])
         self.frame._mouse_limit_last_warp = 0.0  # 模拟冷却时间已过
         self._set_mouse_position(2000.0, 320.0)
         self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1000.0, 320.0), (1800.0, 320.0)])
-
-    def test_band_freezes_target(self):
-        self._set_mouse_position(500.0, 300.0)
-        self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
-        self.frame.mouse_lock_enable()
-        self.warps.clear()
-        self._set_mouse_position(800.0, 320.0)
-        self.frame._poll_mouse_limit()
-        self.assertEqual(self.frame._mouse_limit_last_legal, (800.0, 320.0))
-
-        # 缓冲带内（距右边界 4px < 8px）不拉回，也不更新拉回锚点
-        self._set_mouse_position(1496.0, 320.0)
-        self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [])
-        self.assertEqual(self.frame._mouse_limit_last_legal, (800.0, 320.0))
-
-        # 越界后拉回缓冲带内沿之前的合法坐标，而非贴边位置
-        self.frame._mouse_limit_last_warp = 0.0  # 模拟冷却时间已过
-        self._set_mouse_position(1600.0, 400.0)
-        self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(800.0, 320.0)])
-
-    def test_pull_fallback_without_legal_anchor(self):
-        # 无合法锚点：兜底钳制到边界
-        self._set_mouse_position(500.0, 300.0)
-        self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
-        self.frame.mouse_lock_enable()
-        self.warps.clear()
-        self.frame._mouse_limit_last_legal = None
-        self._set_mouse_position(1600.0, 400.0)
-        self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1500.0, 350.0)])
-
-        # 锚点落在修改后的矩形外（宽度缩小）：同样兜底钳制
-        self.frame.mouse_limit_width_input.SetValue("300")
-        self.frame.on_mouse_limit_width_focus_lost(types.SimpleNamespace(Skip=lambda: None))
-        self.frame._mouse_limit_last_legal = (1000.0, 320.0)
-        self.frame._mouse_limit_last_warp = 0.0  # 模拟冷却时间已过
-        self._set_mouse_position(1600.0, 400.0)
-        self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1500.0, 350.0), (800.0, 350.0)])
+        self.assertEqual(self.warps, [(1499.0, 349.0), (1499.0, 320.0), (1920.0, 320.0)])
 
     def test_pull_sound_min_interval(self):
         # 连续拉回时音效按最小间隔去重
@@ -265,21 +218,21 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._poll_mouse_limit()
         self.warps.clear()
 
-        # 第一次越界：立即拉回最后合法坐标
+        # 第一次越界：立即钳制到边界
         self._set_mouse_position(1600.0, 400.0)
         self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1000.0, 320.0)])
+        self.assertEqual(self.warps, [(1499.0, 349.0)])
 
         # 冷却期内再次越界：不重复 warp，避免触发系统节流导致指针卡顿
         self._set_mouse_position(1700.0, 450.0)
         self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1000.0, 320.0)])
+        self.assertEqual(self.warps, [(1499.0, 349.0)])
 
-        # 冷却结束后恢复拉回
+        # 冷却结束后恢复钳制
         self.frame._mouse_limit_last_warp = 0.0
         self._set_mouse_position(1700.0, 450.0)
         self.frame._poll_mouse_limit()
-        self.assertEqual(self.warps, [(1000.0, 320.0), (1000.0, 320.0)])
+        self.assertEqual(self.warps, [(1499.0, 349.0), (1499.0, 349.0)])
 
     def test_lock_key_poll_toggles(self):
         self._set_mouse_position(500.0, 300.0)
