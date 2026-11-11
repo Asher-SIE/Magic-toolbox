@@ -2616,6 +2616,7 @@ class MainFrame(wx.Frame):
                 self.mouse_lock_disable()
         event.Skip()
 
+    @staticmethod
     def _filter_digit_input(input_ctrl):
         """输入框过滤：仅保留数字字符"""
         current_value = input_ctrl.GetValue()
