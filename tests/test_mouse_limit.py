@@ -56,6 +56,36 @@ class MouseLimitTests(unittest.TestCase):
         self.assertEqual(setting.clamp_point_to_rect(500.0, 300.0, rect), (500.0, 250.0))
         self.assertEqual(setting.clamp_point_to_rect(500.0, 220.0, rect), (500.0, 220.0))
 
+    def test_plan_limit_correction_axis_priority(self):
+        rect = (100.0, 200.0, 1100.0, 250.0)
+        # 界内不修正，目标即原坐标
+        self.assertEqual(setting.plan_limit_correction(500.0, 220.0, rect, False, True, True, 20.0),
+                         (False, False, 500.0, 220.0))
+        # 横向越界且冷却已到：钳回右墙，纵向保持不动
+        self.assertEqual(setting.plan_limit_correction(1200.0, 220.0, rect, False, True, True, 20.0),
+                         (True, False, 1100.0, 220.0))
+        # 横向冷却未到：不修正
+        self.assertEqual(setting.plan_limit_correction(1200.0, 220.0, rect, False, False, True, 20.0),
+                         (False, False, 1200.0, 220.0))
+        # 仅纵向越界且用户静止：钳回下边界，横向保持
+        self.assertEqual(setting.plan_limit_correction(500.0, 300.0, rect, False, True, True, 20.0),
+                         (False, True, 500.0, 250.0))
+        # 左右移动优先：横向拖动进行中且纵向越界量在容忍带内，纵向让路
+        self.assertEqual(setting.plan_limit_correction(500.0, 265.0, rect, True, True, True, 20.0),
+                         (False, False, 500.0, 265.0))
+        # 纵向越界量超出容忍带：即使拖动中也立即钳回，防指针跑飞
+        self.assertEqual(setting.plan_limit_correction(500.0, 300.0, rect, True, True, True, 20.0),
+                         (False, True, 500.0, 250.0))
+        # 横向本次也要修正：纵向合并进同一次 warp，目标两轴同时钳回
+        self.assertEqual(setting.plan_limit_correction(1200.0, 300.0, rect, True, True, True, 20.0),
+                         (True, True, 1100.0, 250.0))
+        # 纵向冷却未到：即使越界也让路，仅修正横向
+        self.assertEqual(setting.plan_limit_correction(1200.0, 300.0, rect, True, True, False, 20.0),
+                         (True, False, 1100.0, 300.0))
+        # 未冷却的轴目标保持原值，越界状态由后续轮询处理
+        self.assertEqual(setting.plan_limit_correction(1200.0, 300.0, rect, False, False, False, 20.0),
+                         (False, False, 1200.0, 300.0))
+
     def test_should_announce_coord_change(self):
         # 刚按住修饰键（上次为空）不播报，需移动后按阈值播报
         self.assertFalse(setting.should_announce_coord_change((100, 200), None, 5))

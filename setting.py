@@ -781,6 +781,28 @@ def clamp_point_to_rect(x: float, y: float, rect) -> tuple:
     return (min(max(float(x), x0), x1), min(max(float(y), y0), y1))
 
 
+def plan_limit_correction(x, y, rect, x_moving: bool, warp_ready_x: bool, warp_ready_y: bool, y_escape_px: float) -> tuple:
+    """规划一次越界修正，返回 (是否修正横向, 是否修正纵向, 目标x, 目标y)
+
+    横向为滑块主运动方向：纵向越界仅在横向本次也要修正（合并同一次 warp）、
+    用户已停止横向移动或纵向越界量超过 y_escape_px 容忍带时才钳回，其余让路，
+    避免拖动中高频纵向拉回触发系统 warp 节流把横向移动一起拖僵
+    """
+    x0, y0, x1, y1 = rect
+    x_out = x < x0 or x > x1
+    y_out = y < y0 or y > y1
+    correct_x = x_out and warp_ready_x
+    correct_y = False
+    if y_out and warp_ready_y:
+        excursion = max(y0 - y, y - y1, 0.0)
+        if correct_x or not x_moving or excursion > y_escape_px:
+            correct_y = True
+    clamped = clamp_point_to_rect(x, y, rect)
+    target_x = clamped[0] if correct_x else float(x)
+    target_y = clamped[1] if correct_y else float(y)
+    return (correct_x, correct_y, target_x, target_y)
+
+
 def should_announce_coord_change(position, last_position, precision: int) -> bool:
     """判断是否播报坐标：上次为空（刚按住修饰键）不播报，任一轴移动达到精度阈值才播报"""
     if last_position is None:
