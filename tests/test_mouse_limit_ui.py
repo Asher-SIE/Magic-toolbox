@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest import mock
@@ -51,6 +52,9 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame._announce_flags_error_logged = False
         self.frame._mouse_limit_last_warp = 0.0
         self.frame._last_pull_sound_time = 0.0
+        self.frame._mouse_limit_last_warp_x = 0.0
+        self.frame._mouse_limit_last_warp_y = 0.0
+        self.frame._mouse_limit_last_pos = None
         self.frame._mouse_lock_key_pressed = False
         self.frame._lock_key_error_logged = False
         self.frame._mouse_limit_auto_fit = True
@@ -136,7 +140,8 @@ class MouseLimitUITests(unittest.TestCase):
         self.assertEqual(self.warps, [(1499.0, 349.0)])
 
         # 单轴越界只钳对应轴，另一轴保持
-        self.frame._mouse_limit_last_warp = 0.0  # 模拟冷却时间已过
+        self.frame._mouse_limit_last_warp_x = 0.0  # 模拟冷却时间已过
+        self.frame._mouse_limit_last_warp_y = 0.0
         self._set_mouse_position(1600.0, 320.0)
         self.frame._poll_mouse_limit()
         self.assertEqual(self.warps, [(1499.0, 349.0), (1499.0, 320.0)])
@@ -145,7 +150,8 @@ class MouseLimitUITests(unittest.TestCase):
         self.frame.mouse_limit_width_input.SetValue("2000")
         self.frame.on_mouse_limit_width_focus_lost(types.SimpleNamespace(Skip=lambda: None))
         self.assertEqual(self.frame._mouse_limit_width, 2000)
-        self.frame._mouse_limit_last_warp = 0.0  # 模拟冷却时间已过
+        self.frame._mouse_limit_last_warp_x = 0.0  # 模拟冷却时间已过
+        self.frame._mouse_limit_last_warp_y = 0.0
         self._set_mouse_position(2000.0, 320.0)
         self.frame._poll_mouse_limit()
         self.assertEqual(self.warps, [(1499.0, 349.0), (1499.0, 320.0), (1920.0, 320.0)])
@@ -229,10 +235,56 @@ class MouseLimitUITests(unittest.TestCase):
         self.assertEqual(self.warps, [(1499.0, 349.0)])
 
         # 冷却结束后恢复钳制
-        self.frame._mouse_limit_last_warp = 0.0
+        self.frame._mouse_limit_last_warp_x = 0.0
+        self.frame._mouse_limit_last_warp_y = 0.0
         self._set_mouse_position(1700.0, 450.0)
         self.frame._poll_mouse_limit()
         self.assertEqual(self.warps, [(1499.0, 349.0), (1499.0, 349.0)])
+
+    def test_vertical_yields_to_horizontal_drag(self):
+        # 左右移动优先：横向拖动进行中纵向小幅越界让路，保证滑块拖动顺滑
+        self._set_mouse_position(500.0, 300.0)
+        self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
+        self.frame.mouse_lock_enable()
+
+        # 预置一次界内轮询作为横向移动基准
+        self._set_mouse_position(600.0, 320.0)
+        self.frame._poll_mouse_limit()
+
+        # 拖动中纵向越界 16 像素（容忍带 20 内）：让路不拉回
+        self._set_mouse_position(610.0, 365.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [])
+
+        # 横向停止移动：立即钳回下边界
+        self._set_mouse_position(610.0, 365.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [(610.0, 349.0)])
+
+        # 拖动中纵向越界超出容忍带：即使移动中也钳回防指针跑飞
+        self.frame._mouse_limit_last_warp_y = 0.0  # 模拟冷却时间已过
+        self._set_mouse_position(620.0, 400.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [(610.0, 349.0), (620.0, 349.0)])
+
+    def test_axis_independent_cooldown(self):
+        # 一轴刚拉回不占用另一轴的修正配额：横纵冷却各自独立计时
+        self._set_mouse_position(500.0, 300.0)
+        self.frame._get_display_bounds_at = lambda x, y: (0.0, 0.0, 1920.0, 1080.0)
+        self.frame.mouse_lock_enable()
+
+        # 纵向刚拉回（冷却中），横向越界仍立即钳回
+        self.frame._mouse_limit_last_warp_y = time.monotonic()
+        self._set_mouse_position(1600.0, 320.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [(1499.0, 320.0)])
+
+        # 横向刚拉回（冷却中），纵向越界仍立即钳回（用户静止，不属于让路场景）
+        self.frame._mouse_limit_last_warp_x = time.monotonic()
+        self.frame._mouse_limit_last_warp_y = 0.0
+        self._set_mouse_position(1600.0, 365.0)
+        self.frame._poll_mouse_limit()
+        self.assertEqual(self.warps, [(1499.0, 320.0), (1600.0, 349.0)])
 
     def test_lock_key_poll_toggles(self):
         self._set_mouse_position(500.0, 300.0)

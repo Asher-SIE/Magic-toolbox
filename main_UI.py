@@ -32,8 +32,12 @@ MOUSE_POLL_INTERVAL_MS = 30
 MOUSE_LOCK_KEYCODE = 0x32
 
 # 越界钳制的最小间隔（秒）：CGWarpMouseCursorPosition 高频调用会被系统节流（插入约 0.1 秒暂停）；
-# 取值小于轮询间隔，正常情况不拦截，仅挡住更密的连续 warp，真机出现指针发僵时可调大
+# 横纵两轴各自独立计时，一轴拉回不占用另一轴的修正配额；取值小于轮询间隔，正常情况不拦截
 MOUSE_LIMIT_WARP_COOLDOWN_S = 0.02
+
+# 纵向越界容忍带（像素）：横向拖动进行中，纵向越界量在该带内时让路不拉回，
+# 保证滑块左右拖动顺滑；越界超出带宽或横向停止移动时立即钳回
+MOUSE_LIMIT_Y_ESCAPE_PX = 20.0
 
 # 拉回提示音最小间隔（秒）：连续拉回时避免音效连发
 MOUSE_PULL_SOUND_MIN_INTERVAL_S = 0.3
@@ -82,8 +86,11 @@ class MainFrame(wx.Frame):
         self._mouse_limit_active = False
         self._mouse_limit_origin = None
         self._mouse_limit_display = None
-        # 上次钳制拉回的时刻（monotonic），用于钳制冷却
-        self._mouse_limit_last_warp = 0.0
+        # 横纵两轴各自的上次钳制时刻（monotonic），轴独立冷却互不占用
+        self._mouse_limit_last_warp_x = 0.0
+        self._mouse_limit_last_warp_y = 0.0
+        # 上次轮询读到的鼠标位置，用于判断用户是否正在横向移动（纵向让路依据）
+        self._mouse_limit_last_pos = None
         # 上次拉回提示音时刻（monotonic），用于音效最小间隔
         self._last_pull_sound_time = 0.0
         # 按住 Option+Shift 播报坐标：上次播报的坐标（释放修饰键时清空）
@@ -2485,7 +2492,9 @@ class MainFrame(wx.Frame):
         self._mouse_limit_origin = position
         self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
         self._mouse_limit_active = True
-        self._mouse_limit_last_warp = 0.0
+        self._mouse_limit_last_warp_x = 0.0
+        self._mouse_limit_last_warp_y = 0.0
+        self._mouse_limit_last_pos = None
         self._sync_mouse_limit_widgets()
         logging.info(f"已恢复鼠标移动范围限制，起始点: {position}")
 
@@ -2530,7 +2539,9 @@ class MainFrame(wx.Frame):
         self._mouse_limit_origin = position
         self._mouse_limit_display = self._get_display_bounds_at(position[0], position[1])
         self._mouse_limit_active = True
-        self._mouse_limit_last_warp = 0.0
+        self._mouse_limit_last_warp_x = 0.0
+        self._mouse_limit_last_warp_y = 0.0
+        self._mouse_limit_last_pos = None
         self._sync_mouse_limit_widgets()
         self.save_config()
         self.vo_handler.speak_text("区域锁定开")
@@ -2678,8 +2689,8 @@ class MainFrame(wx.Frame):
             return False
 
     def _poll_mouse_limit(self):
-        """虚拟墙：指针越出矩形时钳制到最近边界并播提示音，越界后最迟约一个轮询周期生效；
-        边界坐标本身属于界内，贴边不算越界；连续钳制带冷却，避免 warp 高频触发系统节流"""
+        """虚拟墙：按轴独立钳制越界指针并播提示音，越界后最迟约一个轮询周期生效；
+        横向为滑块主运动方向，拖动中纵向小幅越界让路，避免高频拉回触发系统节流把横向拖僵"""
         if not self._mouse_limit_active:
             return
         position = self._get_mouse_position()
@@ -2688,15 +2699,24 @@ class MainFrame(wx.Frame):
         rect = self._current_mouse_limit_rect()
         if rect is None:
             return
-        if not setting.is_point_outside_rect(position[0], position[1], rect):
-            # 矩形内自由移动，不做任何处理
-            return
+        x, y = float(position[0]), float(position[1])
+        # 横向是否正在移动以相邻两次轮询读数为准；启用初期无基准，按静止处理可立即钳制
+        x_moving = (self._mouse_limit_last_pos is not None
+                    and x != self._mouse_limit_last_pos[0])
         now = time.monotonic()
-        if now - self._mouse_limit_last_warp < MOUSE_LIMIT_WARP_COOLDOWN_S:
+        correct_x, correct_y, target_x, target_y = setting.plan_limit_correction(
+            x, y, rect, x_moving,
+            now - self._mouse_limit_last_warp_x >= MOUSE_LIMIT_WARP_COOLDOWN_S,
+            now - self._mouse_limit_last_warp_y >= MOUSE_LIMIT_WARP_COOLDOWN_S,
+            MOUSE_LIMIT_Y_ESCAPE_PX)
+        self._mouse_limit_last_pos = (x, y)
+        if not (correct_x or correct_y):
             return
-        target = setting.clamp_point_to_rect(position[0], position[1], rect)
-        if self._move_mouse_to(target[0], target[1]):
-            self._mouse_limit_last_warp = now
+        if self._move_mouse_to(target_x, target_y):
+            if correct_x:
+                self._mouse_limit_last_warp_x = now
+            if correct_y:
+                self._mouse_limit_last_warp_y = now
             self._play_pull_sound(now)
 
     def _play_pull_sound(self, now):
